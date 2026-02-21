@@ -18,27 +18,31 @@ export interface Quote {
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 
-// Category keywords — all 19 categories
+// Category keywords aligned with ZenQuotes actual topic vocabulary
+// ZenQuotes indexes by: Anxiety, Change, Choice, Confidence, Courage, Death, Dreams,
+// Excellence, Failure, Fairness, Fear, Forgiveness, Freedom, Future, Happiness,
+// Inspiration, Kindness, Leadership, Life, Living, Love, Pain, Past, Success,
+// Time, Today, Truth, Work
 const categoryKeywords: Record<string, string[]> = {
-  motivation: ['achieve', 'goal', 'dream', 'work', 'effort', 'strive', 'push', 'never give up', 'keep going', 'determination', 'drive', 'persist', 'win', 'conquer', 'overcome', 'action', 'start', 'hustle'],
-  success: ['success', 'achieve', 'accomplish', 'win', 'victory', 'triumph', 'excel', 'prosper', 'thrive', 'goal', 'great', 'champion', 'failure', 'rise'],
-  mindfulness: ['present', 'moment', 'peace', 'calm', 'breath', 'aware', 'conscious', 'meditation', 'stillness', 'quiet', 'inner', 'mindful', 'zen', 'tranquil', 'serene', 'pause', 'reflect'],
-  'self-love': ['self', 'worthy', 'enough', 'accept', 'embrace', 'compassion', 'believe in yourself', 'value', 'confidence', 'yourself', 'own', 'who you are', 'be yourself'],
-  growth: ['grow', 'learn', 'change', 'evolve', 'improve', 'better', 'progress', 'develop', 'transform', 'become', 'journey', 'potential', 'expand', 'flourish', 'advance'],
-  happiness: ['happy', 'joy', 'smile', 'laugh', 'pleasure', 'delight', 'content', 'cheerful', 'bliss', 'glad', 'enjoy', 'wonderful', 'beautiful', 'gratitude', 'grateful'],
-  courage: ['courage', 'brave', 'fear', 'bold', 'dare', 'risk', 'warrior', 'fight', 'stand', 'hero', 'fearless', 'face', 'strong', 'strength'],
-  love: ['love', 'heart', 'affection', 'romance', 'beloved', 'passion', 'loving', 'care', 'tender', 'adore', 'cherish', 'devotion', 'soul', 'kiss', 'warm'],
-  hope: ['hope', 'dream', 'believe', 'faith', 'tomorrow', 'light', 'better', 'possible', 'wish', 'bright', 'future', 'optimis', 'expect', 'trust', 'aspir', 'promise', 'dawn'],
-  strength: ['strong', 'strength', 'power', 'overcome', 'endure', 'resilient', 'tough', 'unbreakable', 'mighty', 'iron', 'will', 'persist', 'determin', 'warrior'],
-  wisdom: ['wisdom', 'wise', 'knowledge', 'learn', 'understand', 'truth', 'know', 'think', 'thought', 'insight', 'mind', 'intellect', 'reason', 'teach', 'lesson', 'experience', 'reflect'],
-  time: ['time', 'moment', 'now', 'past', 'future', 'present', 'today', 'tomorrow', 'yesterday', 'clock', 'hour', 'day', 'year', 'season', 'age', 'wait', 'patience', 'fleeting', 'eternal'],
+  motivation: ['work', 'effort', 'dream', 'achieve', 'goal', 'strive', 'push', 'determination', 'drive', 'persist', 'action', 'start', 'inspire', 'inspiration', 'excellence', 'hustle', 'keep going', 'never give up', 'overcome'],
+  success: ['success', 'achieve', 'accomplish', 'excellence', 'win', 'victory', 'triumph', 'leadership', 'failure', 'rise', 'great', 'champion', 'prosper'],
+  mindfulness: ['present', 'moment', 'peace', 'calm', 'breath', 'aware', 'conscious', 'stillness', 'quiet', 'inner', 'mindful', 'tranquil', 'serene', 'pause', 'today', 'living', 'life'],
+  'self-love': ['self', 'worthy', 'enough', 'accept', 'embrace', 'compassion', 'confidence', 'believe in yourself', 'value', 'yourself', 'forgiveness', 'kindness', 'who you are'],
+  growth: ['grow', 'learn', 'change', 'evolve', 'improve', 'better', 'progress', 'develop', 'transform', 'become', 'journey', 'potential', 'expand', 'flourish', 'advance', 'freedom', 'choice'],
+  happiness: ['happy', 'happiness', 'joy', 'smile', 'laugh', 'pleasure', 'delight', 'content', 'cheerful', 'bliss', 'glad', 'enjoy', 'gratitude', 'grateful', 'living', 'life'],
+  courage: ['courage', 'brave', 'fear', 'bold', 'dare', 'risk', 'fight', 'stand', 'fearless', 'face', 'anxiety', 'pain', 'strong', 'strength', 'freedom'],
+  love: ['love', 'heart', 'affection', 'beloved', 'passion', 'loving', 'care', 'tender', 'adore', 'cherish', 'devotion', 'soul', 'kindness', 'forgiveness', 'warm'],
+  hope: ['hope', 'dream', 'believe', 'faith', 'tomorrow', 'light', 'better', 'possible', 'wish', 'bright', 'future', 'optimis', 'trust', 'aspir', 'promise', 'dawn', 'today'],
+  strength: ['strong', 'strength', 'power', 'overcome', 'endure', 'resilient', 'tough', 'pain', 'failure', 'unbreakable', 'will', 'persist', 'determin', 'courage'],
+  wisdom: ['wisdom', 'wise', 'knowledge', 'learn', 'understand', 'truth', 'know', 'think', 'insight', 'mind', 'reason', 'teach', 'lesson', 'experience', 'life', 'fairness'],
+  time: ['time', 'moment', 'now', 'past', 'future', 'present', 'today', 'tomorrow', 'yesterday', 'hour', 'day', 'year', 'age', 'wait', 'patience', 'fleeting', 'eternal'],
   nature: ['nature', 'tree', 'flower', 'earth', 'sky', 'ocean', 'sea', 'sun', 'moon', 'star', 'mountain', 'river', 'wind', 'rain', 'forest', 'garden', 'bloom', 'spring', 'wild', 'water'],
-  change: ['change', 'transform', 'new', 'different', 'evolve', 'grow', 'become', 'improve', 'adapt', 'shift', 'move', 'turn', 'transition', 'begin', 'start', 'fresh', 'reinvent'],
-  friendship: ['friend', 'friendship', 'together', 'companion', 'people', 'others', 'trust', 'loyal', 'bond', 'connect', 'share', 'support', 'ally', 'community', 'belong'],
+  change: ['change', 'transform', 'new', 'evolve', 'grow', 'become', 'improve', 'adapt', 'shift', 'transition', 'begin', 'fresh', 'reinvent', 'choice', 'freedom', 'today'],
+  friendship: ['friend', 'friendship', 'together', 'companion', 'trust', 'loyal', 'bond', 'connect', 'share', 'support', 'kindness', 'community', 'belong', 'love', 'people'],
   solitude: ['alone', 'solitude', 'quiet', 'silence', 'self', 'within', 'inner', 'peace', 'reflect', 'stillness', 'lonely', 'meditat', 'retreat', 'private', 'thought'],
-  ambition: ['ambition', 'goal', 'achieve', 'drive', 'determination', 'purpose', 'vision', 'aspire', 'aim', 'mission', 'target', 'strive', 'pursue', 'reach', 'climb', 'greatness'],
-  death: ['death', 'die', 'mortal', 'end', 'finite', 'eternal', 'gone', 'loss', 'grave', 'legacy', 'remember', 'memory', 'farewell', 'grief'],
-  peace: ['peace', 'calm', 'tranquil', 'serene', 'quiet', 'still', 'rest', 'harmony', 'gentle', 'ease', 'relax', 'sooth', 'comfort', 'soft', 'breath', 'balance'],
+  ambition: ['ambition', 'goal', 'achieve', 'drive', 'determination', 'purpose', 'vision', 'aspire', 'aim', 'mission', 'strive', 'pursue', 'reach', 'climb', 'greatness', 'excellence', 'work', 'leadership'],
+  death: ['death', 'die', 'mortal', 'end', 'finite', 'eternal', 'gone', 'loss', 'grave', 'legacy', 'remember', 'memory', 'farewell', 'grief', 'pain', 'past'],
+  peace: ['peace', 'calm', 'tranquil', 'serene', 'quiet', 'still', 'rest', 'harmony', 'gentle', 'ease', 'relax', 'comfort', 'breath', 'balance', 'freedom', 'forgiveness'],
 };
 
 // Mood keywords
