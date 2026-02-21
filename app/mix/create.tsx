@@ -70,7 +70,7 @@ function CategoryCard({
 export default function CreateMixScreen() {
   const theme = useTheme();
   const router = useRouter();
-  const { selectedCategories, setCategories } = useMixStore();
+  const { selectedCategories, mixActive, setCategories, deactivateMix } = useMixStore();
   const favorites = useFavoritesStore((s) => s.favorites);
   const userQuotes = useUserQuotesStore((s) => s.userQuotes);
 
@@ -92,6 +92,11 @@ export default function CreateMixScreen() {
 
   const handleSave = () => {
     setCategories(localSelected);
+    router.back();
+  };
+
+  const handleDisable = () => {
+    deactivateMix();
     router.back();
   };
 
@@ -119,12 +124,24 @@ export default function CreateMixScreen() {
           <Text style={[styles.title, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
             Create Mix
           </Text>
-          {localSelected.length > 0 && (
-            <TouchableOpacity onPress={handleClear}>
-              <Text style={[styles.clearBtn, { color: theme.textMuted }]}>Clear</Text>
-            </TouchableOpacity>
-          )}
-          {localSelected.length === 0 && <View style={styles.placeholder} />}
+          <View style={styles.headerRight}>
+            {localSelected.length > 0 && (
+              <TouchableOpacity onPress={handleClear}>
+                <Text style={[styles.clearBtn, { color: theme.textMuted }]}>Clear</Text>
+              </TouchableOpacity>
+            )}
+            {mixActive && (
+              <TouchableOpacity
+                onPress={handleDisable}
+                style={[styles.disableBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}
+              >
+                <Text style={[styles.disableBtnText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+                  Disable
+                </Text>
+              </TouchableOpacity>
+            )}
+            {!mixActive && localSelected.length === 0 && <View style={styles.placeholder} />}
+          </View>
         </View>
 
         <Text style={[styles.subtitle, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
@@ -181,7 +198,15 @@ const styles = StyleSheet.create({
   },
   backBtn: { fontSize: 20, padding: 4 },
   title: { fontSize: 22, fontWeight: '700' },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   clearBtn: { fontSize: 14 },
+  disableBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  disableBtnText: { fontSize: 13, fontWeight: '500' },
   placeholder: { width: 40 },
   subtitle: {
     paddingHorizontal: 24,
