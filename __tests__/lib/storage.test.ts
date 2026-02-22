@@ -1,20 +1,22 @@
 /**
  * Unit tests for lib/storage.ts
- * Tests MMKV-based typed storage helpers
+ * Tests AsyncStorage-backed typed storage helpers.
  */
 
-// Mock react-native-mmkv
-jest.mock('react-native-mmkv', () => {
-  const store: Record<string, string | boolean | number> = {};
+// Mock @react-native-async-storage/async-storage with an in-memory store
+jest.mock('@react-native-async-storage/async-storage', () => {
+  const store: Record<string, string | null> = {};
   return {
-    MMKV: jest.fn().mockImplementation(() => ({
-      getString: (key: string) => (typeof store[key] === 'string' ? store[key] : undefined),
-      set: (key: string, value: string | boolean | number) => { store[key] = value; },
-      getBoolean: (key: string) => (typeof store[key] === 'boolean' ? store[key] : undefined),
-      getNumber: (key: string) => (typeof store[key] === 'number' ? store[key] : undefined),
-      delete: (key: string) => { delete store[key]; },
-      clearAll: () => { Object.keys(store).forEach(k => delete store[k]); },
-    })),
+    getItem: jest.fn(async (key: string) => store[key] ?? null),
+    setItem: jest.fn(async (key: string, value: string) => {
+      store[key] = value;
+    }),
+    removeItem: jest.fn(async (key: string) => {
+      delete store[key];
+    }),
+    clear: jest.fn(async () => {
+      Object.keys(store).forEach((k) => delete store[k]);
+    }),
   };
 });
 
@@ -72,10 +74,10 @@ describe('Storage helpers', () => {
 describe('zustandMMKVStorage adapter', () => {
   it('implements getItem / setItem / removeItem', async () => {
     const { zustandMMKVStorage } = await import('../../lib/storage');
-    zustandMMKVStorage.setItem('z-key', JSON.stringify({ a: 1 }));
-    const val = zustandMMKVStorage.getItem('z-key');
+    await zustandMMKVStorage.setItem('z-key', JSON.stringify({ a: 1 }));
+    const val = await zustandMMKVStorage.getItem('z-key');
     expect(val).toBe(JSON.stringify({ a: 1 }));
-    zustandMMKVStorage.removeItem('z-key');
-    expect(zustandMMKVStorage.getItem('z-key')).toBeNull();
+    await zustandMMKVStorage.removeItem('z-key');
+    expect(await zustandMMKVStorage.getItem('z-key')).toBeNull();
   });
 });

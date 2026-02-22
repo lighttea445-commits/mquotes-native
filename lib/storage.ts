@@ -1,50 +1,43 @@
-import { Platform } from 'react-native';
+/**
+ * Cross-platform storage layer.
+ *
+ * - `zustandMMKVStorage`  — async adapter for Zustand's `persist` middleware;
+ *                           backed by AsyncStorage (uses localStorage on web via react-native-web).
+ * - `Storage`             — sync typed helpers backed by an in-memory map.
+ *                           Used for simple, non-critical values and tests.
+ *                           NOTE: in-memory values are not persisted across restarts;
+ *                           all durable app state goes through Zustand's persist layer.
+ */
 
-// Web-compatible storage layer
-// Uses MMKV on native (iOS/Android), localStorage on web
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-let storage: {
-  getString: (key: string) => string | undefined;
-  set: (key: string, value: string | boolean | number) => void;
-  getBoolean: (key: string) => boolean | undefined;
-  getNumber: (key: string) => number | undefined;
-  delete: (key: string) => void;
-  clearAll: () => void;
+// ─── In-memory backing store for synchronous helpers ─────────────────────────
+
+const _mem: Record<string, string> = {};
+
+export const storage = {
+  getString: (key: string): string | undefined => _mem[key],
+  set: (key: string, value: string | boolean | number): void => {
+    _mem[key] = String(value);
+  },
+  getBoolean: (key: string): boolean | undefined => {
+    if (!(key in _mem)) return undefined;
+    return _mem[key] === 'true';
+  },
+  getNumber: (key: string): number | undefined => {
+    if (!(key in _mem)) return undefined;
+    return Number(_mem[key]);
+  },
+  delete: (key: string): void => {
+    delete _mem[key];
+  },
+  clearAll: (): void => {
+    Object.keys(_mem).forEach((k) => delete _mem[k]);
+  },
 };
 
-if (Platform.OS === 'web') {
-  // localStorage-based fallback for web/browser preview
-  storage = {
-    getString: (key) => localStorage.getItem(key) ?? undefined,
-    set: (key, value) => localStorage.setItem(key, String(value)),
-    getBoolean: (key) => {
-      const v = localStorage.getItem(key);
-      return v === null ? undefined : v === 'true';
-    },
-    getNumber: (key) => {
-      const v = localStorage.getItem(key);
-      return v === null ? undefined : Number(v);
-    },
-    delete: (key) => localStorage.removeItem(key),
-    clearAll: () => localStorage.clear(),
-  };
-} else {
-  // MMKV for native — imported lazily to avoid web crash
-  const { MMKV } = require('react-native-mmkv');
-  const mmkv = new MMKV({ id: 'mquotes-storage' });
-  storage = {
-    getString: (key) => mmkv.getString(key),
-    set: (key, value) => mmkv.set(key, value),
-    getBoolean: (key) => mmkv.getBoolean(key),
-    getNumber: (key) => mmkv.getNumber(key),
-    delete: (key) => mmkv.delete(key),
-    clearAll: () => mmkv.clearAll(),
-  };
-}
+// ─── Typed sync helpers ───────────────────────────────────────────────────────
 
-export { storage };
-
-// Typed storage helpers
 export const Storage = {
   getString: (key: string): string | undefined => storage.getString(key),
   setString: (key: string, value: string): void => storage.set(key, value),
@@ -72,9 +65,13 @@ export const Storage = {
   clear: (): void => storage.clearAll(),
 };
 
-// Zustand persistence adapter
+// ─── Zustand persistence adapter — async, uses AsyncStorage ──────────────────
+// AsyncStorage is built into Expo Go and works on web via react-native-web
+// (uses window.localStorage internally on web).
+
 export const zustandMMKVStorage = {
-  getItem: (key: string): string | null => storage.getString(key) ?? null,
-  setItem: (key: string, value: string): void => storage.set(key, value),
-  removeItem: (key: string): void => storage.delete(key),
+  getItem: (key: string): Promise<string | null> => AsyncStorage.getItem(key),
+  setItem: (key: string, value: string): Promise<void> =>
+    AsyncStorage.setItem(key, value),
+  removeItem: (key: string): Promise<void> => AsyncStorage.removeItem(key),
 };
