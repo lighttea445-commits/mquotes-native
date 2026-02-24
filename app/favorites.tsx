@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ThemeBackground } from '../../components/layout/ThemeBackground';
-import { useFavoritesStore, FavoriteQuote } from '../../store/useFavoritesStore';
-import { useTheme } from '../../hooks/useTheme';
+import { useRouter } from 'expo-router';
+import { ThemeBackground } from '../components/layout/ThemeBackground';
+import { useFavoritesStore, FavoriteQuote } from '../store/useFavoritesStore';
+import { useTheme } from '../hooks/useTheme';
 
 function FavoriteItem({
   quote,
@@ -35,11 +36,8 @@ function FavoriteItem({
 
 export default function FavoritesScreen() {
   const theme = useTheme();
+  const router = useRouter();
   const { favorites, removeFavorite, clearFavorites } = useFavoritesStore();
-
-  const handleRemove = (id: string) => {
-    removeFavorite(id);
-  };
 
   const handleClearAll = () => {
     Alert.alert(
@@ -56,13 +54,18 @@ export default function FavoritesScreen() {
     <ThemeBackground>
       <SafeAreaView style={styles.safe} edges={['top']}>
         <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+            <Text style={[styles.backText, { color: theme.textMuted }]}>‹</Text>
+          </TouchableOpacity>
           <Text style={[styles.title, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
             Favorites
           </Text>
-          {favorites.length > 0 && (
+          {favorites.length > 0 ? (
             <TouchableOpacity onPress={handleClearAll}>
               <Text style={[styles.clearText, { color: theme.textMuted }]}>Clear all</Text>
             </TouchableOpacity>
+          ) : (
+            <View style={{ width: 60 }} />
           )}
         </View>
 
@@ -81,7 +84,7 @@ export default function FavoritesScreen() {
             data={favorites}
             keyExtractor={item => item.id}
             renderItem={({ item }) => (
-              <FavoriteItem quote={item} onRemove={handleRemove} theme={theme} />
+              <FavoriteItem quote={item} onRemove={removeFavorite} theme={theme} />
             )}
             contentContainerStyle={styles.list}
             showsVerticalScrollIndicator={false}
@@ -98,16 +101,28 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingTop: 16,
+    paddingHorizontal: 16,
+    paddingTop: 12,
     paddingBottom: 8,
   },
-  title: {
+  backBtn: {
+    width: 36,
+    height: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  backText: {
     fontSize: 28,
+    lineHeight: 32,
+  },
+  title: {
+    fontSize: 22,
     fontWeight: '700',
   },
   clearText: {
     fontSize: 13,
+    width: 60,
+    textAlign: 'right',
   },
   list: {
     padding: 16,

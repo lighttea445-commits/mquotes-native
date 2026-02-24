@@ -6,7 +6,6 @@ import {
   Dimensions,
   TouchableOpacity,
   ActivityIndicator,
-  Platform,
 } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -25,8 +24,9 @@ import { useHistoryStore } from '../../store/useHistoryStore';
 import { useMixStore } from '../../store/useMixStore';
 import { useAppStore } from '../../store/useAppStore';
 import { QuoteActions } from './QuoteActions';
-import { ApiQuote, convertApiQuote, fetchMultipleRandomQuotes } from '../../lib/quotesApi';
+import { ApiQuote, convertApiQuote, fetchMultipleRandomQuotes, fetchQuotesByCategory } from '../../lib/quotesApi';
 import { useMix } from '../../hooks/useMix';
+import { CATEGORIES } from '../../constants/categories';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const SWIPE_THRESHOLD = SCREEN_HEIGHT * 0.15;
@@ -41,6 +41,7 @@ export function QuoteCard({ onOpenMix, onOpenThemes, onOpenCategories }: QuoteCa
   const theme = useTheme();
   const router = useRouter();
   const { mixActive, selectedCategories, loadQuotesForMix } = useMix();
+  const activeCategory = useMixStore((s) => s.activeCategory);
   const mood = useAppStore((s) => s.preferences.mood);
   const { toggleFavorite, isFavorite } = useFavoritesStore();
   const { addToHistory } = useHistoryStore();
@@ -48,7 +49,6 @@ export function QuoteCard({ onOpenMix, onOpenThemes, onOpenCategories }: QuoteCa
   const [buffer, setBuffer] = useState<ApiQuote[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [swipeDirection, setSwipeDirection] = useState<'up' | 'down'>('up');
   const [showHint, setShowHint] = useState(true);
   const isFetching = useRef(false);
 
@@ -60,15 +60,29 @@ export function QuoteCard({ onOpenMix, onOpenThemes, onOpenCategories }: QuoteCa
   const converted = currentQuote ? convertApiQuote(currentQuote) : null;
   const favorited = converted ? isFavorite(converted.id) : false;
 
-  // Load quotes on mount or when mix/mood changes
+  // Pill label: activeCategory > mix > default
+  const activeCategoryName = activeCategory
+    ? CATEGORIES.find(c => c.id === activeCategory)?.name ?? activeCategory
+    : null;
+  const pillLabel = activeCategoryName
+    ? activeCategoryName
+    : mixActive
+      ? `Mix (${selectedCategories.length})`
+      : 'My Mix';
+  const pillActive = !!activeCategoryName || mixActive;
+
+  // Load quotes on mount or when activeCategory/mix/mood changes
   useEffect(() => {
     loadQuotes();
-  }, [mixActive, mood]);
+  }, [activeCategory, mixActive, mood]);
 
   async function loadQuotes() {
     setLoading(true);
     let quotes: ApiQuote[] = [];
-    if (mixActive && selectedCategories.length > 0) {
+    if (activeCategory) {
+      quotes = await fetchQuotesByCategory(activeCategory);
+      if (quotes.length === 0) quotes = await fetchMultipleRandomQuotes(20);
+    } else if (mixActive && selectedCategories.length > 0) {
       quotes = await loadQuotesForMix();
     } else {
       quotes = await fetchMultipleRandomQuotes(20);
@@ -80,7 +94,6 @@ export function QuoteCard({ onOpenMix, onOpenThemes, onOpenCategories }: QuoteCa
       addToHistory({ id: c.id, text: c.text, author: c.author, category: c.category });
     }
     setLoading(false);
-    // Hide hint after first swipe or 3 seconds
     setTimeout(() => setShowHint(false), 3000);
   }
 
@@ -119,7 +132,6 @@ export function QuoteCard({ onOpenMix, onOpenThemes, onOpenCategories }: QuoteCa
       return;
     }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setSwipeDirection('up');
     animateOut('up', () => {
       setCurrentIndex(nextIdx);
       const q = buffer[nextIdx];
@@ -135,7 +147,6 @@ export function QuoteCard({ onOpenMix, onOpenThemes, onOpenCategories }: QuoteCa
   const goPrev = useCallback(() => {
     if (currentIndex <= 0) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setSwipeDirection('down');
     animateOut('down', () => {
       setCurrentIndex(prev => prev - 1);
       runOnJS(animateIn)('down');
@@ -172,7 +183,6 @@ export function QuoteCard({ onOpenMix, onOpenThemes, onOpenCategories }: QuoteCa
       } else if (e.translationY > SWIPE_THRESHOLD && currentIndex > 0) {
         runOnJS(goPrev)();
       } else {
-        // Snap back
         translateY.value = withSpring(0);
         opacity.value = withTiming(1);
       }
@@ -202,14 +212,14 @@ export function QuoteCard({ onOpenMix, onOpenThemes, onOpenCategories }: QuoteCa
           {/* Top bar */}
           <View style={styles.topBar}>
             <TouchableOpacity
-              onPress={onOpenMix ?? (() => router.push('/mix/create'))}
+              onPress={onOpenMix ?? (() => router.push('/categories'))}
               style={[styles.mixPill, {
-                backgroundColor: mixActive ? theme.accent : theme.surface,
+                backgroundColor: pillActive ? theme.accent : theme.surface,
                 borderColor: theme.border,
               }]}
             >
-              <Text style={[styles.mixPillText, { color: mixActive ? theme.background : theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-                {mixActive ? `Mix (${selectedCategories.length})` : 'My Mix'}
+              <Text style={[styles.mixPillText, { color: pillActive ? theme.background : theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+                {pillLabel}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -254,6 +264,8 @@ export function QuoteCard({ onOpenMix, onOpenThemes, onOpenCategories }: QuoteCa
             onCategories={onOpenCategories}
             theme={theme}
             heartStyle={heartStyle}
+            quoteText={converted?.text}
+            quoteAuthor={converted?.author}
           />
         </Animated.View>
       </View>

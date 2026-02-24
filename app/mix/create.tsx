@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../../hooks/useTheme';
 import { useMixStore } from '../../store/useMixStore';
 import { useFavoritesStore } from '../../store/useFavoritesStore';
@@ -42,26 +43,25 @@ function CategoryCard({
       style={[
         styles.card,
         {
-          backgroundColor: selected ? item.color + '22' : theme.surface,
-          borderColor: selected ? item.color : theme.border,
+          backgroundColor: selected ? item.color + '18' : theme.surface,
+          borderColor: selected ? item.color + '99' : theme.border,
           width: ITEM_SIZE,
-          height: ITEM_SIZE * 0.7,
+          height: ITEM_SIZE * 0.65,
         },
       ]}
       onPress={() => onToggle(item.id)}
       activeOpacity={0.7}
     >
       {selected && (
-        <View style={[styles.checkBadge, { backgroundColor: item.color }]}>
-          <Text style={styles.checkMark}>✓</Text>
+        <View style={[styles.checkBadge, { backgroundColor: theme.text }]}>
+          <MaterialCommunityIcons name="check" size={11} color={theme.background} />
         </View>
       )}
-      <Text style={styles.categoryIcon}>{item.icon}</Text>
-      <Text style={[styles.categoryName, { color: selected ? item.color : theme.text, fontFamily: theme.uiFontFamily }]}>
+      <Text style={[styles.categoryName, { color: selected ? theme.text : theme.textMuted, fontFamily: theme.uiFontFamily }]}>
         {item.name}
       </Text>
       {item.count !== undefined && (
-        <Text style={[styles.countText, { color: theme.textMuted }]}>{item.count} quotes</Text>
+        <Text style={[styles.countText, { color: theme.textMuted }]}>{item.count} saved</Text>
       )}
     </TouchableOpacity>
   );
@@ -100,37 +100,29 @@ export default function CreateMixScreen() {
     router.back();
   };
 
-  const handleClear = () => {
-    setLocalSelected([]);
-  };
-
-  const renderItem = ({ item }: { item: CategoryItem }) => (
-    <CategoryCard
-      item={item}
-      selected={localSelected.includes(item.id)}
-      onToggle={toggle}
-      theme={theme}
-    />
-  );
-
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+      {/* Drag handle */}
+      <View style={styles.dragHandle}>
+        <View style={[styles.dragPill, { backgroundColor: theme.border }]} />
+      </View>
+
+      <SafeAreaView style={styles.safe} edges={['bottom']}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()}>
-            <Text style={[styles.backBtn, { color: theme.textMuted }]}>✕</Text>
+          <TouchableOpacity onPress={() => router.back()} style={styles.closeBtn}>
+            <MaterialCommunityIcons name="close" size={20} color={theme.textMuted} />
           </TouchableOpacity>
           <Text style={[styles.title, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
             Create Mix
           </Text>
           <View style={styles.headerRight}>
             {localSelected.length > 0 && (
-              <TouchableOpacity onPress={handleClear}>
-                <Text style={[styles.clearBtn, { color: theme.textMuted }]}>Clear</Text>
+              <TouchableOpacity onPress={() => setLocalSelected([])}>
+                <Text style={[styles.clearBtn, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>Clear</Text>
               </TouchableOpacity>
             )}
-            {mixActive && (
+            {mixActive && localSelected.length === 0 && (
               <TouchableOpacity
                 onPress={handleDisable}
                 style={[styles.disableBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}
@@ -140,7 +132,7 @@ export default function CreateMixScreen() {
                 </Text>
               </TouchableOpacity>
             )}
-            {!mixActive && localSelected.length === 0 && <View style={styles.placeholder} />}
+            {!mixActive && localSelected.length === 0 && <View style={{ width: 52 }} />}
           </View>
         </View>
 
@@ -153,14 +145,21 @@ export default function CreateMixScreen() {
           data={allItems}
           keyExtractor={item => item.id}
           numColumns={2}
-          renderItem={renderItem}
+          renderItem={({ item }) => (
+            <CategoryCard
+              item={item}
+              selected={localSelected.includes(item.id)}
+              onToggle={toggle}
+              theme={theme}
+            />
+          )}
           contentContainerStyle={styles.grid}
           columnWrapperStyle={styles.row}
           showsVerticalScrollIndicator={false}
         />
 
-        {/* Selected count + save button */}
-        <View style={[styles.footer, { borderTopColor: theme.border, backgroundColor: theme.navBackground }]}>
+        {/* Footer */}
+        <View style={[styles.footer, { borderTopColor: theme.border, backgroundColor: theme.background }]}>
           {localSelected.length > 0 && (
             <Text style={[styles.selectedCount, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
               {localSelected.length} categor{localSelected.length === 1 ? 'y' : 'ies'} selected
@@ -169,13 +168,11 @@ export default function CreateMixScreen() {
           <TouchableOpacity
             style={[
               styles.saveBtn,
-              {
-                backgroundColor: localSelected.length > 0 ? theme.text : theme.surface,
-              },
+              { backgroundColor: localSelected.length > 0 ? theme.text : theme.surface },
             ]}
             onPress={handleSave}
           >
-            <Text style={[styles.saveBtnText, { color: localSelected.length > 0 ? theme.background : theme.textMuted }]}>
+            <Text style={[styles.saveBtnText, { color: localSelected.length > 0 ? theme.background : theme.textMuted, fontFamily: theme.uiFontFamily }]}>
               {localSelected.length > 0 ? 'Save Mix' : 'Save (No filter)'}
             </Text>
           </TouchableOpacity>
@@ -187,6 +184,16 @@ export default function CreateMixScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  dragHandle: {
+    alignItems: 'center',
+    paddingTop: 10,
+    paddingBottom: 4,
+  },
+  dragPill: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+  },
   safe: { flex: 1 },
   header: {
     flexDirection: 'row',
@@ -196,9 +203,14 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 4,
   },
-  backBtn: { fontSize: 20, padding: 4 },
-  title: { fontSize: 22, fontWeight: '700' },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  closeBtn: {
+    width: 36,
+    height: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  title: { fontSize: 20, fontWeight: '700' },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 52, justifyContent: 'flex-end' },
   clearBtn: { fontSize: 14 },
   disableBtn: {
     paddingHorizontal: 10,
@@ -207,14 +219,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   disableBtnText: { fontSize: 13, fontWeight: '500' },
-  placeholder: { width: 40 },
   subtitle: {
     paddingHorizontal: 24,
     paddingBottom: 12,
     fontSize: 13,
   },
   grid: {
-    padding: 16,
+    paddingHorizontal: 16,
     paddingBottom: 120,
   },
   row: {
@@ -224,7 +235,7 @@ const styles = StyleSheet.create({
   },
   card: {
     borderRadius: 16,
-    borderWidth: 1.5,
+    borderWidth: 1,
     padding: 16,
     justifyContent: 'flex-end',
     position: 'relative',
@@ -233,14 +244,12 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 10,
     right: 10,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  checkMark: { color: '#fff', fontSize: 12, fontWeight: '700' },
-  categoryIcon: { fontSize: 28, marginBottom: 6 },
   categoryName: { fontSize: 14, fontWeight: '600' },
   countText: { fontSize: 11, marginTop: 2 },
   footer: {

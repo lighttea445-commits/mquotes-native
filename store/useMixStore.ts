@@ -5,6 +5,7 @@ import { zustandMMKVStorage } from '../lib/storage';
 interface MixState {
   selectedCategories: string[]; // category IDs
   mixActive: boolean;
+  activeCategory: string | null; // single-category browsing mode
 
   // Actions
   setCategories: (categories: string[]) => void;
@@ -12,6 +13,7 @@ interface MixState {
   clearMix: () => void;
   activateMix: () => void;
   deactivateMix: () => void;
+  setActiveCategory: (id: string | null) => void;
 }
 
 export const useMixStore = create<MixState>()(
@@ -19,9 +21,10 @@ export const useMixStore = create<MixState>()(
     (set, get) => ({
       selectedCategories: [],
       mixActive: false,
+      activeCategory: null,
 
       setCategories: (categories) =>
-        set({ selectedCategories: categories, mixActive: categories.length > 0 }),
+        set({ selectedCategories: categories, mixActive: categories.length > 0, activeCategory: null }),
 
       toggleCategory: (categoryId) => {
         const { selectedCategories } = get();
@@ -36,6 +39,7 @@ export const useMixStore = create<MixState>()(
 
       activateMix: () => set({ mixActive: true }),
       deactivateMix: () => set({ mixActive: false }),
+      setActiveCategory: (id) => set({ activeCategory: id, mixActive: false }),
     }),
     {
       name: 'mix-store',

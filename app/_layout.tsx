@@ -1,5 +1,5 @@
 import '../global.css';
-import React, { useEffect } from 'react';
+import React from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -30,12 +30,15 @@ function RootLayoutInner() {
         {!onboardingComplete ? (
           <Stack.Screen name="onboarding/index" options={{ animation: 'fade' }} />
         ) : (
-          <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
+          <Stack.Screen name="index" options={{ animation: 'fade' }} />
         )}
+        <Stack.Screen name="categories" options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
+        <Stack.Screen name="profile" options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
         <Stack.Screen name="mix/create" options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
         <Stack.Screen name="history" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="mood" options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
         <Stack.Screen name="themes" options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
+        <Stack.Screen name="favorites" options={{ animation: 'slide_from_right' }} />
       </Stack>
     </>
   );

@@ -35,22 +35,8 @@ export function QuoteActions({
 
   return (
     <View style={styles.container}>
-      {/* Left side: theme + categories */}
-      <View style={styles.leftActions}>
-        {onTheme && (
-          <TouchableOpacity onPress={onTheme} style={[styles.iconBtn, { backgroundColor: theme.surface }]}>
-            <Text style={{ color: theme.textMuted, fontSize: 16 }}>◑</Text>
-          </TouchableOpacity>
-        )}
-        {onCategories && (
-          <TouchableOpacity onPress={onCategories} style={[styles.iconBtn, { backgroundColor: theme.surface }]}>
-            <Text style={{ color: theme.textMuted, fontSize: 16 }}>⊞</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-
-      {/* Right side: share + favorite */}
-      <View style={styles.rightActions}>
+      {/* Left side: share + heart */}
+      <View style={styles.group}>
         {quoteText && (
           <TouchableOpacity onPress={handleShare} style={[styles.iconBtn, { backgroundColor: theme.surface }]}>
             <Text style={{ color: theme.textMuted, fontSize: 16 }}>↗</Text>
@@ -64,6 +50,20 @@ export function QuoteActions({
           </Animated.View>
         </TouchableOpacity>
       </View>
+
+      {/* Right side: palette + grid */}
+      <View style={styles.group}>
+        {onTheme && (
+          <TouchableOpacity onPress={onTheme} style={[styles.iconBtn, { backgroundColor: theme.surface }]}>
+            <Text style={{ color: theme.textMuted, fontSize: 16 }}>◑</Text>
+          </TouchableOpacity>
+        )}
+        {onCategories && (
+          <TouchableOpacity onPress={onCategories} style={[styles.iconBtn, { backgroundColor: theme.surface }]}>
+            <Text style={{ color: theme.textMuted, fontSize: 16 }}>⊞</Text>
+          </TouchableOpacity>
+        )}
+      </View>
     </View>
   );
 }
@@ -75,19 +75,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingBottom: 8,
   },
-  leftActions: {
+  group: {
     flexDirection: 'row',
-    gap: 8,
-  },
-  rightActions: {
-    flexDirection: 'row',
-    gap: 8,
-    justifyContent: 'flex-end',
+    gap: 10,
   },
   iconBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 48,
+    height: 48,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
   },

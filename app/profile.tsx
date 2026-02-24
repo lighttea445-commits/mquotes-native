@@ -2,12 +2,13 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ThemeBackground } from '../../components/layout/ThemeBackground';
-import { useTheme } from '../../hooks/useTheme';
-import { useAppStore } from '../../store/useAppStore';
-import { useStreak } from '../../hooks/useStreak';
-import { useFavoritesStore } from '../../store/useFavoritesStore';
-import { useHistoryStore } from '../../store/useHistoryStore';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { ThemeBackground } from '../components/layout/ThemeBackground';
+import { useTheme } from '../hooks/useTheme';
+import { useAppStore } from '../store/useAppStore';
+import { useStreak } from '../hooks/useStreak';
+import { useFavoritesStore } from '../store/useFavoritesStore';
+import { useHistoryStore } from '../store/useHistoryStore';
 
 function WeekHeatmap({ weekData, theme }: { weekData: boolean[]; theme: ReturnType<typeof useTheme> }) {
   const days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
@@ -50,9 +51,25 @@ export default function ProfileScreen() {
 
   return (
     <ThemeBackground>
-      <SafeAreaView style={styles.safe} edges={['top']}>
+      {/* Drag handle */}
+      <View style={styles.dragHandle}>
+        <View style={[styles.dragPill, { backgroundColor: theme.border }]} />
+      </View>
+
+      <SafeAreaView style={styles.safe} edges={['bottom']}>
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.closeBtn}>
+            <MaterialCommunityIcons name="close" size={20} color={theme.textMuted} />
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
+            Profile
+          </Text>
+          <View style={{ width: 36 }} />
+        </View>
+
         <ScrollView showsVerticalScrollIndicator={false}>
-          <View style={styles.header}>
+          <View style={styles.nameSection}>
             <Text style={[styles.greeting, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
               Welcome back
             </Text>
@@ -83,7 +100,7 @@ export default function ProfileScreen() {
             <StatCard label="Quotes Read" value={history.length} theme={theme} />
           </View>
 
-          {/* Actions */}
+          {/* Settings */}
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
               SETTINGS
@@ -126,11 +143,39 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
+  dragHandle: {
+    alignItems: 'center',
+    paddingTop: 10,
+    paddingBottom: 4,
+  },
+  dragPill: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+  },
   safe: { flex: 1 },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 8,
+  },
+  closeBtn: {
+    width: 36,
+    height: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  nameSection: {
     paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 24,
+    paddingTop: 8,
+    paddingBottom: 20,
   },
   greeting: {
     fontSize: 13,
