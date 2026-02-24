@@ -9,28 +9,7 @@ import { useAppStore } from '../store/useAppStore';
 import { useStreak } from '../hooks/useStreak';
 import { useFavoritesStore } from '../store/useFavoritesStore';
 import { useHistoryStore } from '../store/useHistoryStore';
-
-function WeekHeatmap({ weekData, theme }: { weekData: boolean[]; theme: ReturnType<typeof useTheme> }) {
-  const days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-  return (
-    <View style={styles.heatmap}>
-      {weekData.map((active, i) => (
-        <View key={i} style={styles.dayContainer}>
-          <View style={[
-            styles.dayDot,
-            {
-              backgroundColor: active ? theme.accent : theme.surface,
-              borderColor: theme.border,
-            },
-          ]} />
-          <Text style={[styles.dayLabel, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-            {days[i]}
-          </Text>
-        </View>
-      ))}
-    </View>
-  );
-}
+import { StreakCard } from '../components/ui/StreakCard';
 
 function StatCard({ label, value, theme }: { label: string; value: string | number; theme: ReturnType<typeof useTheme> }) {
   return (
@@ -69,6 +48,7 @@ export default function ProfileScreen() {
         </View>
 
         <ScrollView showsVerticalScrollIndicator={false}>
+          {/* Name section */}
           <View style={styles.nameSection}>
             <Text style={[styles.greeting, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
               Welcome back
@@ -78,20 +58,9 @@ export default function ProfileScreen() {
             </Text>
           </View>
 
-          {/* Streak card */}
-          <View style={[styles.streakCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-            <View style={styles.streakTop}>
-              <Text style={{ fontSize: 32 }}>🔥</Text>
-              <View>
-                <Text style={[styles.streakNumber, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
-                  {streakCount}
-                </Text>
-                <Text style={[styles.streakLabel, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-                  day streak
-                </Text>
-              </View>
-            </View>
-            <WeekHeatmap weekData={weekData} theme={theme} />
+          {/* Streak card — gold sun + 7-day tracker */}
+          <View style={styles.streakWrapper}>
+            <StreakCard streakCount={streakCount} weekData={weekData} />
           </View>
 
           {/* Stats row */}
@@ -110,29 +79,29 @@ export default function ProfileScreen() {
               style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border }]}
               onPress={() => router.push('/themes')}
             >
-              <Text style={{ fontSize: 20 }}>◑</Text>
+              <MaterialCommunityIcons name="palette-outline" size={20} color={theme.gold} />
               <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>Theme</Text>
               <Text style={[styles.menuValue, { color: theme.textMuted }]}>{preferences.theme}</Text>
-              <Text style={{ color: theme.textMuted }}>›</Text>
+              <MaterialCommunityIcons name="chevron-right" size={18} color={theme.textMuted} />
             </TouchableOpacity>
 
             <TouchableOpacity
               style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border }]}
               onPress={() => router.push('/history')}
             >
-              <Text style={{ fontSize: 20 }}>⌚</Text>
+              <MaterialCommunityIcons name="history" size={20} color={theme.gold} />
               <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>History</Text>
-              <Text style={{ color: theme.textMuted }}>›</Text>
+              <MaterialCommunityIcons name="chevron-right" size={18} color={theme.textMuted} />
             </TouchableOpacity>
 
             <View style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-              <Text style={{ fontSize: 20 }}>🔔</Text>
+              <MaterialCommunityIcons name="bell-outline" size={20} color={theme.gold} />
               <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>Notifications</Text>
               <Switch
                 value={preferences.notificationsEnabled}
                 onValueChange={(v) => setPreferences({ notificationsEnabled: v })}
-                trackColor={{ false: theme.border, true: theme.accent }}
-                thumbColor={theme.text}
+                trackColor={{ false: theme.border, true: theme.gold }}
+                thumbColor={theme.surface}
               />
             </View>
           </View>
@@ -187,45 +156,9 @@ const styles = StyleSheet.create({
     fontSize: 32,
     fontWeight: '700',
   },
-  streakCard: {
+  streakWrapper: {
     marginHorizontal: 16,
-    borderRadius: 20,
-    padding: 20,
-    borderWidth: 1,
     marginBottom: 16,
-  },
-  streakTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 16,
-  },
-  streakNumber: {
-    fontSize: 42,
-    fontWeight: '700',
-    lineHeight: 44,
-  },
-  streakLabel: {
-    fontSize: 13,
-    letterSpacing: 0.5,
-  },
-  heatmap: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  dayContainer: {
-    alignItems: 'center',
-    gap: 4,
-  },
-  dayDot: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  dayLabel: {
-    fontSize: 10,
-    letterSpacing: 0.5,
   },
   statsRow: {
     flexDirection: 'row',
@@ -251,7 +184,7 @@ const styles = StyleSheet.create({
   },
   section: {
     paddingHorizontal: 16,
-    marginBottom: 24,
+    marginBottom: 40,
   },
   sectionTitle: {
     fontSize: 11,
@@ -263,7 +196,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
     marginBottom: 8,
     gap: 12,

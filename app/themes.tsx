@@ -17,14 +17,15 @@ import { useAppStore } from '../store/useAppStore';
 import { THEMES } from '../constants/themes';
 
 const { width } = Dimensions.get('window');
-const CARD_SIZE = (width - 48) / 3;
+const SIDE_PADDING = 16;
+const GAP = 8;
+const CARD_WIDTH = (width - SIDE_PADDING * 2 - GAP * 2) / 3;
+const CARD_HEIGHT = CARD_WIDTH * 1.5; // 2:3 portrait ratio
 
 export default function ThemesScreen() {
   const theme = useTheme();
   const router = useRouter();
   const { preferences, setTheme } = useAppStore();
-
-  const currentTheme = THEMES.find(t => t.id === preferences.theme) ?? THEMES[0];
 
   const handleSelect = (themeId: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -40,49 +41,21 @@ export default function ThemesScreen() {
       </View>
 
       <SafeAreaView style={styles.safe} edges={['bottom']}>
-        {/* Header */}
+        {/* Header — close only */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.closeBtn}>
             <MaterialCommunityIcons name="close" size={20} color={theme.textMuted} />
           </TouchableOpacity>
-          <Text style={[styles.title, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
-            Themes
-          </Text>
-          <View style={{ width: 36 }} />
+          <View style={{ flex: 1 }} />
         </View>
 
-        {/* Currently using banner */}
-        <View style={styles.bannerWrapper}>
-          <TouchableOpacity
-            style={[styles.bannerCard, { borderColor: theme.text, borderWidth: 1.5 }]}
-            onPress={() => handleSelect(currentTheme.id)}
-            activeOpacity={0.85}
-          >
-            {currentTheme.backgroundImage ? (
-              <ImageBackground
-                source={currentTheme.backgroundImage}
-                style={styles.bannerBg}
-                resizeMode="cover"
-                borderRadius={16}
-              >
-                <View style={[styles.bannerOverlay, { backgroundColor: 'rgba(0,0,0,0.45)' }]}>
-                  <Text style={[styles.bannerLabel, { color: 'rgba(255,255,255,0.6)' }]}>Currently using</Text>
-                  <Text style={[styles.bannerName, { color: '#fff' }]}>{currentTheme.name}</Text>
-                </View>
-              </ImageBackground>
-            ) : (
-              <View style={[styles.bannerBg, { backgroundColor: currentTheme.background, borderRadius: 16 }]}>
-                <Text style={[styles.bannerLabel, { color: currentTheme.textMuted }]}>Currently using</Text>
-                <Text style={[styles.bannerName, { color: currentTheme.text }]}>{currentTheme.name}</Text>
-              </View>
-            )}
-            <View style={[styles.activeBadge, { backgroundColor: theme.text }]}>
-              <MaterialCommunityIcons name="check" size={12} color={theme.background} />
-            </View>
-          </TouchableOpacity>
-        </View>
+        {/* Screen title */}
+        <Text style={[styles.title, { color: theme.text }]}>Customize</Text>
 
-        {/* 3-column grid */}
+        {/* Subtitle */}
+        <Text style={[styles.forYouLabel, { color: theme.textMuted }]}>For you</Text>
+
+        {/* 3-column portrait grid */}
         <FlatList
           data={THEMES}
           keyExtractor={item => item.id}
@@ -92,14 +65,16 @@ export default function ThemesScreen() {
           showsVerticalScrollIndicator={false}
           renderItem={({ item: t }) => {
             const isSelected = preferences.theme === t.id;
+            const aaColor = t.isDark ? '#E8E0D0' : '#1A1208';
             return (
               <TouchableOpacity
                 style={[
                   styles.card,
                   {
-                    borderColor: isSelected ? theme.text : theme.border,
-                    borderWidth: isSelected ? 1.5 : 1,
-                    width: CARD_SIZE,
+                    width: CARD_WIDTH,
+                    height: CARD_HEIGHT,
+                    borderColor: isSelected ? theme.gold : 'transparent',
+                    borderWidth: isSelected ? 2 : 1,
                   },
                 ]}
                 onPress={() => handleSelect(t.id)}
@@ -110,20 +85,17 @@ export default function ThemesScreen() {
                     source={t.backgroundImage}
                     style={styles.cardBg}
                     resizeMode="cover"
-                    borderRadius={10}
+                    borderRadius={14}
                   >
-                    <View style={[styles.cardOverlay, { backgroundColor: 'rgba(0,0,0,0.45)' }]}>
-                      <Text style={[styles.themeName, { color: '#fff' }]} numberOfLines={1}>{t.name}</Text>
+                    <View style={styles.aaContainer}>
+                      <Text style={[styles.aaText, { color: aaColor }]}>Aa</Text>
                     </View>
                   </ImageBackground>
                 ) : (
-                  <View style={[styles.cardBg, { backgroundColor: t.background, borderRadius: 10 }]}>
-                    <Text style={[styles.themeName, { color: t.text }]} numberOfLines={1}>{t.name}</Text>
-                  </View>
-                )}
-                {isSelected && (
-                  <View style={[styles.selectedBadge, { backgroundColor: theme.text }]}>
-                    <MaterialCommunityIcons name="check" size={10} color={theme.background} />
+                  <View style={[styles.cardBg, { backgroundColor: t.background }]}>
+                    <View style={styles.aaContainer}>
+                      <Text style={[styles.aaText, { color: aaColor }]}>Aa</Text>
+                    </View>
                   </View>
                 )}
               </TouchableOpacity>
@@ -151,10 +123,9 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingTop: 8,
-    paddingBottom: 12,
+    paddingBottom: 4,
   },
   closeBtn: {
     width: 36,
@@ -163,85 +134,41 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   title: {
-    fontSize: 20,
-    fontWeight: '700',
+    fontSize: 28,
+    fontFamily: 'PlayfairDisplay_700Bold',
+    textAlign: 'center',
+    marginTop: 4,
+    marginBottom: 8,
   },
-  bannerWrapper: {
-    paddingHorizontal: 16,
-    marginBottom: 16,
-  },
-  bannerCard: {
-    borderRadius: 16,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  bannerBg: {
-    height: 88,
-    justifyContent: 'flex-end',
-    padding: 14,
-  },
-  bannerOverlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    padding: 14,
-    borderRadius: 16,
-  },
-  bannerLabel: {
-    fontSize: 10,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-    marginBottom: 2,
-  },
-  bannerName: {
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  activeBadge: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    justifyContent: 'center',
-    alignItems: 'center',
+  forYouLabel: {
+    fontSize: 14,
+    fontFamily: 'Inter_400Regular',
+    marginBottom: 12,
+    paddingHorizontal: SIDE_PADDING,
   },
   grid: {
-    paddingHorizontal: 16,
+    paddingHorizontal: SIDE_PADDING,
     paddingBottom: 40,
   },
   row: {
-    gap: 8,
-    marginBottom: 8,
+    gap: GAP,
+    marginBottom: GAP,
   },
   card: {
-    borderRadius: 12,
+    borderRadius: 16,
     overflow: 'hidden',
-    position: 'relative',
   },
   cardBg: {
-    height: 80,
-    justifyContent: 'flex-end',
-    padding: 8,
-  },
-  cardOverlay: {
     flex: 1,
-    justifyContent: 'flex-end',
-    padding: 8,
-    borderRadius: 10,
-  },
-  themeName: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  selectedBadge: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  aaContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  aaText: {
+    fontSize: 20,
+    fontFamily: 'PlayfairDisplay_700Bold',
   },
 });

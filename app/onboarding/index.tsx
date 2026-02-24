@@ -234,7 +234,7 @@ export default function OnboardingScreen() {
       if (cats.length > 0) setPreferences({ categories: cats });
       completeOnboarding();
       // Navigate to main app
-      router.replace('/(tabs)');
+      router.replace('/');
       return;
     }
 
@@ -379,7 +379,7 @@ export default function OnboardingScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0a0a0a' },
+  container: { flex: 1, backgroundColor: '#0D0D0D' },
   safe: { flex: 1 },
   progressBar: {
     height: 2,
@@ -390,7 +390,7 @@ const styles = StyleSheet.create({
   },
   progressFill: {
     height: 2,
-    backgroundColor: '#fff',
+    backgroundColor: '#B8975A',
     borderRadius: 1,
   },
   backBtn: { padding: 20, paddingBottom: 0 },
@@ -404,7 +404,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: '700',
-    color: '#fff',
+    color: '#E8E0D0',
     textAlign: 'center',
     marginBottom: 12,
     fontFamily: 'PlayfairDisplay_700Bold',
@@ -412,17 +412,17 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 15,
-    color: '#888',
+    color: '#6B6560',
     textAlign: 'center',
     lineHeight: 22,
     marginBottom: 32,
     fontFamily: 'Inter_400Regular',
   },
   input: {
-    backgroundColor: '#1a1a1a',
+    backgroundColor: '#1C1A18',
     borderRadius: 14,
     padding: 16,
-    color: '#fff',
+    color: '#E8E0D0',
     fontSize: 18,
     borderWidth: 1,
     borderColor: '#333',
@@ -434,27 +434,27 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   optionBtn: {
-    backgroundColor: '#1a1a1a',
+    backgroundColor: '#1C1A18',
     borderRadius: 14,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#2a2a2a',
+    borderColor: '#2A2520',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
   },
   optionBtnSelected: {
-    backgroundColor: '#ffffff15',
-    borderColor: '#ffffff60',
+    backgroundColor: 'rgba(184,151,90,0.12)',
+    borderColor: '#B8975A',
   },
   optionEmoji: { fontSize: 22 },
   optionLabel: {
-    color: '#aaa',
+    color: '#6B6560',
     fontSize: 15,
     fontFamily: 'Inter_400Regular',
     flex: 1,
   },
-  optionLabelSelected: { color: '#fff' },
+  optionLabelSelected: { color: '#E8E0D0' },
   themePicker: {
     gap: 10,
     paddingVertical: 8,
@@ -469,7 +469,7 @@ const styles = StyleSheet.create({
   },
   themeChipText: { fontSize: 14, fontWeight: '600' },
   ctaBtn: {
-    backgroundColor: '#fff',
+    backgroundColor: '#C4A35A',
     borderRadius: 28,
     margin: 24,
     marginTop: 8,
@@ -478,7 +478,7 @@ const styles = StyleSheet.create({
   },
   ctaBtnDisabled: { opacity: 0.35 },
   ctaBtnText: {
-    color: '#000',
+    color: '#1A1208',
     fontSize: 16,
     fontWeight: '700',
     fontFamily: 'Inter_700Bold',

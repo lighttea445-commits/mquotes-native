@@ -43,8 +43,8 @@ function CategoryCard({
       style={[
         styles.card,
         {
-          backgroundColor: selected ? item.color + '18' : theme.surface,
-          borderColor: selected ? item.color + '99' : theme.border,
+          backgroundColor: selected ? theme.gold + '18' : theme.surface,
+          borderColor: selected ? theme.gold : theme.border,
           width: ITEM_SIZE,
           height: ITEM_SIZE * 0.65,
         },
@@ -53,8 +53,8 @@ function CategoryCard({
       activeOpacity={0.7}
     >
       {selected && (
-        <View style={[styles.checkBadge, { backgroundColor: theme.text }]}>
-          <MaterialCommunityIcons name="check" size={11} color={theme.background} />
+        <View style={[styles.checkBadge, { backgroundColor: theme.gold }]}>
+          <MaterialCommunityIcons name="check" size={11} color="#1A1208" />
         </View>
       )}
       <Text style={[styles.categoryName, { color: selected ? theme.text : theme.textMuted, fontFamily: theme.uiFontFamily }]}>
@@ -168,11 +168,11 @@ export default function CreateMixScreen() {
           <TouchableOpacity
             style={[
               styles.saveBtn,
-              { backgroundColor: localSelected.length > 0 ? theme.text : theme.surface },
+              { backgroundColor: localSelected.length > 0 ? theme.goldButton : theme.surface },
             ]}
             onPress={handleSave}
           >
-            <Text style={[styles.saveBtnText, { color: localSelected.length > 0 ? theme.background : theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+            <Text style={[styles.saveBtnText, { color: localSelected.length > 0 ? '#1A1208' : theme.textMuted, fontFamily: theme.uiFontFamily }]}>
               {localSelected.length > 0 ? 'Save Mix' : 'Save (No filter)'}
             </Text>
           </TouchableOpacity>

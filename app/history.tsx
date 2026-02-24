@@ -82,7 +82,7 @@ const styles = StyleSheet.create({
   clearBtn: { fontSize: 13 },
   list: { padding: 16, gap: 12 },
   card: {
-    borderRadius: 14,
+    borderRadius: 16,
     padding: 16,
     borderWidth: 1,
     marginBottom: 10,

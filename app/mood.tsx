@@ -49,8 +49,8 @@ export default function MoodScreen() {
                 style={[
                   styles.moodCard,
                   {
-                    backgroundColor: isSelected ? theme.accent + '33' : theme.surface,
-                    borderColor: isSelected ? theme.accent : theme.border,
+                    backgroundColor: isSelected ? theme.gold + '22' : theme.surface,
+                    borderColor: isSelected ? theme.gold : theme.border,
                   },
                 ]}
                 onPress={() => handleSelect(item.id)}

@@ -14,7 +14,7 @@ export default function HomeScreen() {
     <ThemeBackground>
       <SafeAreaView style={styles.safe} edges={['top']}>
         <QuoteCard
-          onOpenMix={() => router.push('/categories')}
+          onOpenMix={() => router.push('/mix/create')}
           onOpenThemes={() => router.push('/themes')}
           onOpenCategories={() => router.push('/categories')}
         />
