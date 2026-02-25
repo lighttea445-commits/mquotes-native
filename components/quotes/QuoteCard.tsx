@@ -44,7 +44,7 @@ export function QuoteCard({ onOpenMix, onOpenThemes, onOpenCategories }: QuoteCa
   const { mixActive, selectedCategories, loadQuotesForMix } = useMix();
   const activeCategory = useMixStore((s) => s.activeCategory);
   const mood = useAppStore((s) => s.preferences.mood);
-  const { toggleFavorite, isFavorite } = useFavoritesStore();
+  const { toggleFavorite, isFavorite, favorites } = useFavoritesStore();
   const { addToHistory } = useHistoryStore();
 
   const [buffer, setBuffer] = useState<ApiQuote[]>([]);
@@ -70,10 +70,10 @@ export function QuoteCard({ onOpenMix, onOpenThemes, onOpenCategories }: QuoteCa
       ? `Mix (${selectedCategories.length})`
       : 'General';
 
-  // Progress pill: currentIndex+1 / buffer length (capped at 20)
-  const progressNumerator = currentIndex + 1;
-  const progressDenominator = Math.min(buffer.length || 1, 20);
-  const progressFraction = Math.min(progressNumerator / progressDenominator, 1);
+  // Progress pill: favorites toward 5 (unlocks For You section)
+  const progressNumerator = Math.min(favorites.length, 5);
+  const progressDenominator = 5;
+  const progressFraction = progressNumerator / progressDenominator;
 
   useEffect(() => {
     loadQuotes();
