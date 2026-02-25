@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Expo Go (LAN)",
+      "runtimeExecutable": "C:\\Program Files\\nodejs\\npx.cmd",
+      "runtimeArgs": ["expo", "start", "--offline", "--clear"],
+      "port": 8081
+    },
+    {
+      "name": "Expo Web (Browser)",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["-e", "const http=require('http'),fs=require('fs'),path=require('path');const PORT=8082;const DIR='/tmp/expo-web-output';http.createServer((req,res)=>{let f=path.join(DIR,req.url==='/'?'/index.html':req.url);if(!fs.existsSync(f))f=path.join(DIR,'index.html');const ext=path.extname(f);const ct={'html':'text/html','js':'application/javascript','css':'text/css','png':'image/png','ico':'image/x-icon'}[ext.slice(1)]||'text/plain';res.writeHead(200,{'Content-Type':ct});fs.createReadStream(f).pipe(res);}).listen(PORT,()=>console.log('serving on '+PORT))"],
+      "port": 8082
+    }
+  ]
+}
