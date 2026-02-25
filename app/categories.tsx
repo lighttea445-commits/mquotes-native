@@ -12,10 +12,24 @@ import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
 import { useMixStore } from '../store/useMixStore';
-import { useFavoritesStore } from '../store/useFavoritesStore';
+import { useFavoritesStore, FavoriteQuote } from '../store/useFavoritesStore';
 import { useUserQuotesStore } from '../store/useUserQuotesStore';
 import { useHistoryStore } from '../store/useHistoryStore';
-import { CATEGORIES } from '../constants/categories';
+import { CATEGORIES, Category } from '../constants/categories';
+
+function getForYouCategories(favorites: FavoriteQuote[]): Category[] {
+  if (favorites.length === 0) return [];
+  const counts: Record<string, number> = {};
+  for (const fav of favorites) {
+    if (fav.category) {
+      counts[fav.category] = (counts[fav.category] || 0) + 1;
+    }
+  }
+  return CATEGORIES
+    .filter(c => (counts[c.id] ?? 0) > 0)
+    .sort((a, b) => (counts[b.id] ?? 0) - (counts[a.id] ?? 0))
+    .slice(0, 5);
+}
 
 const { width } = Dimensions.get('window');
 const TILE_SIZE = (width - 48) / 2;
@@ -129,8 +143,7 @@ export default function CategoriesScreen() {
   const userQuotes = useUserQuotesStore((s) => s.userQuotes);
   const history = useHistoryStore((s) => s.history);
 
-  const forYouCategories = CATEGORIES.filter(c => c.section === 'forYou');
-  const byTypeCategories = CATEGORIES.filter(c => c.section === 'byType');
+  const forYouCategories = getForYouCategories(favorites);
 
   const selectCategory = (id: string | null) => {
     setActiveCategory(id);
@@ -221,28 +234,32 @@ export default function CategoriesScreen() {
             <MaterialCommunityIcons name="chevron-right" size={18} color={theme.textMuted} />
           </TouchableOpacity>
 
-          {/* By type section */}
-          <View style={{ height: 28 }} />
-          <SectionTitle label="By type" theme={theme} />
-          <View style={styles.pillList}>
-            {byTypeCategories.map(cat => (
-              <CategoryPillRow
-                key={cat.id}
-                id={cat.id}
-                name={cat.name}
-                icon={cat.icon}
-                onPress={() => selectCategory(cat.id)}
-                isActive={activeCategory === cat.id}
-                theme={theme}
-              />
-            ))}
-          </View>
+          {/* For You section — only shown when the user has favorited quotes */}
+          {forYouCategories.length > 0 && (
+            <>
+              <View style={{ height: 28 }} />
+              <SectionTitle label="For You" theme={theme} />
+              <View style={styles.pillList}>
+                {forYouCategories.map(cat => (
+                  <CategoryPillRow
+                    key={cat.id}
+                    id={cat.id}
+                    name={cat.name}
+                    icon={cat.icon}
+                    onPress={() => selectCategory(cat.id)}
+                    isActive={activeCategory === cat.id}
+                    theme={theme}
+                  />
+                ))}
+              </View>
+            </>
+          )}
 
-          {/* Explore section */}
+          {/* All Categories section */}
           <View style={{ height: 28 }} />
-          <SectionTitle label="Explore" theme={theme} />
+          <SectionTitle label="All Categories" theme={theme} />
           <View style={styles.pillList}>
-            {forYouCategories.map(cat => (
+            {CATEGORIES.map(cat => (
               <CategoryPillRow
                 key={cat.id}
                 id={cat.id}
