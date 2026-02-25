@@ -267,11 +267,28 @@ export async function fetchQuotesByTags(tags: string[]): Promise<ApiQuote[]> {
   return fetchMultipleRandomQuotes(15);
 }
 
+export function inferCategory(text: string): string {
+  const lower = text.toLowerCase();
+  let bestCategory = 'wisdom';
+  let bestScore = 0;
+  for (const [cat, keywords] of Object.entries(categoryKeywords)) {
+    let score = 0;
+    for (const kw of keywords) {
+      if (lower.includes(kw.toLowerCase())) score++;
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      bestCategory = cat;
+    }
+  }
+  return bestCategory;
+}
+
 export function convertApiQuote(apiQuote: ApiQuote): Quote {
   return {
     id: apiQuote._id || `zen-${Date.now()}`,
     text: apiQuote.content,
     author: apiQuote.author,
-    category: 'inspiration',
+    category: inferCategory(apiQuote.content),
   };
 }

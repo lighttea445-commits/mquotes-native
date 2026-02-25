@@ -25,7 +25,7 @@ import { useFavoritesStore } from '../../store/useFavoritesStore';
 import { useHistoryStore } from '../../store/useHistoryStore';
 import { useMixStore } from '../../store/useMixStore';
 import { useAppStore } from '../../store/useAppStore';
-import { ApiQuote, convertApiQuote, fetchMultipleRandomQuotes, fetchQuotesByCategory } from '../../lib/quotesApi';
+import { ApiQuote, convertApiQuote, fetchMultipleRandomQuotes, fetchQuotesByCategory, inferCategory } from '../../lib/quotesApi';
 import { useMix } from '../../hooks/useMix';
 import { CATEGORIES } from '../../constants/categories';
 
@@ -156,7 +156,7 @@ export function QuoteCard({ onOpenMix, onOpenThemes, onOpenCategories }: QuoteCa
       id: converted.id,
       text: converted.text,
       author: converted.author,
-      category: converted.category,
+      category: activeCategory ?? inferCategory(converted.text),
     });
     heartScale.value = withSpring(1.3, { damping: 6 }, () => {
       heartScale.value = withSpring(1);
@@ -217,23 +217,27 @@ export function QuoteCard({ onOpenMix, onOpenThemes, onOpenCategories }: QuoteCa
           <View style={styles.topBar}>
             <Text style={[styles.navArrow, { color: theme.textMuted }]}>›</Text>
 
-            <View style={[styles.progressPill, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-              <Text style={{ color: theme.gold, fontSize: 13 }}>♥</Text>
-              <Text style={[styles.progressText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-                {progressNumerator}/{progressDenominator}
-              </Text>
-              <View style={styles.progressTrack}>
-                <View
-                  style={[
-                    styles.progressFill,
-                    {
-                      backgroundColor: theme.gold,
-                      width: `${Math.round(progressFraction * 100)}%`,
-                    } as any,
-                  ]}
-                />
+            {favorites.length < 5 ? (
+              <View style={[styles.progressPill, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                <Text style={{ color: theme.gold, fontSize: 13 }}>♥</Text>
+                <Text style={[styles.progressText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+                  {progressNumerator}/{progressDenominator}
+                </Text>
+                <View style={styles.progressTrack}>
+                  <View
+                    style={[
+                      styles.progressFill,
+                      {
+                        backgroundColor: theme.gold,
+                        width: `${Math.round(progressFraction * 100)}%`,
+                      } as any,
+                    ]}
+                  />
+                </View>
               </View>
-            </View>
+            ) : (
+              <View style={{ flex: 1 }} />
+            )}
 
             <View style={{ width: 28 }} />
           </View>

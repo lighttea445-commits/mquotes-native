@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   View,
   Text,
@@ -18,17 +18,26 @@ import { useHistoryStore } from '../store/useHistoryStore';
 import { CATEGORIES, Category } from '../constants/categories';
 
 function getForYouCategories(favorites: FavoriteQuote[]): Category[] {
-  if (favorites.length === 0) return [];
+  // Rank categories by how many of the user's favorites belong to each
   const counts: Record<string, number> = {};
   for (const fav of favorites) {
     if (fav.category) {
-      counts[fav.category] = (counts[fav.category] || 0) + 1;
+      counts[fav.category] = (counts[fav.category] ?? 0) + 1;
     }
   }
-  return CATEGORIES
+  const favoritedCats = CATEGORIES
     .filter(c => (counts[c.id] ?? 0) > 0)
-    .sort((a, b) => (counts[b.id] ?? 0) - (counts[a.id] ?? 0))
-    .slice(0, 5);
+    .sort((a, b) => (counts[b.id] ?? 0) - (counts[a.id] ?? 0));
+
+  // Fill remaining slots (up to 5) with a shuffled selection from the rest
+  const included = new Set(favoritedCats.map(c => c.id));
+  const pool = CATEGORIES.filter(c => !included.has(c.id));
+  // Fisher-Yates shuffle
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  return [...favoritedCats, ...pool].slice(0, 5);
 }
 
 const { width } = Dimensions.get('window');
@@ -143,7 +152,9 @@ export default function CategoriesScreen() {
   const userQuotes = useUserQuotesStore((s) => s.userQuotes);
   const history = useHistoryStore((s) => s.history);
 
-  const forYouCategories = getForYouCategories(favorites);
+  // Recalculate For You every 5 favorites (milestones: 0, 5, 10, 15…)
+  const forYouTier = Math.floor(favorites.length / 5);
+  const forYouCategories = useMemo(() => getForYouCategories(favorites), [forYouTier]);
 
   const selectCategory = (id: string | null) => {
     setActiveCategory(id);
@@ -234,26 +245,22 @@ export default function CategoriesScreen() {
             <MaterialCommunityIcons name="chevron-right" size={18} color={theme.textMuted} />
           </TouchableOpacity>
 
-          {/* For You section — only shown when the user has favorited quotes */}
-          {forYouCategories.length > 0 && (
-            <>
-              <View style={{ height: 28 }} />
-              <SectionTitle label="For You" theme={theme} />
-              <View style={styles.pillList}>
-                {forYouCategories.map(cat => (
-                  <CategoryPillRow
-                    key={cat.id}
-                    id={cat.id}
-                    name={cat.name}
-                    icon={cat.icon}
-                    onPress={() => selectCategory(cat.id)}
-                    isActive={activeCategory === cat.id}
-                    theme={theme}
-                  />
-                ))}
-              </View>
-            </>
-          )}
+          {/* For You — always 5 categories, personalised as favorites grow */}
+          <View style={{ height: 28 }} />
+          <SectionTitle label="For You" theme={theme} />
+          <View style={styles.pillList}>
+            {forYouCategories.map(cat => (
+              <CategoryPillRow
+                key={cat.id}
+                id={cat.id}
+                name={cat.name}
+                icon={cat.icon}
+                onPress={() => selectCategory(cat.id)}
+                isActive={activeCategory === cat.id}
+                theme={theme}
+              />
+            ))}
+          </View>
 
           {/* All Categories section */}
           <View style={{ height: 28 }} />
