@@ -60,6 +60,21 @@ function getYesterdayString(): string {
   return d.toISOString().split('T')[0];
 }
 
+/** Returns the ISO date of the Monday that starts the week containing dateStr */
+function getWeekStart(dateStr: string): string {
+  const d = new Date(dateStr);
+  const day = d.getDay(); // 0=Sun
+  const dayIndex = day === 0 ? 6 : day - 1; // Mon=0..Sun=6
+  d.setDate(d.getDate() - dayIndex);
+  return d.toISOString().split('T')[0];
+}
+
+/** Returns 0=Mon .. 6=Sun for today */
+function getTodayDayIndex(): number {
+  const day = new Date().getDay(); // 0=Sun
+  return day === 0 ? 6 : day - 1;
+}
+
 export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
@@ -94,13 +109,42 @@ export const useAppStore = create<AppState>()(
         const { streak } = get();
         const today = getTodayString();
         const yesterday = getYesterdayString();
+        const todayDayIndex = getTodayDayIndex(); // Mon=0..Sun=6
 
-        if (streak.lastVisitDate === today) return; // Already visited today
+        // Detect stale rolling-window data from the old format:
+        // future days in the current week should never be marked.
+        const hasFutureMarks = streak.weekData.some((v, i) => i > todayDayIndex && v);
 
-        const weekData = [...streak.weekData];
-        // Shift week data left, add today as true
-        weekData.shift();
-        weekData.push(true);
+        /** Rebuild weekData for the current week using streak count as ground truth */
+        function rebuildWeekData(count: number): boolean[] {
+          const wd: boolean[] = [false, false, false, false, false, false, false];
+          const daysThisWeek = Math.min(count, todayDayIndex + 1);
+          for (let i = 0; i < daysThisWeek; i++) {
+            wd[todayDayIndex - i] = true;
+          }
+          return wd;
+        }
+
+        if (streak.lastVisitDate === today) {
+          // Already visited today — only write if stale data needs fixing
+          if (hasFutureMarks) {
+            set({ streak: { ...streak, weekData: rebuildWeekData(streak.count) } });
+          }
+          return;
+        }
+
+        // Determine clean weekData for the new visit
+        let weekData: boolean[];
+        if (streak.lastVisitDate === '' || getWeekStart(today) !== getWeekStart(streak.lastVisitDate)) {
+          // New week or first ever visit — start fresh
+          weekData = [false, false, false, false, false, false, false];
+        } else if (hasFutureMarks) {
+          // Stale rolling-window data in the same week — reconstruct from streak count
+          weekData = rebuildWeekData(streak.count);
+        } else {
+          weekData = [...streak.weekData];
+        }
+        weekData[todayDayIndex] = true;
 
         let newCount = streak.count;
         let showBanner = false;

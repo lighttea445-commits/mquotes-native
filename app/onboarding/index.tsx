@@ -21,7 +21,7 @@ import Animated, {
 import { useAppStore } from '../../store/useAppStore';
 import { MOODS } from '../../constants/moods';
 import { CATEGORIES } from '../../constants/categories';
-import { THEMES } from '../../constants/themes';
+import { THEMES, DEFAULT_THEME_ID } from '../../constants/themes';
 
 const { width } = Dimensions.get('window');
 
@@ -195,7 +195,7 @@ export default function OnboardingScreen() {
 
   const [stepIndex, setStepIndex] = useState(0);
   const [nameValue, setNameValue] = useState('');
-  const [selectedTheme, setSelectedTheme] = useState('minimal');
+  const [selectedTheme, setSelectedTheme] = useState(DEFAULT_THEME_ID);
   const [singleChoices, setSingleChoices] = useState<Record<string, string>>({});
   const [multiChoices, setMultiChoices] = useState<Record<string, string[]>>({});
 

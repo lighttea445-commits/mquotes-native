@@ -3,7 +3,6 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Switch } from 're
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { ThemeBackground } from '../components/layout/ThemeBackground';
 import { useTheme } from '../hooks/useTheme';
 import { useAppStore } from '../store/useAppStore';
 import { useStreak } from '../hooks/useStreak';
@@ -20,25 +19,30 @@ function StatCard({ label, value, theme }: { label: string; value: string | numb
   );
 }
 
-export default function ProfileScreen() {
+export default function ProfileScreen({ onClose, onOpenThemes }: { onClose?: () => void; onOpenThemes?: () => void }) {
   const theme = useTheme();
   const router = useRouter();
   const { preferences, setPreferences } = useAppStore();
   const { streakCount, weekData } = useStreak();
   const favorites = useFavoritesStore((s) => s.favorites);
-  const history = useHistoryStore((s) => s.history);
+  const totalQuotesRead = useHistoryStore((s) => s.totalQuotesRead);
+
+  const close = onClose ?? (() => router.back());
+  const openThemes = onOpenThemes ?? (() => router.push('/themes'));
 
   return (
-    <ThemeBackground>
-      {/* Drag handle */}
-      <View style={styles.dragHandle}>
-        <View style={[styles.dragPill, { backgroundColor: theme.border }]} />
-      </View>
+    <View style={[styles.root, { backgroundColor: theme.background }]}>
+      {/* Drag handle hidden when used inline (BottomSheet has its own) */}
+      {!onClose && (
+        <View style={styles.dragHandle}>
+          <View style={[styles.dragPill, { backgroundColor: theme.border }]} />
+        </View>
+      )}
 
       <SafeAreaView style={styles.safe} edges={['bottom']}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.closeBtn}>
+          <TouchableOpacity onPress={close} style={[styles.closeBtn, { backgroundColor: theme.surface }]}>
             <MaterialCommunityIcons name="close" size={20} color={theme.textMuted} />
           </TouchableOpacity>
           <Text style={[styles.headerTitle, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
@@ -66,7 +70,7 @@ export default function ProfileScreen() {
           {/* Stats row */}
           <View style={styles.statsRow}>
             <StatCard label="Favorites" value={favorites.length} theme={theme} />
-            <StatCard label="Quotes Read" value={history.length} theme={theme} />
+            <StatCard label="Quotes Read" value={totalQuotesRead} theme={theme} />
           </View>
 
           {/* Settings */}
@@ -77,7 +81,7 @@ export default function ProfileScreen() {
 
             <TouchableOpacity
               style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border }]}
-              onPress={() => router.push('/themes')}
+              onPress={openThemes}
             >
               <MaterialCommunityIcons name="palette-outline" size={20} color={theme.gold} />
               <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>Theme</Text>
@@ -107,11 +111,12 @@ export default function ProfileScreen() {
           </View>
         </ScrollView>
       </SafeAreaView>
-    </ThemeBackground>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  root: { flex: 1 },
   dragHandle: {
     alignItems: 'center',
     paddingTop: 10,
@@ -134,6 +139,7 @@ const styles = StyleSheet.create({
   closeBtn: {
     width: 36,
     height: 36,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
   },

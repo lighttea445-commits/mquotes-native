@@ -14,31 +14,8 @@ import { useTheme } from '../hooks/useTheme';
 import { useMixStore } from '../store/useMixStore';
 import { useFavoritesStore, FavoriteQuote } from '../store/useFavoritesStore';
 import { useUserQuotesStore } from '../store/useUserQuotesStore';
-import { useHistoryStore } from '../store/useHistoryStore';
 import { CATEGORIES, Category } from '../constants/categories';
 
-function getForYouCategories(favorites: FavoriteQuote[]): Category[] {
-  // Rank categories by how many of the user's favorites belong to each
-  const counts: Record<string, number> = {};
-  for (const fav of favorites) {
-    if (fav.category) {
-      counts[fav.category] = (counts[fav.category] ?? 0) + 1;
-    }
-  }
-  const favoritedCats = CATEGORIES
-    .filter(c => (counts[c.id] ?? 0) > 0)
-    .sort((a, b) => (counts[b.id] ?? 0) - (counts[a.id] ?? 0));
-
-  // Fill remaining slots (up to 5) with a shuffled selection from the rest
-  const included = new Set(favoritedCats.map(c => c.id));
-  const pool = CATEGORIES.filter(c => !included.has(c.id));
-  // Fisher-Yates shuffle
-  for (let i = pool.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [pool[i], pool[j]] = [pool[j], pool[i]];
-  }
-  return [...favoritedCats, ...pool].slice(0, 5);
-}
 
 const { width } = Dimensions.get('window');
 const TILE_SIZE = (width - 48) / 2;
@@ -116,8 +93,8 @@ function CategoryPillRow({
         styles.pillRow,
         {
           backgroundColor: theme.surface,
-          borderColor: isActive ? theme.gold : theme.border,
-          borderWidth: isActive ? 1.5 : 1,
+          borderColor: isActive ? theme.gold : 'transparent',
+          borderWidth: isActive ? 1.5 : 0,
         },
       ]}
       onPress={onPress}
@@ -144,43 +121,45 @@ function SectionTitle({ label, theme }: { label: string; theme: ReturnType<typeo
 
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
-export default function CategoriesScreen() {
+const EXPLORE = CATEGORIES;
+
+export default function CategoriesScreen({ onClose, onOpenMix, onOpenMyQuotes }: { onClose?: () => void; onOpenMix?: () => void; onOpenMyQuotes?: () => void }) {
   const theme = useTheme();
   const router = useRouter();
   const { activeCategory, setActiveCategory } = useMixStore();
   const favorites = useFavoritesStore((s) => s.favorites);
+  const forYouCategoryIds = useFavoritesStore((s) => s.forYouCategoryIds);
   const userQuotes = useUserQuotesStore((s) => s.userQuotes);
-  const history = useHistoryStore((s) => s.history);
 
-  // Recalculate For You every 5 favorites (milestones: 0, 5, 10, 15…)
-  const forYouTier = Math.floor(favorites.length / 5);
-  const forYouCategories = useMemo(() => getForYouCategories(favorites), [forYouTier]);
+  // Stable For You list — computed in the store and recomputed only at tier milestones
+  const forYouCategories = useMemo(
+    () => forYouCategoryIds.map(id => CATEGORIES.find(c => c.id === id)).filter(Boolean) as Category[],
+    [forYouCategoryIds],
+  );
+
+  const close = onClose ?? (() => router.back());
+  const openMix = onOpenMix ?? (() => router.push('/mix/create'));
+  const openMyQuotes = onOpenMyQuotes ?? (() => router.push('/my-quotes'));
 
   const selectCategory = (id: string | null) => {
     setActiveCategory(id);
-    router.back();
+    close();
   };
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      {/* Drag handle */}
-      <View style={styles.dragHandle}>
-        <View style={[styles.dragPill, { backgroundColor: theme.border }]} />
-      </View>
+      {/* Drag handle hidden when used inline (BottomSheet has its own) */}
+      {!onClose && (
+        <View style={styles.dragHandle}>
+          <View style={[styles.dragPill, { backgroundColor: theme.border }]} />
+        </View>
+      )}
 
       <SafeAreaView style={styles.safe} edges={['bottom']}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.closeBtn}>
+          <TouchableOpacity onPress={close} style={[styles.closeBtn, { backgroundColor: theme.surface }]}>
             <MaterialCommunityIcons name="close" size={20} color={theme.textMuted} />
-          </TouchableOpacity>
-          <View style={{ flex: 1 }} />
-          <TouchableOpacity
-            style={[styles.myTopicsPill, { borderColor: theme.border }]}
-            onPress={() => router.push('/mix/create')}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.myTopicsText, { color: theme.textMuted }]}>See my topics</Text>
           </TouchableOpacity>
         </View>
 
@@ -191,25 +170,15 @@ export default function CategoriesScreen() {
           {/* Page title */}
           <Text style={[styles.pageTitle, { color: theme.text }]}>Browse topics</Text>
 
-          {/* Special 2×2 tiles */}
+          {/* Special tiles — My own quotes + My favorites */}
           <View style={styles.tilesRow}>
-            <SpecialTile
-              label="General"
-              subtitle="All quotes"
-              icon="cards-outline"
-              onPress={() => selectCategory(null)}
-              isActive={activeCategory === null}
-              theme={theme}
-            />
             <SpecialTile
               label="My own quotes"
               subtitle={`${userQuotes.length} quotes`}
               icon="pencil-outline"
-              onPress={() => router.push('/mix/create')}
+              onPress={openMyQuotes}
               theme={theme}
             />
-          </View>
-          <View style={[styles.tilesRow, { marginTop: 12 }]}>
             <SpecialTile
               label="My favorites"
               subtitle={`${favorites.length} saved`}
@@ -218,32 +187,7 @@ export default function CategoriesScreen() {
               isActive={activeCategory === '_favorites'}
               theme={theme}
             />
-            <SpecialTile
-              label="History"
-              subtitle={`${history.length} viewed`}
-              icon="clock-outline"
-              onPress={() => router.push('/history')}
-              theme={theme}
-            />
           </View>
-
-          {/* Based on mood pill row */}
-          <TouchableOpacity
-            style={[
-              styles.pillRow,
-              { backgroundColor: theme.surface, borderColor: theme.border, borderWidth: 1, marginTop: 16 },
-            ]}
-            onPress={() => router.push('/mood')}
-            activeOpacity={0.7}
-          >
-            <View style={[styles.iconSquare, { backgroundColor: GOLD_ICON_BG }]}>
-              <MaterialCommunityIcons name="emoticon-happy-outline" size={18} color={theme.gold} />
-            </View>
-            <Text style={[styles.pillLabel, { color: theme.text, fontFamily: 'Inter_500Medium' }]}>
-              Based on mood
-            </Text>
-            <MaterialCommunityIcons name="chevron-right" size={18} color={theme.textMuted} />
-          </TouchableOpacity>
 
           {/* For You — always 5 categories, personalised as favorites grow */}
           <View style={{ height: 28 }} />
@@ -262,11 +206,11 @@ export default function CategoriesScreen() {
             ))}
           </View>
 
-          {/* All Categories section */}
+          {/* Explore */}
           <View style={{ height: 28 }} />
-          <SectionTitle label="All Categories" theme={theme} />
+          <SectionTitle label="Explore" theme={theme} />
           <View style={styles.pillList}>
-            {CATEGORIES.map(cat => (
+            {EXPLORE.map(cat => (
               <CategoryPillRow
                 key={cat.id}
                 id={cat.id}
@@ -309,18 +253,9 @@ const styles = StyleSheet.create({
   closeBtn: {
     width: 36,
     height: 36,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  myTopicsPill: {
-    borderWidth: 1,
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  myTopicsText: {
-    fontSize: 13,
-    fontFamily: 'Inter_400Regular',
   },
   scrollContent: {
     paddingHorizontal: 16,
@@ -331,6 +266,7 @@ const styles = StyleSheet.create({
     fontFamily: 'PlayfairDisplay_700Bold',
     marginTop: 16,
     marginBottom: 20,
+    textAlign: 'center',
   },
   tilesRow: {
     flexDirection: 'row',
@@ -361,7 +297,7 @@ const styles = StyleSheet.create({
   pillRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 20,
+    borderRadius: 14,
     height: 56,
     paddingHorizontal: 16,
     gap: 12,

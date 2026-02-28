@@ -73,7 +73,7 @@ export function useMix() {
     // Combine with local quotes
     const all = [...merged, ...localQuotes];
 
-    if (all.length === 0) return fetchMultipleRandomQuotes(20);
+    if (all.length === 0) return [];
 
     // Shuffle
     return all.sort(() => Math.random() - 0.5);

@@ -18,6 +18,7 @@ import { CATEGORIES, SPECIAL_CATEGORIES } from '../../constants/categories';
 
 const { width } = Dimensions.get('window');
 const ITEM_SIZE = (width - 48) / 2;
+const GOLD_ICON_BG = 'rgba(184,151,90,0.12)';
 
 type CategoryItem = {
   id: string;
@@ -57,6 +58,9 @@ function CategoryCard({
           <MaterialCommunityIcons name="check" size={11} color="#1A1208" />
         </View>
       )}
+      <View style={[styles.iconBg, { backgroundColor: GOLD_ICON_BG }]}>
+        <MaterialCommunityIcons name={item.icon as any} size={20} color={theme.gold} />
+      </View>
       <Text style={[styles.categoryName, { color: selected ? theme.text : theme.textMuted, fontFamily: theme.uiFontFamily }]}>
         {item.name}
       </Text>
@@ -67,14 +71,16 @@ function CategoryCard({
   );
 }
 
-export default function CreateMixScreen() {
+export default function CreateMixScreen({ onClose }: { onClose?: () => void }) {
   const theme = useTheme();
   const router = useRouter();
-  const { selectedCategories, mixActive, setCategories, deactivateMix } = useMixStore();
+  const { selectedCategories, setCategories } = useMixStore();
   const favorites = useFavoritesStore((s) => s.favorites);
   const userQuotes = useUserQuotesStore((s) => s.userQuotes);
 
   const [localSelected, setLocalSelected] = useState<string[]>(selectedCategories);
+
+  const close = onClose ?? (() => router.back());
 
   const allItems: CategoryItem[] = [
     ...SPECIAL_CATEGORIES.map(c => ({
@@ -92,47 +98,35 @@ export default function CreateMixScreen() {
 
   const handleSave = () => {
     setCategories(localSelected);
-    router.back();
-  };
-
-  const handleDisable = () => {
-    deactivateMix();
-    router.back();
+    close();
   };
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      {/* Drag handle */}
-      <View style={styles.dragHandle}>
-        <View style={[styles.dragPill, { backgroundColor: theme.border }]} />
-      </View>
+      {/* Drag handle hidden when used inline (BottomSheet has its own) */}
+      {!onClose && (
+        <View style={styles.dragHandle}>
+          <View style={[styles.dragPill, { backgroundColor: theme.border }]} />
+        </View>
+      )}
 
       <SafeAreaView style={styles.safe} edges={['bottom']}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.closeBtn}>
+          <TouchableOpacity onPress={close} style={[styles.closeBtn, { backgroundColor: theme.surface }]}>
             <MaterialCommunityIcons name="close" size={20} color={theme.textMuted} />
           </TouchableOpacity>
           <Text style={[styles.title, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
             Create Mix
           </Text>
           <View style={styles.headerRight}>
-            {localSelected.length > 0 && (
+            {localSelected.length > 0 ? (
               <TouchableOpacity onPress={() => setLocalSelected([])}>
                 <Text style={[styles.clearBtn, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>Clear</Text>
               </TouchableOpacity>
+            ) : (
+              <View style={{ width: 52 }} />
             )}
-            {mixActive && localSelected.length === 0 && (
-              <TouchableOpacity
-                onPress={handleDisable}
-                style={[styles.disableBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}
-              >
-                <Text style={[styles.disableBtnText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-                  Disable
-                </Text>
-              </TouchableOpacity>
-            )}
-            {!mixActive && localSelected.length === 0 && <View style={{ width: 52 }} />}
           </View>
         </View>
 
@@ -206,19 +200,13 @@ const styles = StyleSheet.create({
   closeBtn: {
     width: 36,
     height: 36,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
   },
   title: { fontSize: 20, fontWeight: '700' },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 52, justifyContent: 'flex-end' },
   clearBtn: { fontSize: 14 },
-  disableBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  disableBtnText: { fontSize: 13, fontWeight: '500' },
   subtitle: {
     paddingHorizontal: 24,
     paddingBottom: 12,
@@ -239,6 +227,14 @@ const styles = StyleSheet.create({
     padding: 16,
     justifyContent: 'flex-end',
     position: 'relative',
+  },
+  iconBg: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
   },
   checkBadge: {
     position: 'absolute',

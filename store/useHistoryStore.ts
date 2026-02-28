@@ -14,6 +14,7 @@ const MAX_HISTORY = 100;
 
 interface HistoryState {
   history: HistoryQuote[];
+  totalQuotesRead: number;
 
   // Actions
   addToHistory: (quote: Omit<HistoryQuote, 'viewedAt'>) => void;
@@ -24,6 +25,7 @@ export const useHistoryStore = create<HistoryState>()(
   persist(
     (set) => ({
       history: [],
+      totalQuotesRead: 0,
 
       addToHistory: (quote) =>
         set((state) => {
@@ -32,7 +34,10 @@ export const useHistoryStore = create<HistoryState>()(
             { ...quote, viewedAt: new Date().toISOString() },
             ...filtered,
           ];
-          return { history: updated.slice(0, MAX_HISTORY) };
+          return {
+            history: updated.slice(0, MAX_HISTORY),
+            totalQuotesRead: state.totalQuotesRead + 1,
+          };
         }),
 
       clearHistory: () => set({ history: [] }),

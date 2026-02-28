@@ -5,8 +5,8 @@ import {
   StyleSheet,
   TouchableOpacity,
   FlatList,
-  ImageBackground,
   Dimensions,
+  ImageBackground,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -22,28 +22,32 @@ const GAP = 8;
 const CARD_WIDTH = (width - SIDE_PADDING * 2 - GAP * 2) / 3;
 const CARD_HEIGHT = CARD_WIDTH * 1.5; // 2:3 portrait ratio
 
-export default function ThemesScreen() {
+export default function ThemesScreen({ onClose }: { onClose?: () => void }) {
   const theme = useTheme();
   const router = useRouter();
   const { preferences, setTheme } = useAppStore();
 
+  const close = onClose ?? (() => router.back());
+
   const handleSelect = (themeId: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setTheme(themeId);
-    router.back();
+    close();
   };
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      {/* Drag handle */}
-      <View style={styles.dragHandle}>
-        <View style={[styles.dragPill, { backgroundColor: theme.border }]} />
-      </View>
+      {/* Drag handle hidden when used inline (BottomSheet has its own) */}
+      {!onClose && (
+        <View style={styles.dragHandle}>
+          <View style={[styles.dragPill, { backgroundColor: theme.border }]} />
+        </View>
+      )}
 
       <SafeAreaView style={styles.safe} edges={['bottom']}>
         {/* Header — close only */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.closeBtn}>
+          <TouchableOpacity onPress={close} style={[styles.closeBtn, { backgroundColor: theme.surface }]}>
             <MaterialCommunityIcons name="close" size={20} color={theme.textMuted} />
           </TouchableOpacity>
           <View style={{ flex: 1 }} />
@@ -68,33 +72,41 @@ export default function ThemesScreen() {
             const aaColor = t.isDark ? '#E8E0D0' : '#1A1208';
             return (
               <TouchableOpacity
-                style={[
-                  styles.card,
-                  {
-                    width: CARD_WIDTH,
-                    height: CARD_HEIGHT,
-                    borderColor: isSelected ? theme.gold : 'transparent',
-                    borderWidth: isSelected ? 2 : 1,
-                  },
-                ]}
+                style={[styles.cardWrapper, { width: CARD_WIDTH }]}
                 onPress={() => handleSelect(t.id)}
                 activeOpacity={0.8}
               >
                 {t.backgroundImage ? (
                   <ImageBackground
                     source={t.backgroundImage}
-                    style={styles.cardBg}
+                    style={[
+                      styles.card,
+                      {
+                        width: CARD_WIDTH,
+                        height: CARD_HEIGHT,
+                        borderColor: isSelected ? theme.gold : theme.border,
+                        borderWidth: 2,
+                      },
+                    ]}
+                    imageStyle={{ borderRadius: 14 }}
                     resizeMode="cover"
-                    borderRadius={14}
-                  >
-                    <View style={styles.aaContainer}>
-                      <Text style={[styles.aaText, { color: aaColor }]}>Aa</Text>
-                    </View>
-                  </ImageBackground>
+                  />
                 ) : (
-                  <View style={[styles.cardBg, { backgroundColor: t.background }]}>
-                    <View style={styles.aaContainer}>
-                      <Text style={[styles.aaText, { color: aaColor }]}>Aa</Text>
+                  <View
+                    style={[
+                      styles.card,
+                      {
+                        width: CARD_WIDTH,
+                        height: CARD_HEIGHT,
+                        borderColor: isSelected ? theme.gold : theme.border,
+                        borderWidth: 2,
+                      },
+                    ]}
+                  >
+                    <View style={[styles.cardBg, { backgroundColor: t.background }]}>
+                      <View style={styles.aaContainer}>
+                        <Text style={[styles.aaText, { color: aaColor }]}>Aa</Text>
+                      </View>
                     </View>
                   </View>
                 )}
@@ -130,19 +142,20 @@ const styles = StyleSheet.create({
   closeBtn: {
     width: 36,
     height: 36,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
   },
   title: {
-    fontSize: 28,
+    fontSize: 32,
     fontFamily: 'PlayfairDisplay_700Bold',
     textAlign: 'center',
     marginTop: 4,
     marginBottom: 8,
   },
   forYouLabel: {
-    fontSize: 14,
-    fontFamily: 'Inter_400Regular',
+    fontSize: 16,
+    fontFamily: 'Inter_600SemiBold',
     marginBottom: 12,
     paddingHorizontal: SIDE_PADDING,
   },
@@ -154,6 +167,9 @@ const styles = StyleSheet.create({
     gap: GAP,
     marginBottom: GAP,
   },
+  cardWrapper: {
+    alignItems: 'center',
+  },
   card: {
     borderRadius: 16,
     overflow: 'hidden',
@@ -162,6 +178,12 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  cardLabel: {
+    fontSize: 11,
+    marginTop: 5,
+    textAlign: 'center',
+    width: '100%',
   },
   aaContainer: {
     justifyContent: 'center',
