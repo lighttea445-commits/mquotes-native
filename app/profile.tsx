@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Switch } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -8,6 +8,7 @@ import { useAppStore } from '../store/useAppStore';
 import { useStreak } from '../hooks/useStreak';
 import { useFavoritesStore } from '../store/useFavoritesStore';
 import { useHistoryStore } from '../store/useHistoryStore';
+import { useRevenueCat } from '../hooks/useRevenueCat';
 import { StreakCard } from '../components/ui/StreakCard';
 
 function StatCard({ label, value, theme }: { label: string; value: string | number; theme: ReturnType<typeof useTheme> }) {
@@ -26,6 +27,7 @@ export default function ProfileScreen({ onClose, onOpenThemes }: { onClose?: () 
   const { streakCount, weekData } = useStreak();
   const favorites = useFavoritesStore((s) => s.favorites);
   const totalQuotesRead = useHistoryStore((s) => s.totalQuotesRead);
+  const { isPro } = useRevenueCat();
 
   const close = onClose ?? (() => router.back());
   const openThemes = onOpenThemes ?? (() => router.push('/themes'));
@@ -54,11 +56,8 @@ export default function ProfileScreen({ onClose, onOpenThemes }: { onClose?: () 
         <ScrollView showsVerticalScrollIndicator={false}>
           {/* Name section */}
           <View style={styles.nameSection}>
-            <Text style={[styles.greeting, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-              Welcome back
-            </Text>
             <Text style={[styles.name, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
-              {preferences.name || 'Reader'}
+              Hey {preferences.name || 'Reader'}
             </Text>
           </View>
 
@@ -71,6 +70,28 @@ export default function ProfileScreen({ onClose, onOpenThemes }: { onClose?: () 
           <View style={styles.statsRow}>
             <StatCard label="Favorites" value={favorites.length} theme={theme} />
             <StatCard label="Quotes Read" value={totalQuotesRead} theme={theme} />
+          </View>
+
+          {/* Subscription Section */}
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+              SUBSCRIPTION
+            </Text>
+
+            <TouchableOpacity
+              style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border }]}
+              onPress={() => {
+                close();
+                router.push('/subscriptions');
+              }}
+            >
+              <MaterialCommunityIcons name="crown-outline" size={20} color={theme.gold} />
+              <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>Quotes Pro</Text>
+              <Text style={[styles.menuValue, { color: theme.textMuted }]}>
+                {isPro ? 'Active' : 'Upgrade'}
+              </Text>
+              <MaterialCommunityIcons name="chevron-right" size={18} color={theme.textMuted} />
+            </TouchableOpacity>
           </View>
 
           {/* Settings */}
@@ -98,16 +119,26 @@ export default function ProfileScreen({ onClose, onOpenThemes }: { onClose?: () 
               <MaterialCommunityIcons name="chevron-right" size={18} color={theme.textMuted} />
             </TouchableOpacity>
 
-            <View style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <TouchableOpacity
+              style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border }]}
+              onPress={() => router.push('/widgets')}
+            >
+              <MaterialCommunityIcons name="view-grid-plus-outline" size={20} color={theme.gold} />
+              <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>Widgets</Text>
+              <MaterialCommunityIcons name="chevron-right" size={18} color={theme.textMuted} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border }]}
+              onPress={() => router.push('/notifications')}
+            >
               <MaterialCommunityIcons name="bell-outline" size={20} color={theme.gold} />
               <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>Notifications</Text>
-              <Switch
-                value={preferences.notificationsEnabled}
-                onValueChange={(v) => setPreferences({ notificationsEnabled: v })}
-                trackColor={{ false: theme.border, true: theme.gold }}
-                thumbColor={theme.surface}
-              />
-            </View>
+              <Text style={[styles.menuValue, { color: theme.textMuted }]}>
+                {preferences.notificationsEnabled ? 'On' : 'Off'}
+              </Text>
+              <MaterialCommunityIcons name="chevron-right" size={18} color={theme.textMuted} />
+            </TouchableOpacity>
           </View>
         </ScrollView>
       </SafeAreaView>
