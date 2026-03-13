@@ -5,20 +5,20 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  Dimensions,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
+import { useRevenueCat } from '../hooks/useRevenueCat';
 import { useMixStore } from '../store/useMixStore';
-import { useFavoritesStore, FavoriteQuote } from '../store/useFavoritesStore';
+import { useFavoritesStore } from '../store/useFavoritesStore';
 import { useUserQuotesStore } from '../store/useUserQuotesStore';
 import { CATEGORIES, Category } from '../constants/categories';
+import { useModal } from '../contexts/ModalContext';
+import { analytics } from '../lib/analytics';
 
-
-const { width } = Dimensions.get('window');
-const TILE_SIZE = (width - 48) / 2;
 const GOLD_ICON_BG = 'rgba(184,151,90,0.12)';
 
 // ─── Special 2×2 tile ────────────────────────────────────────────────────────
@@ -30,6 +30,7 @@ function SpecialTile({
   onPress,
   isActive,
   theme,
+  tileSize,
 }: {
   label: string;
   subtitle?: string;
@@ -37,6 +38,7 @@ function SpecialTile({
   onPress: () => void;
   isActive?: boolean;
   theme: ReturnType<typeof useTheme>;
+  tileSize: number;
 }) {
   return (
     <TouchableOpacity
@@ -46,7 +48,7 @@ function SpecialTile({
           backgroundColor: theme.surface,
           borderColor: isActive ? theme.gold : theme.border,
           borderWidth: isActive ? 1.5 : 1,
-          width: TILE_SIZE,
+          width: tileSize,
         },
       ]}
       onPress={onPress}
@@ -78,6 +80,7 @@ function CategoryPillRow({
   icon,
   onPress,
   isActive,
+  locked,
   theme,
 }: {
   id: string;
@@ -85,6 +88,7 @@ function CategoryPillRow({
   icon: string;
   onPress: () => void;
   isActive: boolean;
+  locked?: boolean;
   theme: ReturnType<typeof useTheme>;
 }) {
   return (
@@ -95,6 +99,7 @@ function CategoryPillRow({
           backgroundColor: theme.surface,
           borderColor: isActive ? theme.gold : 'transparent',
           borderWidth: isActive ? 1.5 : 0,
+          opacity: locked ? 0.6 : 1,
         },
       ]}
       onPress={onPress}
@@ -106,16 +111,11 @@ function CategoryPillRow({
       <Text style={[styles.pillLabel, { color: theme.text, fontFamily: 'Inter_500Medium' }]}>
         {name}
       </Text>
-      <MaterialCommunityIcons name="chevron-right" size={18} color={theme.textMuted} />
+      {locked
+        ? <MaterialCommunityIcons name="lock-outline" size={16} color="#B8975A" />
+        : <MaterialCommunityIcons name="chevron-right" size={18} color={theme.textMuted} />
+      }
     </TouchableOpacity>
-  );
-}
-
-// ─── Section title ────────────────────────────────────────────────────────────
-
-function SectionTitle({ label, theme }: { label: string; theme: ReturnType<typeof useTheme> }) {
-  return (
-    <Text style={[styles.sectionTitle, { color: theme.text }]}>{label}</Text>
   );
 }
 
@@ -123,9 +123,13 @@ function SectionTitle({ label, theme }: { label: string; theme: ReturnType<typeo
 
 const EXPLORE = CATEGORIES;
 
-export default function CategoriesScreen({ onClose, onOpenMix, onOpenMyQuotes }: { onClose?: () => void; onOpenMix?: () => void; onOpenMyQuotes?: () => void }) {
+export default function CategoriesScreen({ onClose }: { onClose?: () => void }) {
+  const { width } = useWindowDimensions();
+  const TILE_SIZE = (width - 48) / 2;
   const theme = useTheme();
   const router = useRouter();
+  const modal = useModal();
+  const { isPro } = useRevenueCat();
   const { activeCategory, setActiveCategory } = useMixStore();
   const favorites = useFavoritesStore((s) => s.favorites);
   const forYouCategoryIds = useFavoritesStore((s) => s.forYouCategoryIds);
@@ -138,12 +142,28 @@ export default function CategoriesScreen({ onClose, onOpenMix, onOpenMyQuotes }:
   );
 
   const close = onClose ?? (() => router.back());
-  const openMix = onOpenMix ?? (() => router.push('/mix/create'));
-  const openMyQuotes = onOpenMyQuotes ?? (() => router.push('/my-quotes'));
+  const openPaywall = () => modal ? modal.openPaywall() : router.push('/subscriptions');
+
+  const openMyQuotes = () => {
+    if (!isPro) { openPaywall(); return; }
+    modal ? modal.openSheet('myquotes') : router.push('/my-quotes');
+  };
 
   const selectCategory = (id: string | null) => {
     setActiveCategory(id);
+    analytics.track(id ? 'category_selected' : 'category_cleared', id ? { categoryId: id } : undefined);
     close();
+  };
+
+  // For You = free
+  const selectForYouCategory = (id: string) => {
+    selectCategory(id);
+  };
+
+  // Explore (All Categories) = Premium only
+  const selectExploreCategory = (id: string) => {
+    if (!isPro) { openPaywall(); return; }
+    selectCategory(id);
   };
 
   return (
@@ -168,30 +188,34 @@ export default function CategoriesScreen({ onClose, onOpenMix, onOpenMyQuotes }:
           contentContainerStyle={styles.scrollContent}
         >
           {/* Page title */}
-          <Text style={[styles.pageTitle, { color: theme.text }]}>Browse topics</Text>
+          <Text style={[styles.pageTitle, { color: theme.text }]}>Explore</Text>
 
           {/* Special tiles — My own quotes + My favorites */}
           <View style={styles.tilesRow}>
             <SpecialTile
               label="My own quotes"
               subtitle={`${userQuotes.length} quotes`}
-              icon="pencil-outline"
+              icon={isPro ? 'pencil-outline' : 'lock-outline'}
               onPress={openMyQuotes}
               theme={theme}
+              tileSize={TILE_SIZE}
             />
             <SpecialTile
               label="My favorites"
               subtitle={`${favorites.length} saved`}
               icon="heart-outline"
-              onPress={() => router.push('/favorites')}
+              onPress={() => modal ? modal.openSheet('favorites') : router.push('/favorites')}
               isActive={activeCategory === '_favorites'}
               theme={theme}
+              tileSize={TILE_SIZE}
             />
           </View>
 
-          {/* For You — always 5 categories, personalised as favorites grow */}
+          {/* For You — free, personalised as favorites grow */}
           <View style={{ height: 28 }} />
-          <SectionTitle label="For You" theme={theme} />
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { color: theme.text, marginBottom: 0 }]}>For You</Text>
+          </View>
           <View style={styles.pillList}>
             {forYouCategories.map(cat => (
               <CategoryPillRow
@@ -199,16 +223,24 @@ export default function CategoriesScreen({ onClose, onOpenMix, onOpenMyQuotes }:
                 id={cat.id}
                 name={cat.name}
                 icon={cat.icon}
-                onPress={() => selectCategory(cat.id)}
+                onPress={() => selectForYouCategory(cat.id)}
                 isActive={activeCategory === cat.id}
                 theme={theme}
               />
             ))}
           </View>
 
-          {/* Explore */}
+          {/* Explore — Premium only */}
           <View style={{ height: 28 }} />
-          <SectionTitle label="Explore" theme={theme} />
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { color: theme.text, marginBottom: 0 }]}>All Categories</Text>
+            {!isPro && (
+              <View style={[styles.proBadge, { backgroundColor: 'rgba(184,151,90,0.12)' }]}>
+                <MaterialCommunityIcons name="crown" size={11} color="#B8975A" />
+                <Text style={[styles.proBadgeText, { color: '#B8975A', fontFamily: 'Inter_600SemiBold' }]}>Premium</Text>
+              </View>
+            )}
+          </View>
           <View style={styles.pillList}>
             {EXPLORE.map(cat => (
               <CategoryPillRow
@@ -216,8 +248,9 @@ export default function CategoriesScreen({ onClose, onOpenMix, onOpenMyQuotes }:
                 id={cat.id}
                 name={cat.name}
                 icon={cat.icon}
-                onPress={() => selectCategory(cat.id)}
+                onPress={() => selectExploreCategory(cat.id)}
                 isActive={activeCategory === cat.id}
+                locked={!isPro}
                 theme={theme}
               />
             ))}
@@ -317,6 +350,24 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontFamily: 'PlayfairDisplay_700Bold',
     marginBottom: 12,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  proBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  proBadgeText: {
+    fontSize: 11,
+    letterSpacing: 0.3,
   },
   pillList: {
     gap: 8,

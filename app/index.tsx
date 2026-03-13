@@ -1,38 +1,37 @@
-import React, { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import React from 'react';
+import { StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemeBackground } from '../components/layout/ThemeBackground';
 import { QuoteCard } from '../components/quotes/QuoteCard';
 import { BottomSheet } from '../components/layout/BottomSheet';
 import { StreakBanner } from '../components/layout/StreakBanner';
+import { PaywallSheet } from '../components/subscriptions/PaywallSheet';
 import { useStreak } from '../hooks/useStreak';
 import { useTheme } from '../hooks/useTheme';
+import { ModalProvider, useModal } from '../contexts/ModalContext';
 import CategoriesScreen from './categories';
 import ThemesScreen from './themes';
 import CreateMixScreen from './mix/create';
 import ProfileScreen from './profile';
 import MyQuotesScreen from './my-quotes';
+import ReflectScreen from './reflect';
+import HistoryScreen from './history';
+import NotificationsScreen from './notifications';
+import WidgetsScreen from './widgets';
+import FavoritesScreen from './favorites';
+import JournalScreen from './journal';
 
-type ActiveSheet = 'categories' | 'themes' | 'mix' | 'profile' | 'myquotes' | null;
-
-export default function HomeScreen() {
+function HomeScreenInner() {
   const theme = useTheme();
-  const [activeSheet, setActiveSheet] = useState<ActiveSheet>(null);
+  const { activeSheet, previousSheet, paywallVisible, goBack, closeSheet, closePaywall } = useModal()!;
+  // True when switching between sheets (not a fresh open/close) — used to skip animations
+  const isSwitching = previousSheet !== null;
   const { streakCount, weekData, showStreakBanner, dismissStreakBanner } = useStreak();
 
-  const close = () => setActiveSheet(null);
-
   return (
-    <View style={[styles.root, { backgroundColor: theme.background }]}>
+    <ThemeBackground style={styles.root}>
       <SafeAreaView style={styles.safe} edges={['top']}>
-        <ThemeBackground style={styles.safe}>
-          <QuoteCard
-            onOpenMix={() => setActiveSheet('mix')}
-            onOpenThemes={() => setActiveSheet('themes')}
-            onOpenCategories={() => setActiveSheet('categories')}
-            onOpenProfile={() => setActiveSheet('profile')}
-          />
-        </ThemeBackground>
+        <QuoteCard />
       </SafeAreaView>
 
       <StreakBanner
@@ -43,57 +42,82 @@ export default function HomeScreen() {
       />
 
       {/* Categories sheet */}
-      <BottomSheet
-        visible={activeSheet === 'categories'}
-        onClose={close}
-        backgroundColor={theme.background}
-      >
-        <CategoriesScreen
-          onClose={close}
-          onOpenMix={() => setActiveSheet('mix')}
-          onOpenMyQuotes={() => setActiveSheet('myquotes')}
-        />
+      <BottomSheet visible={activeSheet === 'categories'} onClose={closeSheet} backgroundColor={theme.background}
+        instantClose={previousSheet === 'categories'} instantOpen={isSwitching}>
+        <CategoriesScreen onClose={closeSheet} />
       </BottomSheet>
 
       {/* Themes sheet */}
-      <BottomSheet
-        visible={activeSheet === 'themes'}
-        onClose={close}
-        backgroundColor={theme.background}
-      >
-        <ThemesScreen onClose={close} />
+      <BottomSheet visible={activeSheet === 'themes'} onClose={closeSheet} backgroundColor={theme.background}
+        instantClose={previousSheet === 'themes'} instantOpen={isSwitching}>
+        <ThemesScreen onClose={closeSheet} />
       </BottomSheet>
 
       {/* Mix builder sheet */}
-      <BottomSheet
-        visible={activeSheet === 'mix'}
-        onClose={close}
-        backgroundColor={theme.background}
-      >
-        <CreateMixScreen onClose={close} />
+      <BottomSheet visible={activeSheet === 'mix'} onClose={closeSheet} backgroundColor={theme.background}
+        instantClose={previousSheet === 'mix'} instantOpen={isSwitching}>
+        <CreateMixScreen onClose={closeSheet} />
       </BottomSheet>
 
       {/* Profile sheet */}
-      <BottomSheet
-        visible={activeSheet === 'profile'}
-        onClose={close}
-        backgroundColor={theme.background}
-      >
-        <ProfileScreen
-          onClose={close}
-          onOpenThemes={() => setActiveSheet('themes')}
-        />
+      <BottomSheet visible={activeSheet === 'profile'} onClose={closeSheet} backgroundColor={theme.background}
+        instantClose={previousSheet === 'profile'} instantOpen={isSwitching}>
+        <ProfileScreen onClose={closeSheet} />
       </BottomSheet>
 
       {/* My Quotes sheet */}
-      <BottomSheet
-        visible={activeSheet === 'myquotes'}
-        onClose={close}
-        backgroundColor={theme.background}
-      >
-        <MyQuotesScreen onClose={close} />
+      <BottomSheet visible={activeSheet === 'myquotes'} onClose={closeSheet} backgroundColor={theme.background}
+        instantClose={previousSheet === 'myquotes'} instantOpen={isSwitching}>
+        <MyQuotesScreen onClose={closeSheet} onBack={goBack} />
       </BottomSheet>
-    </View>
+
+      {/* Reflect sheet */}
+      <BottomSheet visible={activeSheet === 'reflect'} onClose={closeSheet} backgroundColor={theme.background}
+        instantClose={previousSheet === 'reflect'} instantOpen={isSwitching}>
+        <ReflectScreen onClose={closeSheet} />
+      </BottomSheet>
+
+      {/* History sheet */}
+      <BottomSheet visible={activeSheet === 'history'} onClose={closeSheet} backgroundColor={theme.background}
+        instantClose={previousSheet === 'history'} instantOpen={isSwitching}>
+        <HistoryScreen onClose={closeSheet} onBack={goBack} />
+      </BottomSheet>
+
+      {/* Notifications sheet */}
+      <BottomSheet visible={activeSheet === 'notifications'} onClose={closeSheet} backgroundColor={theme.background}
+        instantClose={previousSheet === 'notifications'} instantOpen={isSwitching}>
+        <NotificationsScreen onClose={closeSheet} onBack={goBack} />
+      </BottomSheet>
+
+      {/* Widgets sheet */}
+      <BottomSheet visible={activeSheet === 'widgets'} onClose={closeSheet} backgroundColor={theme.background}
+        instantClose={previousSheet === 'widgets'} instantOpen={isSwitching}>
+        <WidgetsScreen onClose={closeSheet} onBack={goBack} />
+      </BottomSheet>
+
+      {/* Favorites sheet */}
+      <BottomSheet visible={activeSheet === 'favorites'} onClose={closeSheet} backgroundColor={theme.background}
+        instantClose={previousSheet === 'favorites'} instantOpen={isSwitching}>
+        <FavoritesScreen onClose={closeSheet} onBack={goBack} />
+      </BottomSheet>
+
+      {/* Journal sheet */}
+      <BottomSheet visible={activeSheet === 'journal'} onClose={closeSheet} backgroundColor={theme.background}
+        instantClose={previousSheet === 'journal'} instantOpen={isSwitching}>
+        <JournalScreen onClose={closeSheet} onBack={goBack} />
+      </BottomSheet>
+
+      {/* Paywall — rendered last so it appears above all sheets */}
+      <PaywallSheet visible={paywallVisible} onClose={closePaywall} />
+    </ThemeBackground>
+  );
+}
+
+export default function HomeScreen() {
+  return (
+    <ModalProvider>
+      <HomeScreenInner />
+    </ModalProvider>
   );
 }
 

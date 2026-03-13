@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../../hooks/useTheme';
 import { SunIcon } from './SunIcon';
 
@@ -52,7 +53,7 @@ export function StreakCard({ streakCount, weekData }: StreakCardProps) {
                 ]}
               >
                 {completed && (
-                  <Text style={styles.checkmark}>✓</Text>
+                  <MaterialCommunityIcons name="check-bold" size={13} color="#1A1208" />
                 )}
               </View>
             </View>
@@ -98,11 +99,5 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  checkmark: {
-    color: '#1A1208',
-    fontSize: 12,
-    fontWeight: '700',
-    lineHeight: 14,
   },
 });

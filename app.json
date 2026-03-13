@@ -1,13 +1,13 @@
 {
   "expo": {
-    "name": "mquotes",
-    "slug": "mquotes-native",
+    "name": "Quotable",
+    "slug": "quotable",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
-    "newArchEnabled": false,
-    "scheme": "mquotes",
+    "newArchEnabled": true,
+    "scheme": "quotable",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -15,14 +15,14 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.mquotes.app"
+      "bundleIdentifier": "com.eriksen_dawson.quotable"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0a0a0a"
       },
-      "package": "com.mquotes.app",
+      "package": "com.eriksen_dawson.quotable",
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },
@@ -34,6 +34,7 @@
     "plugins": [
       "expo-router",
       "expo-font",
+      "./plugins/withQuotesWidget",
       [
         "expo-notifications",
         {
@@ -41,10 +42,18 @@
           "color": "#7C3AED",
           "sounds": []
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "7076af1d-0e03-4913-813f-3fa8061e252d"
+      }
+    },
+    "owner": "eriksen_dawson"
   }
 }

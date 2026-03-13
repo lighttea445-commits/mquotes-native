@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -8,8 +8,14 @@ import { useAppStore } from '../store/useAppStore';
 import { useStreak } from '../hooks/useStreak';
 import { useFavoritesStore } from '../store/useFavoritesStore';
 import { useHistoryStore } from '../store/useHistoryStore';
-import { useRevenueCat } from '../hooks/useRevenueCat';
+import { useMixStore } from '../store/useMixStore';
+import { useUserQuotesStore } from '../store/useUserQuotesStore';
+import { useReflectStore } from '../store/useReflectStore';
 import { StreakCard } from '../components/ui/StreakCard';
+import RevenueCatUI, { PAYWALL_RESULT } from 'react-native-purchases-ui';
+import { useRevenueCat, setForcePro, getForcePro } from '../hooks/useRevenueCat';
+import { useModal } from '../contexts/ModalContext';
+import { ConfirmSheet } from '../components/ui/ConfirmSheet';
 
 function StatCard({ label, value, theme }: { label: string; value: string | number; theme: ReturnType<typeof useTheme> }) {
   return (
@@ -20,17 +26,60 @@ function StatCard({ label, value, theme }: { label: string; value: string | numb
   );
 }
 
-export default function ProfileScreen({ onClose, onOpenThemes }: { onClose?: () => void; onOpenThemes?: () => void }) {
+export default function ProfileScreen({ onClose }: { onClose?: () => void }) {
   const theme = useTheme();
   const router = useRouter();
-  const { preferences, setPreferences } = useAppStore();
+  const { preferences, setPreferences, resetApp } = useAppStore();
   const { streakCount, weekData } = useStreak();
   const favorites = useFavoritesStore((s) => s.favorites);
   const totalQuotesRead = useHistoryStore((s) => s.totalQuotesRead);
-  const { isPro } = useRevenueCat();
-
+  const { isPro, offerings } = useRevenueCat();
+  const clearFavorites = useFavoritesStore((s) => s.clearFavorites);
+  const clearHistory = useHistoryStore((s) => s.clearHistory);
+  const clearMix = useMixStore((s) => s.clearMix);
+  const clearUserQuotes = useUserQuotesStore((s) => s.clearUserQuotes);
+  const clearReflections = useReflectStore((s) => s.clearReflections);
+  const reflectionsCount = useReflectStore((s) => s.reflections.length);
+  const modal = useModal();
   const close = onClose ?? (() => router.back());
-  const openThemes = onOpenThemes ?? (() => router.push('/themes'));
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const openThemes = () => modal ? modal.openSheet('themes') : router.push('/themes');
+
+  const handleHistory = async () => {
+    if (isPro) {
+      modal ? modal.openSheet('history') : router.push('/history');
+    } else {
+      const offering = offerings?.all['sale'] ?? offerings?.current ?? undefined;
+      const result = await RevenueCatUI.presentPaywall({ offering });
+      if (result === PAYWALL_RESULT.PURCHASED || result === PAYWALL_RESULT.RESTORED) {
+        modal ? modal.openSheet('history') : router.push('/history');
+      }
+    }
+  };
+
+  const handleJournal = async () => {
+    if (isPro) {
+      modal ? modal.openSheet('journal') : router.push('/journal');
+    } else {
+      const offering = offerings?.all['sale'] ?? offerings?.current ?? undefined;
+      const result = await RevenueCatUI.presentPaywall({ offering });
+      if (result === PAYWALL_RESULT.PURCHASED || result === PAYWALL_RESULT.RESTORED) {
+        modal ? modal.openSheet('journal') : router.push('/journal');
+      }
+    }
+  };
+
+  const handleDeleteAccount = () => setShowDeleteConfirm(true);
+
+  const confirmDeleteAccount = () => {
+    clearFavorites();
+    clearHistory();
+    clearMix();
+    clearUserQuotes();
+    clearReflections();
+    resetApp();
+    router.replace('/onboarding');
+  };
 
   return (
     <View style={[styles.root, { backgroundColor: theme.background }]}>
@@ -70,49 +119,23 @@ export default function ProfileScreen({ onClose, onOpenThemes }: { onClose?: () 
           <View style={styles.statsRow}>
             <StatCard label="Favorites" value={favorites.length} theme={theme} />
             <StatCard label="Quotes Read" value={totalQuotesRead} theme={theme} />
-          </View>
-
-          {/* Subscription Section */}
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-              SUBSCRIPTION
-            </Text>
-
-            <TouchableOpacity
-              style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border }]}
-              onPress={() => {
-                close();
-                router.push('/subscriptions');
-              }}
-            >
-              <MaterialCommunityIcons name="crown-outline" size={20} color={theme.gold} />
-              <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>Quotes Pro</Text>
-              <Text style={[styles.menuValue, { color: theme.textMuted }]}>
-                {isPro ? 'Active' : 'Upgrade'}
-              </Text>
-              <MaterialCommunityIcons name="chevron-right" size={18} color={theme.textMuted} />
-            </TouchableOpacity>
+            <StatCard label="Reflections" value={reflectionsCount} theme={theme} />
           </View>
 
           {/* Settings */}
           <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-              SETTINGS
-            </Text>
-
             <TouchableOpacity
               style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border }]}
               onPress={openThemes}
             >
               <MaterialCommunityIcons name="palette-outline" size={20} color={theme.gold} />
               <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>Theme</Text>
-              <Text style={[styles.menuValue, { color: theme.textMuted }]}>{preferences.theme}</Text>
               <MaterialCommunityIcons name="chevron-right" size={18} color={theme.textMuted} />
             </TouchableOpacity>
 
             <TouchableOpacity
               style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border }]}
-              onPress={() => router.push('/history')}
+              onPress={handleHistory}
             >
               <MaterialCommunityIcons name="history" size={20} color={theme.gold} />
               <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>History</Text>
@@ -121,7 +144,16 @@ export default function ProfileScreen({ onClose, onOpenThemes }: { onClose?: () 
 
             <TouchableOpacity
               style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border }]}
-              onPress={() => router.push('/widgets')}
+              onPress={handleJournal}
+            >
+              <MaterialCommunityIcons name="pencil-outline" size={20} color={theme.gold} />
+              <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>Reflections</Text>
+              <MaterialCommunityIcons name="chevron-right" size={18} color={theme.textMuted} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border }]}
+              onPress={() => modal ? modal.openSheet('widgets') : router.push('/widgets')}
             >
               <MaterialCommunityIcons name="view-grid-plus-outline" size={20} color={theme.gold} />
               <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>Widgets</Text>
@@ -130,7 +162,7 @@ export default function ProfileScreen({ onClose, onOpenThemes }: { onClose?: () 
 
             <TouchableOpacity
               style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border }]}
-              onPress={() => router.push('/notifications')}
+              onPress={() => modal ? modal.openSheet('notifications') : router.push('/notifications')}
             >
               <MaterialCommunityIcons name="bell-outline" size={20} color={theme.gold} />
               <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>Notifications</Text>
@@ -139,9 +171,47 @@ export default function ProfileScreen({ onClose, onOpenThemes }: { onClose?: () 
               </Text>
               <MaterialCommunityIcons name="chevron-right" size={18} color={theme.textMuted} />
             </TouchableOpacity>
+            {__DEV__ && (
+              <TouchableOpacity
+                style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: '#B8975A', borderStyle: 'dashed' }]}
+                onPress={() => {
+                  const current = getForcePro();
+                  if (current === null) setForcePro(true);
+                  else if (current === true) setForcePro(false);
+                  else setForcePro(null);
+                }}
+              >
+                <MaterialCommunityIcons name="test-tube" size={20} color="#B8975A" />
+                <Text style={[styles.menuText, { color: '#B8975A', fontFamily: theme.uiFontFamily }]}>
+                  Force Pro (dev)
+                </Text>
+                <Text style={{ color: '#B8975A', fontFamily: theme.uiFontFamily, fontSize: 12 }}>
+                  {getForcePro() === null ? 'real' : getForcePro() ? 'ON' : 'OFF'}
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity
+              style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border }]}
+              onPress={handleDeleteAccount}
+            >
+              <MaterialCommunityIcons name="delete-outline" size={20} color="#EF4444" />
+              <Text style={[styles.menuText, { color: '#EF4444', fontFamily: theme.uiFontFamily }]}>Delete Account</Text>
+            </TouchableOpacity>
           </View>
         </ScrollView>
       </SafeAreaView>
+
+      <ConfirmSheet
+        visible={showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(false)}
+        title="Delete Account"
+        message="This will permanently erase all your data — favorites, history, quotes, and preferences. This cannot be undone."
+        confirmLabel="Delete"
+        destructive
+        cancelLabel="Cancel"
+        onConfirm={confirmDeleteAccount}
+      />
     </View>
   );
 }

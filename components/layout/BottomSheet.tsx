@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback, useState } from 'react';
+import React, { useEffect, useCallback, useState, useRef } from 'react';
 import { Dimensions, StyleSheet, Pressable, View } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -19,13 +19,33 @@ interface BottomSheetProps {
   onClose: () => void;
   children: React.ReactNode;
   backgroundColor: string;
+  /** Skip close animation — sheet vanishes instantly (used when switching to another sheet). */
+  instantClose?: boolean;
+  /** Skip open animation — sheet appears instantly at full height (used when replacing another sheet). */
+  instantOpen?: boolean;
 }
 
-export function BottomSheet({ visible, onClose, children, backgroundColor }: BottomSheetProps) {
+export function BottomSheet({ visible, onClose, children, backgroundColor, instantClose, instantOpen }: BottomSheetProps) {
   const translateY = useSharedValue(SCREEN_HEIGHT);
   const backdropOpacity = useSharedValue(0);
-  // `rendered` keeps the sheet in the tree during the close animation
-  const [rendered, setRendered] = useState(false);
+
+  // Keep-alive: children are lazy-mounted on first show and then stay in the native
+  // tree permanently. This eliminates the "first-frame at SCREEN_HEIGHT" teleport
+  // that occurs when a sheet remounts — translateY changes are pure value updates
+  // on an already-present native view, so they take effect before the next frame.
+  const [hasBeenShown, setHasBeenShown] = useState(false);
+
+  // Refs so effects/gestures always see the latest prop values
+  const instantCloseRef = useRef(instantClose);
+  instantCloseRef.current = instantClose;
+  const instantOpenRef = useRef(instantOpen);
+  instantOpenRef.current = instantOpen;
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  // Guards against double-animating when a gesture/backdrop already started the close
+  // animation before the visible=false prop change arrives from the parent.
+  const isAnimatingCloseRef = useRef(false);
 
   const animateOpen = useCallback(() => {
     backdropOpacity.value = withTiming(1, { duration: 280 });
@@ -37,30 +57,54 @@ export function BottomSheet({ visible, onClose, children, backgroundColor }: Bot
     translateY.value = withTiming(
       SCREEN_HEIGHT,
       { duration: 440, easing: Easing.out(Easing.cubic) },
-      () => { if (done) runOnJS(done)(); }
+      () => { if (done) runOnJS(done)(); },
     );
   }, []);
 
   useEffect(() => {
     if (visible) {
-      setRendered(true);
-    } else if (rendered) {
-      animateClose(() => setRendered(false));
+      // Reset close guard on (re-)open
+      isAnimatingCloseRef.current = false;
+      if (!hasBeenShown) setHasBeenShown(true);
+
+      if (instantOpenRef.current) {
+        // Replacing another sheet — appear instantly.
+        // Because the view is already in the native tree (keep-alive), this is a
+        // direct value update with no mount race — zero teleport frames.
+        translateY.value = 0;
+        backdropOpacity.value = 1;
+      } else {
+        // Fresh open — slide up with spring
+        translateY.value = SCREEN_HEIGHT;
+        backdropOpacity.value = 0;
+        setTimeout(animateOpen, 16);
+      }
+    } else if (hasBeenShown) {
+      if (instantCloseRef.current) {
+        // Replaced by another sheet — vanish instantly
+        isAnimatingCloseRef.current = false;
+        translateY.value = SCREEN_HEIGHT;
+        backdropOpacity.value = 0;
+      } else if (!isAnimatingCloseRef.current) {
+        // Programmatic close (X button, etc.) — animate out.
+        // If a gesture/backdrop already started the animation, skip to avoid
+        // double-animating (the gesture handler calls onClose after its own animation).
+        isAnimatingCloseRef.current = true;
+        animateClose(() => { isAnimatingCloseRef.current = false; });
+      }
     }
   }, [visible]);
 
-  // When rendered becomes true, kick off the open animation
-  useEffect(() => {
-    if (rendered) {
-      translateY.value = SCREEN_HEIGHT;
-      backdropOpacity.value = 0;
-      setTimeout(animateOpen, 16);
-    }
-  }, [rendered]);
-
+  // Backdrop tap or drag-to-dismiss: animate first, then call onClose so the
+  // parent's visible=false arrives only after the sheet has already left the screen.
   const handleClose = useCallback(() => {
-    animateClose(onClose);
-  }, [animateClose, onClose]);
+    if (isAnimatingCloseRef.current) return;
+    isAnimatingCloseRef.current = true;
+    animateClose(() => {
+      isAnimatingCloseRef.current = false;
+      onCloseRef.current();
+    });
+  }, [animateClose]);
 
   const backdropStyle = useAnimatedStyle(() => ({
     opacity: backdropOpacity.value,
@@ -87,9 +131,12 @@ export function BottomSheet({ visible, onClose, children, backgroundColor }: Bot
       }
     });
 
-  if (!rendered) return null;
+  // Not yet shown — don't add to the native tree at all
+  if (!hasBeenShown) return null;
 
   return (
+    // pointerEvents controls touch interception; the view stays in the native tree
+    // even when !visible so there is no remount on next show.
     <View style={StyleSheet.absoluteFill} pointerEvents={visible ? 'box-none' : 'none'}>
       {/* Dim backdrop — tap to close */}
       <Animated.View style={[StyleSheet.absoluteFill, styles.backdrop, backdropStyle]} pointerEvents="box-none">

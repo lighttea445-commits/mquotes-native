@@ -1,5 +1,7 @@
 import '../global.css';
 import React, { useEffect, useRef } from 'react';
+import * as Notifications from 'expo-notifications';
+import { rescheduleAll, requestPermissions } from '../lib/notifications';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -20,7 +22,17 @@ import { View, ActivityIndicator, AppState } from 'react-native';
 import { useAppStore } from '../store/useAppStore';
 import { useTheme } from '../hooks/useTheme';
 import { WidgetBridge } from '../modules/widget-bridge';
-import { initializeRevenueCat } from '../lib/revenuecat';
+import { registerWidgetRefreshTask } from '../tasks/widgetRefreshTask';
+
+// Required for scheduled notifications to appear in the foreground and for the
+// OS to know what to do when a notification fires (alert + sound, no badge).
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
 
 function RootLayoutInner() {
   const theme = useTheme();
@@ -54,11 +66,58 @@ function RootLayoutInner() {
     }, delay);
   };
 
+  // ── Notification deep-link handler ─────────────────────────────────────
   useEffect(() => {
-    // Initialize RevenueCat on app launch
-    initializeRevenueCat().catch((err) =>
-      console.warn('RevenueCat initialization failed:', err)
-    );
+    const sub = Notifications.addNotificationResponseReceivedListener(response => {
+      const data = response.notification.request.content.data as { category?: string } | null;
+      if (data?.category === 'reflect') {
+        setTimeout(() => router.push('/reflect'), 100);
+      }
+      // quote, qod, streak → app opens to root by default
+    });
+    return () => sub.remove();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Refresh notification quotes on launch ───────────────────────────────
+  // Guard: skip if a reschedule already happened within the last 18 hours.
+  // Without this guard, every app open cancels all pending notifications and
+  // re-schedules them, which can silently drop same-day notifications that
+  // haven't fired yet (e.g. a 3 PM notification cancelled at 2:59 PM gets
+  // pushed to tomorrow). Settings-screen changes bypass this guard entirely.
+  useEffect(() => {
+    const prefs = useAppStore.getState().preferences;
+    if (!prefs.notificationsEnabled) return;
+    const ageMs = prefs.lastNotifScheduledAt
+      ? Date.now() - new Date(prefs.lastNotifScheduledAt).getTime()
+      : Infinity;
+    if (ageMs < 18 * 3_600_000) return; // scheduled recently — leave it alone
+    requestPermissions().then(granted => {
+      if (!granted) return;
+      return rescheduleAll({
+        enabled: true,
+        days: prefs.notificationDays ?? [],
+        quotesEnabled: prefs.quotesEnabled ?? true,
+        showAuthor: prefs.notificationShowAuthor ?? false,
+        quoteCount: prefs.notificationCount ?? 5,
+        startHHMM: prefs.notificationStartTime ?? '09:00',
+        endHHMM: prefs.notificationEndTime ?? '22:00',
+        qodEnabled: prefs.qodEnabled ?? true,
+        qodTime: prefs.qodTime ?? '08:00',
+        reflectEnabled: prefs.reflectEnabled ?? true,
+        reflectTime: prefs.reflectTime ?? '20:00',
+        streakEnabled: prefs.streakEnabled ?? true,
+        streakTime: prefs.streakTime ?? '21:00',
+      }).then(() => {
+        useAppStore.getState().setPreferences({ lastNotifScheduledAt: new Date().toISOString() });
+      });
+    }).catch(console.warn);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    // Schedule background quote rotation for all placed widgets.
+    registerWidgetRefreshTask('hourly');
 
     // Initial mount: defer long enough for the first screen to settle.
     checkPendingWidget(400);
@@ -95,6 +154,8 @@ function RootLayoutInner() {
         <Stack.Screen name="widgets" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="notifications" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="subscriptions" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="reflect" options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
+        <Stack.Screen name="journal" options={{ animation: 'slide_from_right' }} />
       </Stack>
     </>
   );

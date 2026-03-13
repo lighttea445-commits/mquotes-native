@@ -5,7 +5,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   FlatList,
-  Dimensions,
+  useWindowDimensions,
   ImageBackground,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -13,24 +13,34 @@ import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
+import { useRevenueCat } from '../hooks/useRevenueCat';
 import { useAppStore } from '../store/useAppStore';
 import { THEMES } from '../constants/themes';
+import { useModal } from '../contexts/ModalContext';
+import { analytics } from '../lib/analytics';
 
-const { width } = Dimensions.get('window');
 const SIDE_PADDING = 16;
 const GAP = 8;
-const CARD_WIDTH = (width - SIDE_PADDING * 2 - GAP * 2) / 3;
-const CARD_HEIGHT = CARD_WIDTH * 1.5; // 2:3 portrait ratio
 
 export default function ThemesScreen({ onClose }: { onClose?: () => void }) {
+  const { width } = useWindowDimensions();
+  const CARD_WIDTH = (width - SIDE_PADDING * 2 - GAP * 2) / 3;
+  const CARD_HEIGHT = CARD_WIDTH * 1.5; // 2:3 portrait ratio
   const theme = useTheme();
   const router = useRouter();
+  const modal = useModal();
+  const { isPro } = useRevenueCat();
   const { preferences, setTheme } = useAppStore();
 
   const close = onClose ?? (() => router.back());
 
   const handleSelect = (themeId: string) => {
+    if (!isPro) {
+      modal ? modal.openPaywall() : router.push('/subscriptions');
+      return;
+    }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    analytics.track('theme_changed', { themeId });
     setTheme(themeId);
     close();
   };
@@ -56,8 +66,15 @@ export default function ThemesScreen({ onClose }: { onClose?: () => void }) {
         {/* Screen title */}
         <Text style={[styles.title, { color: theme.text }]}>Customize</Text>
 
-        {/* Subtitle */}
-        <Text style={[styles.forYouLabel, { color: theme.textMuted }]}>For you</Text>
+        {/* Pro lock banner */}
+        {!isPro && (
+          <View style={[styles.proBanner, { backgroundColor: 'rgba(184,151,90,0.10)', borderColor: 'rgba(184,151,90,0.25)' }]}>
+            <MaterialCommunityIcons name="crown" size={14} color="#B8975A" />
+            <Text style={[styles.proBannerText, { color: '#B8975A', fontFamily: 'Inter_500Medium' }]}>
+              Unlock all themes with Quotable Premium
+            </Text>
+          </View>
+        )}
 
         {/* 3-column portrait grid */}
         <FlatList
@@ -158,6 +175,20 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_600SemiBold',
     marginBottom: 12,
     paddingHorizontal: SIDE_PADDING,
+  },
+  proBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginHorizontal: SIDE_PADDING,
+    marginBottom: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  proBannerText: {
+    fontSize: 13,
   },
   grid: {
     paddingHorizontal: SIDE_PADDING,

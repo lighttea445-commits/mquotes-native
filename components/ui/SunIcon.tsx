@@ -9,10 +9,9 @@ interface SunIconProps {
 
 export function SunIcon({ day, size = 64, color = '#B8975A' }: SunIconProps) {
   const center = size / 2;
-  const outerRadius = size / 2 - 2;
   const innerRadius = size * 0.28;
-  const rayLength = size * 0.09;
-  const rayStart = outerRadius - rayLength - 2;
+  const rayLength = size * 0.17;
+  const rayStart = innerRadius + 4;
 
   const rays = Array.from({ length: 8 }, (_, i) => {
     const angle = (i * 45 * Math.PI) / 180;
@@ -25,15 +24,6 @@ export function SunIcon({ day, size = 64, color = '#B8975A' }: SunIconProps) {
 
   return (
     <Svg width={size} height={size}>
-      {/* Outer circle */}
-      <Circle
-        cx={center}
-        cy={center}
-        r={outerRadius}
-        stroke={color}
-        strokeWidth={1.5}
-        fill="transparent"
-      />
       {/* Rays */}
       {rays.map((ray, i) => (
         <Line

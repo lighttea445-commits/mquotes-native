@@ -11,10 +11,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../../hooks/useTheme';
+import { useRevenueCat } from '../../hooks/useRevenueCat';
 import { useMixStore } from '../../store/useMixStore';
 import { useFavoritesStore } from '../../store/useFavoritesStore';
 import { useUserQuotesStore } from '../../store/useUserQuotesStore';
 import { CATEGORIES, SPECIAL_CATEGORIES } from '../../constants/categories';
+import { useModal } from '../../contexts/ModalContext';
+
+const FREE_MIX_LIMIT = 2;
 
 const { width } = Dimensions.get('window');
 const ITEM_SIZE = (width - 48) / 2;
@@ -31,11 +35,13 @@ type CategoryItem = {
 function CategoryCard({
   item,
   selected,
+  locked,
   onToggle,
   theme,
 }: {
   item: CategoryItem;
   selected: boolean;
+  locked: boolean;
   onToggle: (id: string) => void;
   theme: ReturnType<typeof useTheme>;
 }) {
@@ -48,6 +54,7 @@ function CategoryCard({
           borderColor: selected ? theme.gold : theme.border,
           width: ITEM_SIZE,
           height: ITEM_SIZE * 0.65,
+          opacity: locked ? 0.55 : 1,
         },
       ]}
       onPress={() => onToggle(item.id)}
@@ -56,6 +63,11 @@ function CategoryCard({
       {selected && (
         <View style={[styles.checkBadge, { backgroundColor: theme.gold }]}>
           <MaterialCommunityIcons name="check" size={11} color="#1A1208" />
+        </View>
+      )}
+      {locked && !selected && (
+        <View style={[styles.checkBadge, { backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border }]}>
+          <MaterialCommunityIcons name="lock" size={10} color={theme.textMuted} />
         </View>
       )}
       <View style={[styles.iconBg, { backgroundColor: GOLD_ICON_BG }]}>
@@ -74,6 +86,8 @@ function CategoryCard({
 export default function CreateMixScreen({ onClose }: { onClose?: () => void }) {
   const theme = useTheme();
   const router = useRouter();
+  const modal = useModal();
+  const { isPro } = useRevenueCat();
   const { selectedCategories, setCategories } = useMixStore();
   const favorites = useFavoritesStore((s) => s.favorites);
   const userQuotes = useUserQuotesStore((s) => s.userQuotes);
@@ -90,7 +104,13 @@ export default function CreateMixScreen({ onClose }: { onClose?: () => void }) {
     ...CATEGORIES,
   ];
 
+  const openPaywall = () => modal ? modal.openPaywall() : router.push('/subscriptions');
+
   const toggle = (id: string) => {
+    if (!localSelected.includes(id) && !isPro && localSelected.length >= FREE_MIX_LIMIT) {
+      openPaywall();
+      return;
+    }
     setLocalSelected(prev =>
       prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id],
     );
@@ -139,14 +159,19 @@ export default function CreateMixScreen({ onClose }: { onClose?: () => void }) {
           data={allItems}
           keyExtractor={item => item.id}
           numColumns={2}
-          renderItem={({ item }) => (
-            <CategoryCard
-              item={item}
-              selected={localSelected.includes(item.id)}
-              onToggle={toggle}
-              theme={theme}
-            />
-          )}
+          renderItem={({ item }) => {
+            const selected = localSelected.includes(item.id);
+            const locked = !isPro && !selected && localSelected.length >= FREE_MIX_LIMIT;
+            return (
+              <CategoryCard
+                item={item}
+                selected={selected}
+                locked={locked}
+                onToggle={toggle}
+                theme={theme}
+              />
+            );
+          }}
           contentContainerStyle={styles.grid}
           columnWrapperStyle={styles.row}
           showsVerticalScrollIndicator={false}
@@ -154,7 +179,18 @@ export default function CreateMixScreen({ onClose }: { onClose?: () => void }) {
 
         {/* Footer */}
         <View style={[styles.footer, { borderTopColor: theme.border, backgroundColor: theme.background }]}>
-          {localSelected.length > 0 && (
+          {!isPro ? (
+            <View style={styles.slotRow}>
+              <Text style={[styles.selectedCount, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+                {localSelected.length}/{FREE_MIX_LIMIT} slots used
+              </Text>
+              <TouchableOpacity onPress={openPaywall} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Text style={[styles.upgradeLink, { color: '#B8975A', fontFamily: 'Inter_500Medium' }]}>
+                  Unlock unlimited →
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : localSelected.length > 0 && (
             <Text style={[styles.selectedCount, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
               {localSelected.length} categor{localSelected.length === 1 ? 'y' : 'ies'} selected
             </Text>
@@ -257,6 +293,14 @@ const styles = StyleSheet.create({
     paddingBottom: 32,
     borderTopWidth: 1,
     gap: 8,
+  },
+  slotRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  upgradeLink: {
+    fontSize: 13,
   },
   selectedCount: { fontSize: 13, textAlign: 'center' },
   saveBtn: {

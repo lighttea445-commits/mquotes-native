@@ -1,12 +1,17 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
+  Pressable,
   TextInput,
-  Dimensions,
   ScrollView,
+  Platform,
+  Dimensions,
+  ImageBackground,
+  KeyboardAvoidingView,
+  Animated as RNAnimated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -14,474 +19,2173 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
-  withSpring,
   Easing,
   runOnJS,
 } from 'react-native-reanimated';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import Svg, { Circle } from 'react-native-svg';
+import RevenueCatUI from 'react-native-purchases-ui';
 import { useAppStore } from '../../store/useAppStore';
-import { MOODS } from '../../constants/moods';
+import { useMixStore } from '../../store/useMixStore';
+import { useRevenueCat } from '../../hooks/useRevenueCat';
+import {
+  requestPermissions,
+  scheduleQuoteNotifications,
+  ensureNotificationChannel,
+  formatHHMMto12h,
+} from '../../lib/notifications';
+import { useTheme } from '../../hooks/useTheme';
+import { StreakCard } from '../../components/ui/StreakCard';
+import { WidgetBridge } from '../../modules/widget-bridge';
 import { CATEGORIES } from '../../constants/categories';
-import { THEMES, DEFAULT_THEME_ID } from '../../constants/themes';
+import { ConfirmSheet } from '../../components/ui/ConfirmSheet';
 
-const { width } = Dimensions.get('window');
+const { width: SW, height: SH } = Dimensions.get('window');
 
-// ─────────────────────────────────────────────────
-// Step data
-// ─────────────────────────────────────────────────
+// ─── Constants ──────────────────────────────────────────────────────────────
 
-type OnboardingStep = {
-  id: string;
-  title: string;
-  subtitle?: string;
-  type: 'welcome' | 'name' | 'single-choice' | 'multi-choice' | 'theme' | 'info' | 'ready';
-  emoji?: string;
-  options?: { id: string; label: string; emoji?: string }[];
-};
+const TOTAL_STEPS = 20;
+const PROGRESS_START_STEP = 6;
+const PROGRESS_END_STEP = 17;
+const NOTIF_STEP = 30; // minutes per step for time pickers
 
-const STEPS: OnboardingStep[] = [
-  {
-    id: 'welcome',
-    type: 'welcome',
-    emoji: '✦',
-    title: 'Welcome to mquotes',
-    subtitle: 'Your daily source of wisdom, motivation, and calm.',
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+function stepHHMM(hhmm: string, deltaMinutes: number): string {
+  const [h, m] = hhmm.split(':').map(Number);
+  const total = ((h * 60 + m + deltaMinutes) % 1440 + 1440) % 1440;
+  return `${Math.floor(total / 60).toString().padStart(2, '0')}:${(total % 60).toString().padStart(2, '0')}`;
+}
+
+// ─── TypewriterText ──────────────────────────────────────────────────────────
+
+function TypewriterText({
+  text,
+  style,
+  charDelay = 35,
+  startDelay = 150,
+}: {
+  text: string;
+  style?: any;
+  charDelay?: number;
+  startDelay?: number;
+}) {
+  const [count, setCount] = useState(0);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    setCount(0);
+    const timer = setTimeout(() => {
+      let i = 0;
+      intervalRef.current = setInterval(() => {
+        i += 1;
+        setCount(i);
+        if (i >= text.length && intervalRef.current) {
+          clearInterval(intervalRef.current);
+        }
+      }, charDelay);
+    }, startDelay);
+    return () => {
+      clearTimeout(timer);
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [text]);
+
+  return <Text style={style}>{text.slice(0, count)}</Text>;
+}
+
+// ─── TypewriterColorText ─────────────────────────────────────────────────────
+
+function TypewriterColorText({
+  segments,
+  style,
+  charDelay = 35,
+  startDelay = 150,
+}: {
+  segments: { text: string; color: string }[];
+  style?: any;
+  charDelay?: number;
+  startDelay?: number;
+}) {
+  // Flatten to a single string — identical dep pattern to TypewriterText
+  const fullText = segments.map(s => s.text).join('');
+  const [count, setCount] = useState(0);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    setCount(0);
+    const timer = setTimeout(() => {
+      let i = 0;
+      intervalRef.current = setInterval(() => {
+        i += 1;
+        setCount(i);
+        if (i >= fullText.length && intervalRef.current) {
+          clearInterval(intervalRef.current);
+        }
+      }, charDelay);
+    }, startDelay);
+    return () => {
+      clearTimeout(timer);
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [fullText]);
+
+  // Slice the visible portion then re-partition into colored runs
+  const visible = fullText.slice(0, count);
+  const parts: React.ReactElement[] = [];
+  let pos = 0;
+  for (const seg of segments) {
+    if (pos >= visible.length) break;
+    const chunk = visible.slice(pos, pos + seg.text.length);
+    if (chunk.length > 0) {
+      parts.push(<Text key={pos} style={{ color: seg.color }}>{chunk}</Text>);
+    }
+    pos += seg.text.length;
+  }
+
+  return <Text style={style}>{parts}</Text>;
+}
+
+// ─── Joy → Mix mapping ──────────────────────────────────────────────────────
+// Direct 1:1 mapping from CATEGORIES (name → id)
+const JOY_TO_MIX: Record<string, string> = Object.fromEntries(
+  CATEGORIES.map((c) => [c.name, c.id]),
+);
+
+// ─── Types ──────────────────────────────────────────────────────────────────
+
+interface OnboardingData {
+  name: string;
+  phoneUsage: string;
+  goals: string[];
+  age: string;
+  gender: string;
+  joyCategories: string[];
+  notificationCount: number;
+  notificationStart: string; // "HH:MM" 24h
+  notificationEnd: string;   // "HH:MM" 24h
+  notificationsGranted: boolean;
+}
+
+interface ScreenProps {
+  data: OnboardingData;
+  updateData: (u: Partial<OnboardingData>) => void;
+  next: () => void;
+  back: () => void;
+  progress?: number;
+}
+
+// ─── Shared: OnboardingHeader ────────────────────────────────────────────────
+
+function OnboardingHeader({
+  progress,
+  onBack,
+  onSkip,
+  title,
+}: {
+  progress?: number;
+  onBack?: () => void;
+  onSkip?: () => void;
+  title?: string;
+}) {
+  const theme = useTheme();
+  return (
+    <View style={hdr.wrap}>
+      {progress !== undefined && (
+        <View style={[hdr.track, { backgroundColor: theme.surface }]}>
+          <View
+            style={[
+              hdr.fill,
+              { width: `${Math.min(progress, 100)}%`, backgroundColor: theme.gold },
+            ]}
+          />
+        </View>
+      )}
+      <View style={hdr.row}>
+        {onBack ? (
+          <TouchableOpacity style={hdr.back} onPress={onBack}>
+            <MaterialCommunityIcons name="chevron-left" size={20} color={theme.textMuted} />
+            <Text style={[hdr.backText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+              Back
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 60 }} />
+        )}
+        {title ? (
+          <Text style={[hdr.title, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
+            {title}
+          </Text>
+        ) : (
+          <View />
+        )}
+        {onSkip ? (
+          <TouchableOpacity onPress={onSkip}>
+            <Text style={[hdr.skip, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+              Skip
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 60 }} />
+        )}
+      </View>
+    </View>
+  );
+}
+
+const hdr = StyleSheet.create({
+  wrap: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 8 },
+  track: {
+    height: 3,
+    borderRadius: 2,
+    marginBottom: 16,
+    overflow: 'hidden',
   },
-  {
-    id: 'problem',
-    type: 'info',
-    emoji: '🤔',
-    title: 'Life gets overwhelming',
-    subtitle: 'Between deadlines, distractions, and daily stress — it\'s easy to lose sight of what matters.',
+  fill: { height: 3, borderRadius: 2 },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: 36,
   },
-  {
-    id: 'solution',
-    type: 'info',
-    emoji: '💡',
-    title: 'One quote. Every day.',
-    subtitle: 'A single powerful quote can shift your mindset, spark an idea, or give you the strength to keep going.',
+  back: { flexDirection: 'row', alignItems: 'center', gap: 2, width: 60 },
+  backText: { fontSize: 14 },
+  title: { fontSize: 13, fontWeight: '500' },
+  skip: { fontSize: 14, textAlign: 'right', width: 60 },
+});
+
+// ─── Shared: ContinueButton ─────────────────────────────────────────────────
+
+function ContinueButton({
+  onPress,
+  label = 'Continue',
+  disabled = false,
+  variant = 'muted',
+}: {
+  onPress: () => void;
+  label?: string;
+  disabled?: boolean;
+  variant?: 'muted' | 'brandDark' | 'gold';
+}) {
+  const bg =
+    variant === 'brandDark'
+      ? '#26313b'
+      : variant === 'gold'
+      ? '#C4A35A'
+      : 'rgba(138,128,120,0.30)';
+  const color =
+    variant === 'brandDark' ? '#fbf6ea' : variant === 'gold' ? '#1A1208' : '#E8E0D0';
+  return (
+    <View style={ctaS.wrap}>
+      <TouchableOpacity
+        style={[ctaS.btn, { backgroundColor: bg, opacity: disabled ? 0.3 : 1 }]}
+        onPress={onPress}
+        disabled={disabled}
+        activeOpacity={0.8}
+      >
+        <Text style={[ctaS.label, { color }]}>{label}</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+const ctaS = StyleSheet.create({
+  wrap: { paddingHorizontal: 24, paddingBottom: 32, paddingTop: 16 },
+  btn: { borderRadius: 99, paddingVertical: 18, alignItems: 'center' },
+  label: {
+    fontSize: 16,
+    fontWeight: '600',
+    fontFamily: 'Inter_600SemiBold',
+    letterSpacing: 0.2,
   },
-  {
-    id: 'name',
-    type: 'name',
-    emoji: '👋',
-    title: 'What should we call you?',
-    subtitle: 'This helps us personalize your experience',
+});
+
+// ─── Shared: SkipModal ───────────────────────────────────────────────────────
+
+function SkipModal({ onGoBack, onSkip }: { onGoBack: () => void; onSkip: () => void }) {
+  const theme = useTheme();
+  return (
+    <View style={[skpS.overlay, { backgroundColor: 'rgba(0,0,0,0.6)' }]}>
+      <TouchableOpacity style={StyleSheet.absoluteFill} onPress={onGoBack} />
+      <View style={[skpS.card, { backgroundColor: theme.surfaceElevated ?? theme.surface, borderColor: theme.border }]}>
+        <Text style={[skpS.title, { color: theme.text, fontFamily: 'PlayfairDisplay_700Bold' }]}>
+          Are you sure you want to do this?
+        </Text>
+        <Text style={[skpS.body, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+          This is a main feature of the app.
+        </Text>
+        <TouchableOpacity
+          style={[skpS.primary, { backgroundColor: theme.gold }]}
+          onPress={onGoBack}
+          activeOpacity={0.8}
+        >
+          <Text style={[skpS.primaryLabel, { fontFamily: theme.uiFontFamily }]}>Go Back</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[skpS.secondary, { backgroundColor: theme.surface }]}
+          onPress={onSkip}
+          activeOpacity={0.8}
+        >
+          <Text style={[skpS.secondaryLabel, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+            Skip Anyway
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
+const skpS = StyleSheet.create({
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 100,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  {
-    id: 'focus',
-    type: 'single-choice',
-    emoji: '🎯',
-    title: 'What do you most want to work on?',
-    options: [
-      { id: 'motivation', label: 'Staying motivated', emoji: '🔥' },
-      { id: 'mindfulness', label: 'Being more present', emoji: '🧘' },
-      { id: 'growth', label: 'Personal growth', emoji: '🌱' },
-      { id: 'happiness', label: 'Finding more joy', emoji: '☀️' },
-    ],
+  card: {
+    marginHorizontal: 32,
+    width: SW - 64,
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 32,
+    alignItems: 'center',
   },
-  {
-    id: 'drives',
-    type: 'single-choice',
-    emoji: '⚡',
-    title: 'What drives you most?',
-    options: [
-      { id: 'success', label: 'Achieving goals', emoji: '🏆' },
-      { id: 'love', label: 'Relationships & love', emoji: '❤️' },
-      { id: 'wisdom', label: 'Learning & wisdom', emoji: '📚' },
-      { id: 'peace', label: 'Inner peace', emoji: '☁️' },
-    ],
+  title: { fontSize: 20, fontWeight: '700', textAlign: 'center', marginBottom: 8 },
+  body: { fontSize: 13, textAlign: 'center', marginBottom: 24, lineHeight: 20 },
+  primary: {
+    width: '100%',
+    borderRadius: 99,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginBottom: 12,
   },
-  {
-    id: 'barrier',
-    type: 'single-choice',
-    emoji: '🚧',
-    title: 'What holds you back most?',
-    options: [
-      { id: 'courage', label: 'Fear and self-doubt', emoji: '😰' },
-      { id: 'time', label: 'Lack of time', emoji: '⏰' },
-      { id: 'change', label: 'Resistance to change', emoji: '🔄' },
-      { id: 'solitude', label: 'Loneliness', emoji: '🌙' },
-    ],
+  primaryLabel: { fontSize: 14, fontWeight: '600', color: '#1A1208' },
+  secondary: {
+    width: '100%',
+    borderRadius: 99,
+    paddingVertical: 14,
+    alignItems: 'center',
   },
-  {
-    id: 'morning',
-    type: 'single-choice',
-    emoji: '🌅',
-    title: 'When do you read quotes most?',
-    options: [
-      { id: 'morning', label: 'Morning', emoji: '🌄' },
-      { id: 'afternoon', label: 'Afternoon', emoji: '☀️' },
-      { id: 'evening', label: 'Evening', emoji: '🌆' },
-      { id: 'random', label: 'Whenever I need it', emoji: '🎲' },
-    ],
+  secondaryLabel: { fontSize: 14, fontWeight: '500' },
+});
+
+// ─── Screen: SplashScreen ───────────────────────────────────────────────────
+
+function SplashScreen_({ next, progress }: { next: () => void; progress?: number }) {
+  const theme = useTheme();
+  const cardW = Math.min(SW - 24, 400);
+  const cardH = Math.min(cardW * 1.45, SH * 0.72);
+  return (
+    <View style={[ss.root, { backgroundColor: theme.background }]}>
+      <SafeAreaView style={ss.safe} edges={['top', 'bottom']}>
+        <OnboardingHeader progress={progress} />
+        <View style={ss.center}>
+          <View style={[ss.cardWrap, { width: cardW, height: cardH }]}>
+            <ImageBackground
+              source={require('../../assets/clouds.jpg')}
+              style={ss.img}
+              imageStyle={{ borderRadius: 24 }}
+              resizeMode="cover"
+            >
+              <View style={[ss.overlay, { borderRadius: 24 }]} />
+              <View style={ss.inner}>
+                <View style={ss.top}>
+                  <TypewriterText
+                    text="Quotable"
+                    style={ss.brand}
+                    charDelay={70}
+                    startDelay={400}
+                  />
+                  <TypewriterText
+                    text="Daily Affirmations & Motivation"
+                    style={ss.tagline}
+                    charDelay={22}
+                    startDelay={1100}
+                  />
+                </View>
+                <TouchableOpacity style={ss.beginBtn} onPress={next} activeOpacity={0.85}>
+                  <Text style={ss.beginText}>Begin My Journey</Text>
+                </TouchableOpacity>
+              </View>
+            </ImageBackground>
+          </View>
+        </View>
+      </SafeAreaView>
+    </View>
+  );
+}
+
+const ss = StyleSheet.create({
+  root: { flex: 1 },
+  safe: { flex: 1, width: '100%' },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 },
+  cardWrap: { borderRadius: 24, overflow: 'hidden' },
+  img: { flex: 1 },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(26,26,26,0.55)',
   },
-  {
-    id: 'themes-intro',
-    type: 'info',
-    emoji: '🎨',
-    title: 'Your space, your vibe',
-    subtitle: 'mquotes has 15 beautiful themes — from Midnight to Sakura. Pick one on the next screen.',
+  inner: {
+    flex: 1,
+    padding: 32,
+    justifyContent: 'space-between',
   },
-  {
-    id: 'theme',
-    type: 'theme',
-    emoji: '◑',
-    title: 'Pick your theme',
-    subtitle: 'You can change this anytime',
+  top: { paddingTop: 24 },
+  brand: {
+    fontFamily: 'PlayfairDisplay_700Bold',
+    fontSize: 38,
+    color: '#f0ece4',
+    lineHeight: 46,
   },
-  {
-    id: 'streak-intro',
-    type: 'info',
-    emoji: '🔥',
-    title: 'Build your streak',
-    subtitle: 'Open mquotes daily to keep your streak alive. Consistency builds wisdom.',
+  tagline: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 15,
+    color: 'rgba(240,236,228,0.7)',
+    marginTop: 12,
   },
-  {
-    id: 'mix-intro',
-    type: 'info',
-    emoji: '🎛️',
-    title: 'Create your Mix',
-    subtitle: 'Blend multiple quote categories into one personalized feed. You\'re in control.',
+  beginBtn: {
+    borderRadius: 99,
+    paddingVertical: 18,
+    alignItems: 'center',
+    backgroundColor: 'rgba(240,236,228,0.85)',
   },
-  {
-    id: 'categories',
-    type: 'multi-choice',
-    emoji: '📚',
-    title: 'What topics interest you?',
-    subtitle: 'Select all that apply',
-    options: CATEGORIES.slice(0, 8).map(c => ({ id: c.id, label: c.name, emoji: c.icon })),
+  beginText: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 16,
+    color: '#1a1208',
+    fontWeight: '600',
   },
-  {
-    id: 'overwhelmed',
-    type: 'single-choice',
-    emoji: '💭',
-    title: 'When you\'re overwhelmed, you prefer:',
-    options: [
-      { id: 'wisdom', label: 'Inspiring words', emoji: '✨' },
-      { id: 'mindfulness', label: 'Calming quotes', emoji: '🌿' },
-      { id: 'courage', label: 'A push to act', emoji: '⚡' },
-      { id: 'hope', label: 'Hopeful thoughts', emoji: '🌤️' },
-    ],
+});
+
+// ─── Screen: TapScreen ───────────────────────────────────────────────────────
+
+function TapScreen_({ text, next }: { text: string; next: () => void; back?: () => void; progress?: number }) {
+  const theme = useTheme();
+  return (
+    <TouchableOpacity style={{ flex: 1 }} onPress={next} activeOpacity={1}>
+      <View style={[tps.root, { backgroundColor: theme.background }]}>
+        <SafeAreaView style={tps.safe} edges={['top', 'bottom']}>
+          <View style={tps.center}>
+            <TypewriterText
+              text={text}
+              style={[tps.title, { color: theme.text, fontFamily: 'Allkin_400Regular' }]}
+              charDelay={55}
+              startDelay={200}
+            />
+          </View>
+        </SafeAreaView>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+const tps = StyleSheet.create({
+  root: { flex: 1 },
+  safe: { flex: 1 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
+  title: {
+    fontWeight: '700',
+    fontSize: 36,
+    lineHeight: 44,
+    textAlign: 'center',
   },
-  {
-    id: 'notifications',
-    type: 'single-choice',
-    emoji: '🔔',
-    title: 'Daily quote reminders?',
-    subtitle: 'We\'ll send one quote at your preferred time',
-    options: [
-      { id: 'yes_morning', label: '8:00 AM', emoji: '🌅' },
-      { id: 'yes_noon', label: '12:00 PM', emoji: '☀️' },
-      { id: 'yes_evening', label: '7:00 PM', emoji: '🌙' },
-      { id: 'no', label: 'No thanks', emoji: '🔕' },
-    ],
-  },
-  {
-    id: 'ready',
-    type: 'ready',
-    emoji: '🚀',
-    title: 'You\'re all set!',
-    subtitle: 'Your personalized quote feed is ready. Swipe up to explore.',
-  },
+});
+
+// ─── Screen: HookScreen ───────────────────────────────────────────────────────
+
+// Flat word list with highlight flag for word-by-word reveal
+const hookWords: { text: string; highlight: boolean }[] = [
+  { text: 'Ever', highlight: false },
+  { text: 'feel', highlight: false },
+  { text: 'you', highlight: false },
+  { text: 'unlock', highlight: false },
+  { text: 'your', highlight: false },
+  { text: 'phone', highlight: false },
+  { text: '100', highlight: true },
+  { text: 'times', highlight: true },
+  { text: 'a', highlight: true },
+  { text: 'day...', highlight: true },
+  { text: 'but', highlight: false },
+  { text: 'never', highlight: true },
+  { text: 'have', highlight: true },
+  { text: 'the', highlight: true },
+  { text: 'energy', highlight: true },
+  { text: 'you', highlight: false },
+  { text: 'need', highlight: false },
+  { text: 'to', highlight: false },
+  { text: 'be', highlight: false },
+  { text: 'productive.', highlight: false },
 ];
 
-// ─────────────────────────────────────────────────
-// Main Onboarding Component
-// ─────────────────────────────────────────────────
-
-export default function OnboardingScreen() {
-  const router = useRouter();
-  const { setPreferences, setTheme, setName, completeOnboarding } = useAppStore();
-
-  const [stepIndex, setStepIndex] = useState(0);
-  const [nameValue, setNameValue] = useState('');
-  const [selectedTheme, setSelectedTheme] = useState(DEFAULT_THEME_ID);
-  const [singleChoices, setSingleChoices] = useState<Record<string, string>>({});
-  const [multiChoices, setMultiChoices] = useState<Record<string, string[]>>({});
-
-  const translateX = useSharedValue(0);
-  const opacity = useSharedValue(1);
-
-  const step = STEPS[stepIndex];
-  const isLast = stepIndex === STEPS.length - 1;
-
-  const animateTransition = (onDone: () => void) => {
-    opacity.value = withTiming(0, { duration: 180, easing: Easing.out(Easing.cubic) }, () => {
-      runOnJS(onDone)();
-      opacity.value = withTiming(1, { duration: 220 });
-    });
-  };
-
-  const handleNext = useCallback(() => {
-    // Save step data
-    if (step.type === 'name') setName(nameValue);
-    if (step.type === 'theme') setTheme(selectedTheme);
-    if (step.id === 'notifications') {
-      const choice = singleChoices['notifications'];
-      if (choice && choice !== 'no') {
-        const timeMap: Record<string, string> = {
-          yes_morning: '08:00',
-          yes_noon: '12:00',
-          yes_evening: '19:00',
-        };
-        setPreferences({ notificationsEnabled: true, notificationTime: timeMap[choice] ?? '08:00' });
-      }
-    }
-
-    if (isLast) {
-      // Save categories from multi-choice
-      const cats = multiChoices['categories'] ?? [];
-      if (cats.length > 0) setPreferences({ categories: cats });
-      completeOnboarding();
-      // Navigate to main app
-      router.replace('/');
-      return;
-    }
-
-    animateTransition(() => setStepIndex(prev => prev + 1));
-  }, [step, stepIndex, isLast, nameValue, selectedTheme, singleChoices, multiChoices]);
-
-  const handlePrev = () => {
-    if (stepIndex === 0) return;
-    animateTransition(() => setStepIndex(prev => prev - 1));
-  };
-
-  const animStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
-
-  const canProceed = () => {
-    if (step.type === 'name') return nameValue.trim().length > 0;
-    if (step.type === 'single-choice') return !!singleChoices[step.id];
-    return true;
-  };
+function HookScreen_({ next, back, progress }: { next: () => void; back?: () => void; progress?: number }) {
+  const theme = useTheme();
+  const hookSegments = hookWords.map((word, i) => ({
+    text: (i === 0 ? '' : ' ') + word.text,
+    color: word.highlight ? theme.gold : theme.text,
+  }));
 
   return (
-    <View style={styles.container}>
-      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        {/* Progress bar */}
-        <View style={styles.progressBar}>
-          <View style={[styles.progressFill, { width: `${((stepIndex + 1) / STEPS.length) * 100}%` }]} />
-        </View>
-
-        {/* Back button */}
-        {stepIndex > 0 && (
-          <TouchableOpacity style={styles.backBtn} onPress={handlePrev}>
-            <Text style={styles.backText}>‹</Text>
-          </TouchableOpacity>
-        )}
-
-        <Animated.View style={[styles.content, animStyle]}>
-          <Text style={styles.emoji}>{step.emoji}</Text>
-          <Text style={styles.title}>{step.title}</Text>
-          {step.subtitle && <Text style={styles.subtitle}>{step.subtitle}</Text>}
-
-          {/* Name input */}
-          {step.type === 'name' && (
-            <TextInput
-              style={styles.input}
-              placeholder="Your name..."
-              placeholderTextColor="#666"
-              value={nameValue}
-              onChangeText={setNameValue}
-              autoFocus
-              returnKeyType="done"
-              onSubmitEditing={handleNext}
-            />
-          )}
-
-          {/* Single choice */}
-          {step.type === 'single-choice' && step.options && (
-            <View style={styles.optionsGrid}>
-              {step.options.map(opt => {
-                const selected = singleChoices[step.id] === opt.id;
-                return (
-                  <TouchableOpacity
-                    key={opt.id}
-                    style={[styles.optionBtn, selected && styles.optionBtnSelected]}
-                    onPress={() => setSingleChoices(prev => ({ ...prev, [step.id]: opt.id }))}
-                  >
-                    {opt.emoji && <Text style={styles.optionEmoji}>{opt.emoji}</Text>}
-                    <Text style={[styles.optionLabel, selected && styles.optionLabelSelected]}>
-                      {opt.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          )}
-
-          {/* Multi choice */}
-          {step.type === 'multi-choice' && step.options && (
-            <View style={styles.optionsGrid}>
-              {step.options.map(opt => {
-                const selected = (multiChoices[step.id] ?? []).includes(opt.id);
-                return (
-                  <TouchableOpacity
-                    key={opt.id}
-                    style={[styles.optionBtn, selected && styles.optionBtnSelected]}
-                    onPress={() => {
-                      setMultiChoices(prev => {
-                        const current = prev[step.id] ?? [];
-                        return {
-                          ...prev,
-                          [step.id]: selected
-                            ? current.filter(id => id !== opt.id)
-                            : [...current, opt.id],
-                        };
-                      });
-                    }}
-                  >
-                    {opt.emoji && <Text style={styles.optionEmoji}>{opt.emoji}</Text>}
-                    <Text style={[styles.optionLabel, selected && styles.optionLabelSelected]}>
-                      {opt.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          )}
-
-          {/* Theme picker */}
-          {step.type === 'theme' && (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.themePicker}
-            >
-              {THEMES.slice(0, 6).map(t => (
-                <TouchableOpacity
-                  key={t.id}
-                  style={[
-                    styles.themeChip,
-                    { backgroundColor: t.background, borderColor: selectedTheme === t.id ? '#fff' : 'transparent' },
-                  ]}
-                  onPress={() => setSelectedTheme(t.id)}
-                >
-                  <Text style={[styles.themeChipText, { color: t.text }]}>{t.name}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          )}
-        </Animated.View>
-
-        {/* CTA Button */}
+    <View style={[hks.root, { backgroundColor: theme.background }]}>
+      <SafeAreaView style={hks.safe} edges={['top', 'bottom']}>
+        <OnboardingHeader progress={progress} onBack={back} />
         <TouchableOpacity
-          style={[styles.ctaBtn, !canProceed() && styles.ctaBtnDisabled]}
-          onPress={handleNext}
-          disabled={!canProceed()}
+          style={hks.body}
+          onPress={next}
+          activeOpacity={1}
         >
-          <Text style={styles.ctaBtnText}>
-            {isLast ? "Let's go →" : step.type === 'info' || step.type === 'welcome' ? 'Continue →' : 'Next →'}
-          </Text>
+          <View style={hks.content}>
+            <TypewriterColorText
+              segments={hookSegments}
+              style={[hks.para, { fontFamily: 'Allkin_400Regular' }]}
+              charDelay={18}
+              startDelay={100}
+            />
+            <View style={hks.subWrap}>
+              <TypewriterText
+                text="You're not alone. Your phone is full of distractions and it's easy to lose sight of what you really want."
+                style={[hks.sub, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}
+                charDelay={14}
+                startDelay={2200}
+              />
+              <TypewriterText
+                text="What if every time you went on your phone you felt motivated and ready for your day."
+                style={[hks.sub, { color: theme.textMuted, fontFamily: theme.uiFontFamily, marginTop: 12 }]}
+                charDelay={14}
+                startDelay={3950}
+              />
+            </View>
+          </View>
         </TouchableOpacity>
       </SafeAreaView>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0D0D0D' },
+const hks = StyleSheet.create({
+  root: { flex: 1 },
   safe: { flex: 1 },
-  progressBar: {
-    height: 2,
-    backgroundColor: '#1a1a1a',
-    marginHorizontal: 24,
-    marginTop: 16,
-    borderRadius: 1,
-  },
-  progressFill: {
-    height: 2,
-    backgroundColor: '#B8975A',
-    borderRadius: 1,
-  },
-  backBtn: { padding: 20, paddingBottom: 0 },
-  backText: { color: '#666', fontSize: 28 },
-  content: {
-    flex: 1,
-    padding: 24,
-    justifyContent: 'center',
-  },
-  emoji: { fontSize: 56, marginBottom: 20, textAlign: 'center' },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#E8E0D0',
-    textAlign: 'center',
-    marginBottom: 12,
-    fontFamily: 'PlayfairDisplay_700Bold',
-    lineHeight: 36,
-  },
-  subtitle: {
-    fontSize: 15,
-    color: '#6B6560',
-    textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 32,
-    fontFamily: 'Inter_400Regular',
-  },
+  body: { flex: 1, paddingHorizontal: 32, paddingBottom: 48 },
+  content: { flex: 1, justifyContent: 'center' },
+  para: { fontSize: 26, fontWeight: '700', lineHeight: 36 },
+  subWrap: { marginTop: 28 },
+  sub: { fontSize: 13, lineHeight: 20 },
+});
+
+// ─── Screen: NameInputScreen ─────────────────────────────────────────────────
+
+function NameInputScreen_({ data, updateData, next }: ScreenProps) {
+  const theme = useTheme();
+  const [name, setName] = useState(data.name);
+
+  const handleContinue = () => {
+    updateData({ name });
+    next();
+  };
+
+  return (
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <View style={[ns.root, { backgroundColor: theme.background }]}>
+        <SafeAreaView style={ns.safe} edges={['top', 'bottom']}>
+          <View style={ns.content}>
+            <TypewriterText
+              text="But first."
+              style={[ns.eyebrow, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}
+              charDelay={55}
+              startDelay={100}
+            />
+            <TypewriterText
+              text="What should we call you?"
+              style={[ns.title, { color: theme.text, fontFamily: theme.quoteFontFamily }]}
+              charDelay={40}
+              startDelay={750}
+            />
+            <TextInput
+              style={[
+                ns.input,
+                { backgroundColor: theme.surface, color: theme.text, borderColor: theme.border, fontFamily: theme.uiFontFamily },
+              ]}
+              placeholder="Enter your name"
+              placeholderTextColor={theme.textMuted}
+              value={name}
+              onChangeText={setName}
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={handleContinue}
+            />
+          </View>
+          <ContinueButton onPress={handleContinue} disabled={!name.trim()} />
+        </SafeAreaView>
+      </View>
+    </KeyboardAvoidingView>
+  );
+}
+
+const ns = StyleSheet.create({
+  root: { flex: 1 },
+  safe: { flex: 1 },
+  content: { flex: 1, paddingHorizontal: 28, paddingTop: 80 },
+  eyebrow: { fontSize: 13, letterSpacing: 0.5, marginBottom: 8 },
+  title: { fontSize: 30, fontWeight: '700', lineHeight: 38 },
   input: {
-    backgroundColor: '#1C1A18',
-    borderRadius: 14,
-    padding: 16,
-    color: '#E8E0D0',
-    fontSize: 18,
+    marginTop: 28,
+    borderRadius: 99,
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    fontSize: 16,
     borderWidth: 1,
-    borderColor: '#333',
-    fontFamily: 'Inter_400Regular',
-    marginTop: 8,
   },
-  optionsGrid: {
-    gap: 10,
-    marginTop: 8,
-  },
-  optionBtn: {
-    backgroundColor: '#1C1A18',
-    borderRadius: 14,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#2A2520',
+});
+
+// ─── Screen: PersonalizedHookScreen ──────────────────────────────────────────
+
+const phsWords: { text: string; gold: boolean }[] = [
+  { text: 'Imagine', gold: false },
+  { text: 'if', gold: false },
+  { text: '5', gold: true },
+  { text: 'minutes', gold: true },
+  { text: 'made', gold: false },
+  { text: 'you', gold: false },
+  { text: 'ready', gold: false },
+  { text: 'to', gold: false },
+  { text: 'take', gold: false },
+  { text: 'on', gold: false },
+  { text: 'your', gold: false },
+  { text: 'day.', gold: false },
+];
+
+function PersonalizedHookScreen_({ next, back, progress }: { next: () => void; back?: () => void; progress?: number }) {
+  const theme = useTheme();
+  const [footerVisible, setFooterVisible] = useState(false);
+  const phsSegments = phsWords.map((word, i) => ({
+    text: (i === 0 ? '' : ' ') + word.text,
+    color: word.gold ? theme.gold : theme.text,
+  }));
+
+  useEffect(() => {
+    setFooterVisible(false);
+    // phsWords: 56 chars × 30ms + 150ms start ≈ 1830ms; footer after +800ms
+    const t = setTimeout(() => setFooterVisible(true), 2700);
+    return () => clearTimeout(t);
+  }, []);
+
+  return (
+    <View style={[phs.root, { backgroundColor: theme.background }]}>
+      <SafeAreaView style={phs.safe} edges={['top', 'bottom']}>
+        <OnboardingHeader progress={progress} onBack={back} />
+        <TouchableOpacity
+          style={phs.body}
+          onPress={next}
+          activeOpacity={1}
+        >
+          <View style={phs.content}>
+            <TypewriterColorText
+              segments={phsSegments}
+              style={[phs.main, { fontFamily: 'Allkin_400Regular' }]}
+              charDelay={30}
+              startDelay={150}
+            />
+            <TypewriterText
+              text="Now let's build that habit together."
+              style={[phs.sub, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}
+              charDelay={18}
+              startDelay={2200}
+            />
+          </View>
+          <View style={[phs.footer, { opacity: footerVisible ? 1 : 0 }]}>
+            <Text style={[phs.hint, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+              Tap to continue
+            </Text>
+            <MaterialCommunityIcons name="arrow-right" size={16} color={theme.textMuted} />
+          </View>
+        </TouchableOpacity>
+      </SafeAreaView>
+    </View>
+  );
+}
+
+const phs = StyleSheet.create({
+  root: { flex: 1 },
+  safe: { flex: 1 },
+  body: { flex: 1, paddingHorizontal: 32, paddingBottom: 48, justifyContent: 'space-between' },
+  content: { flex: 1, justifyContent: 'center' },
+  main: { fontSize: 26, fontWeight: '700', lineHeight: 36 },
+  sub: { fontSize: 13, marginTop: 24, lineHeight: 20 },
+  footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 6 },
+  hint: { fontSize: 13 },
+});
+
+// ─── Screen: PhoneUsageScreen ─────────────────────────────────────────────────
+
+const phoneOptions = ['1-2 hours', '2-3 hours', '3-4 hours', '4-5 hours', '5-6 hours', '6+ hours'];
+
+function PhoneUsageScreen_({ data, updateData, next, back, progress }: ScreenProps) {
+  const theme = useTheme();
+  const [selected, setSelected] = useState(data.phoneUsage);
+
+  return (
+    <View style={[fs.root, { backgroundColor: theme.background }]}>
+      <SafeAreaView style={fs.safe} edges={['top', 'bottom']}>
+        <OnboardingHeader progress={progress} onBack={back} />
+        <ScrollView style={fs.scroll} contentContainerStyle={fs.scrollContent} showsVerticalScrollIndicator={false}>
+          <TypewriterText
+            text="How much time do you spend on your phone every day?"
+            style={[fs.title, { color: theme.text, fontFamily: theme.quoteFontFamily }]}
+            charDelay={22}
+          />
+          <View style={fs.list}>
+            {phoneOptions.map((opt) => {
+              const sel = selected === opt;
+              return (
+                <TouchableOpacity
+                  key={opt}
+                  style={[
+                    fs.option,
+                    {
+                      backgroundColor: sel ? theme.goldButton : theme.surface,
+                      borderColor: sel ? theme.gold : 'transparent',
+                      borderWidth: 1,
+                    },
+                  ]}
+                  onPress={() => setSelected(opt)}
+                  activeOpacity={0.75}
+                >
+                  <Text
+                    style={[
+                      fs.optLabel,
+                      { color: sel ? theme.text : theme.textMuted, fontFamily: theme.uiFontFamily },
+                    ]}
+                  >
+                    {opt}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </ScrollView>
+        <ContinueButton
+          onPress={() => { updateData({ phoneUsage: selected }); next(); }}
+          disabled={!selected}
+        />
+      </SafeAreaView>
+    </View>
+  );
+}
+
+const fs = StyleSheet.create({
+  root: { flex: 1 },
+  safe: { flex: 1 },
+  scroll: { flex: 1 },
+  scrollContent: { paddingHorizontal: 24, paddingTop: 8 },
+  title: { fontSize: 26, fontWeight: '700', lineHeight: 34, marginBottom: 24 },
+  list: { gap: 12 },
+  option: { borderRadius: 16, paddingHorizontal: 24, paddingVertical: 18 },
+  optLabel: { fontSize: 15 },
+});
+
+// ─── Screen: GoalsScreen ──────────────────────────────────────────────────────
+
+const GOALS_TITLE_WORDS: { text: string; gold: boolean }[] = [
+  { text: 'What', gold: false },
+  { text: 'do', gold: false },
+  { text: 'you', gold: false },
+  { text: 'want', gold: false },
+  { text: 'to', gold: false },
+  { text: 'achieve', gold: true },
+  { text: 'with', gold: false },
+  { text: 'Quotable?', gold: false },
+];
+
+const goalsList = [
+  { label: 'Start my day ready', icon: 'weather-sunny' },
+  { label: 'Build a daily motivation habit', icon: 'book-open-variant' },
+  { label: 'Deepen my relationship with myself', icon: 'heart' },
+  { label: 'Find peace in chaos', icon: 'peace' },
+  { label: 'Memorize quotes that matter', icon: 'creation' },
+  { label: 'Share my motivation with others', icon: 'account-group' },
+];
+
+function GoalsScreen_({ data, updateData, next, back, progress }: ScreenProps) {
+  const theme = useTheme();
+  const [selected, setSelected] = useState<string[]>(data.goals);
+  const goalsSegments = GOALS_TITLE_WORDS.map((word, i) => ({
+    text: (i === 0 ? '' : ' ') + word.text,
+    color: word.gold ? theme.gold : theme.text,
+  }));
+
+  const toggle = (label: string) =>
+    setSelected((prev) =>
+      prev.includes(label) ? prev.filter((g) => g !== label) : [...prev, label],
+    );
+
+  return (
+    <View style={[gs.root, { backgroundColor: theme.background }]}>
+      <SafeAreaView style={gs.safe} edges={['top', 'bottom']}>
+        <OnboardingHeader progress={progress} onBack={back} />
+        <ScrollView style={gs.scroll} contentContainerStyle={gs.scrollContent} showsVerticalScrollIndicator={false}>
+          <TypewriterColorText
+            segments={goalsSegments}
+            style={[gs.title, { color: theme.text, fontFamily: theme.quoteFontFamily }]}
+            charDelay={40}
+            startDelay={200}
+          />
+          <View style={gs.list}>
+            {goalsList.map((goal) => {
+              const sel = selected.includes(goal.label);
+              return (
+                <TouchableOpacity
+                  key={goal.label}
+                  style={[
+                    gs.item,
+                    {
+                      backgroundColor: theme.surface,
+                      borderColor: sel ? theme.gold : 'transparent',
+                      borderWidth: sel ? 2 : 1,
+                    },
+                  ]}
+                  onPress={() => toggle(goal.label)}
+                  activeOpacity={0.75}
+                >
+                  <View style={[gs.iconWrap, { backgroundColor: sel ? theme.gold + '22' : 'transparent' }]}>
+                    <MaterialCommunityIcons
+                      name={goal.icon as any}
+                      size={20}
+                      color={sel ? theme.gold : theme.textMuted}
+                    />
+                  </View>
+                  <Text
+                    style={[
+                      gs.itemLabel,
+                      { color: sel ? theme.text : theme.textMuted, fontFamily: theme.uiFontFamily, fontWeight: sel ? '600' : '400' },
+                    ]}
+                  >
+                    {goal.label}
+                  </Text>
+                  <View
+                    style={[
+                      gs.check,
+                      {
+                        borderColor: sel ? theme.gold : theme.textMuted + '60',
+                        backgroundColor: sel ? theme.gold : 'transparent',
+                      },
+                    ]}
+                  >
+                    {sel && (
+                      <MaterialCommunityIcons name="check" size={12} color={theme.background} />
+                    )}
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </ScrollView>
+        <ContinueButton
+          onPress={() => { updateData({ goals: selected }); next(); }}
+          disabled={selected.length === 0}
+        />
+      </SafeAreaView>
+    </View>
+  );
+}
+
+const gs = StyleSheet.create({
+  root: { flex: 1 },
+  safe: { flex: 1 },
+  scroll: { flex: 1 },
+  scrollContent: { paddingHorizontal: 24, paddingTop: 8 },
+  title: { fontSize: 26, fontWeight: '700', lineHeight: 34, marginBottom: 24 },
+  list: { gap: 12 },
+  item: {
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
   },
-  optionBtnSelected: {
-    backgroundColor: 'rgba(184,151,90,0.12)',
-    borderColor: '#B8975A',
-  },
-  optionEmoji: { fontSize: 22 },
-  optionLabel: {
-    color: '#6B6560',
-    fontSize: 15,
-    fontFamily: 'Inter_400Regular',
-    flex: 1,
-  },
-  optionLabelSelected: { color: '#E8E0D0' },
-  themePicker: {
-    gap: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 4,
-  },
-  themeChip: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 24,
-    borderWidth: 2,
-    marginRight: 8,
-  },
-  themeChipText: { fontSize: 14, fontWeight: '600' },
-  ctaBtn: {
-    backgroundColor: '#C4A35A',
-    borderRadius: 28,
-    margin: 24,
-    marginTop: 8,
-    paddingVertical: 18,
+  iconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
-  ctaBtnDisabled: { opacity: 0.35 },
-  ctaBtnText: {
-    color: '#1A1208',
-    fontSize: 16,
-    fontWeight: '700',
-    fontFamily: 'Inter_700Bold',
-    letterSpacing: 0.3,
+  itemLabel: { fontSize: 14, flex: 1 },
+  check: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
+
+// ─── Screen: ValidationScreen ─────────────────────────────────────────────────
+
+const validationCards = [
+  {
+    icon: 'creation',
+    title: 'Start my day feeling motivated',
+    desc: 'Wake up with purpose and positive energy every morning.',
+    featured: false,
+    tilt: '-0.2deg',
+    offsetX: 0,
+  },
+  {
+    icon: 'target',
+    title: 'Build a daily motivation habit',
+    desc: 'Turn small daily wins into lasting change.',
+    featured: false,
+    tilt: '0.2deg',
+    offsetX: 2,
+  },
+  {
+    icon: 'heart',
+    title: 'Believe in yourself',
+    desc: 'Strengthen your self-worth and confidence from within.',
+    featured: true,
+    tilt: '-0.15deg',
+    offsetX: -1,
+  },
+];
+
+function ValidationScreen_({ next, back, progress }: ScreenProps) {
+  const theme = useTheme();
+  return (
+    <View style={[vs.root, { backgroundColor: theme.background }]}>
+      <SafeAreaView style={vs.safe} edges={['top', 'bottom']}>
+        <OnboardingHeader progress={progress} onBack={back} />
+        <View style={vs.content}>
+          <TypewriterText
+            text="You're in the right place."
+            style={[vs.title, { color: theme.text, fontFamily: theme.quoteFontFamily }]}
+          />
+          <View style={vs.cards}>
+            {validationCards.map((card) => (
+              <View
+                key={card.title}
+                style={{
+                  transform: [{ rotate: card.tilt }, { translateX: card.offsetX }],
+                }}
+              >
+                <View
+                  style={[
+                    vs.card,
+                    {
+                      backgroundColor: card.featured ? theme.goldButton : theme.surface,
+                      borderWidth: card.featured ? 2 : 1,
+                      borderColor: card.featured ? theme.gold : 'transparent',
+                    },
+                  ]}
+                >
+                  <View
+                    style={[
+                      vs.iconWrap,
+                      { backgroundColor: theme.background, borderWidth: 1.5, borderColor: theme.gold + '55' },
+                    ]}
+                  >
+                    <MaterialCommunityIcons
+                      name={card.icon as any}
+                      size={24}
+                      color={theme.gold}
+                    />
+                  </View>
+                  <View style={vs.cardText}>
+                    <Text style={[vs.cardTitle, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
+                      {card.title}
+                    </Text>
+                    <Text style={[vs.cardDesc, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+                      {card.desc}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            ))}
+          </View>
+        </View>
+        <ContinueButton onPress={next} />
+      </SafeAreaView>
+    </View>
+  );
+}
+
+const vs = StyleSheet.create({
+  root: { flex: 1 },
+  safe: { flex: 1 },
+  content: { flex: 1, paddingHorizontal: 24, paddingTop: 8 },
+  title: { fontSize: 30, fontWeight: '700', lineHeight: 38, marginBottom: 24 },
+  cards: { gap: 20 },
+  card: {
+    borderRadius: 16,
+    padding: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 20,
+    minHeight: 110,
+  },
+  iconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  cardText: { flex: 1 },
+  cardTitle: { fontSize: 15, fontWeight: '600', marginBottom: 4 },
+  cardDesc: { fontSize: 13, lineHeight: 20 },
+});
+
+// ─── Screen: AgeScreen ────────────────────────────────────────────────────────
+
+const ageOptions = ['18-24', '25-34', '35-44', '45-54', '55+'];
+
+function AgeScreen_({ data, updateData, next, back, progress }: ScreenProps) {
+  const theme = useTheme();
+  const [selected, setSelected] = useState(data.age);
+  return (
+    <View style={[as.root, { backgroundColor: theme.background }]}>
+      <SafeAreaView style={as.safe} edges={['top', 'bottom']}>
+        <OnboardingHeader progress={progress} onBack={back} />
+        <View style={as.content}>
+          <TypewriterText
+            text="How old are you?"
+            style={[as.title, { color: theme.text, fontFamily: theme.quoteFontFamily }]}
+          />
+          <View style={as.list}>
+            {ageOptions.map((opt) => {
+              const sel = selected === opt;
+              return (
+                <TouchableOpacity
+                  key={opt}
+                  style={[
+                    as.option,
+                    {
+                      backgroundColor: sel ? theme.goldButton : theme.surface,
+                      borderColor: sel ? theme.gold : 'transparent',
+                      borderWidth: 1,
+                    },
+                  ]}
+                  onPress={() => setSelected(opt)}
+                  activeOpacity={0.75}
+                >
+                  <Text
+                    style={[
+                      as.optLabel,
+                      { color: sel ? theme.text : theme.textMuted, fontFamily: theme.uiFontFamily },
+                    ]}
+                  >
+                    {opt}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+        <ContinueButton
+          onPress={() => { updateData({ age: selected }); next(); }}
+          disabled={!selected}
+        />
+      </SafeAreaView>
+    </View>
+  );
+}
+
+const as = StyleSheet.create({
+  root: { flex: 1 },
+  safe: { flex: 1 },
+  content: { flex: 1, paddingHorizontal: 24, paddingTop: 8 },
+  title: { fontSize: 30, fontWeight: '700', lineHeight: 38, marginBottom: 28 },
+  list: { gap: 12 },
+  option: { borderRadius: 16, paddingHorizontal: 24, paddingVertical: 18 },
+  optLabel: { fontSize: 15 },
+});
+
+// ─── Screen: GenderScreen ─────────────────────────────────────────────────────
+
+const genderOptions = ['Male', 'Female', 'Other', 'Prefer not to say'];
+
+function GenderScreen_({ data, updateData, next, back, progress }: ScreenProps) {
+  const theme = useTheme();
+  const [selected, setSelected] = useState(data.gender);
+  return (
+    <View style={[gend.root, { backgroundColor: theme.background }]}>
+      <SafeAreaView style={gend.safe} edges={['top', 'bottom']}>
+        <OnboardingHeader progress={progress} onBack={back} />
+        <View style={gend.content}>
+          <TypewriterText
+            text="How do you identify?"
+            style={[gend.title, { color: theme.text, fontFamily: theme.quoteFontFamily }]}
+          />
+          <View style={gend.list}>
+            {genderOptions.map((opt) => {
+              const sel = selected === opt;
+              return (
+                <TouchableOpacity
+                  key={opt}
+                  style={[
+                    gend.option,
+                    {
+                      backgroundColor: sel ? theme.goldButton : theme.surface,
+                      borderColor: sel ? theme.gold : 'transparent',
+                      borderWidth: 1,
+                    },
+                  ]}
+                  onPress={() => setSelected(opt)}
+                  activeOpacity={0.75}
+                >
+                  <Text
+                    style={[
+                      gend.optLabel,
+                      { color: sel ? theme.text : theme.textMuted, fontFamily: theme.uiFontFamily },
+                    ]}
+                  >
+                    {opt}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+        <ContinueButton
+          onPress={() => { updateData({ gender: selected }); next(); }}
+          disabled={!selected}
+        />
+      </SafeAreaView>
+    </View>
+  );
+}
+
+const gend = StyleSheet.create({
+  root: { flex: 1 },
+  safe: { flex: 1 },
+  content: { flex: 1, paddingHorizontal: 24, paddingTop: 8 },
+  title: { fontSize: 30, fontWeight: '700', lineHeight: 38, marginBottom: 28 },
+  list: { gap: 12 },
+  option: { borderRadius: 16, paddingHorizontal: 24, paddingVertical: 18 },
+  optLabel: { fontSize: 15 },
+});
+
+// ─── Screen: BenefitsScreen ───────────────────────────────────────────────────
+
+const benefitsList = [
+  {
+    icon: 'fire',
+    title: 'Stay calm in all of the chaos',
+    desc: 'Mindful moments throughout the day help you stay grounded and manage anxiety.',
+  },
+  {
+    icon: 'creation',
+    title: 'Increase positivity',
+    desc: 'Daily reminders shift your mindset toward gratitude and optimism.',
+  },
+  {
+    icon: 'target',
+    title: 'Achieve your goals',
+    desc: 'Positive self-talk reinforces your capabilities and motivates action.',
+  },
+];
+
+function BenefitsScreen_({ next, back, progress }: ScreenProps) {
+  const theme = useTheme();
+  return (
+    <View style={[bs.root, { backgroundColor: theme.background }]}>
+      <SafeAreaView style={bs.safe} edges={['top', 'bottom']}>
+        <OnboardingHeader progress={progress} onBack={back} />
+        <ScrollView style={bs.scroll} contentContainerStyle={bs.scrollContent} showsVerticalScrollIndicator={false}>
+          <TypewriterText
+            text="The benefits of daily motivation and affirmations."
+            style={[bs.title, { color: theme.text, fontFamily: theme.quoteFontFamily }]}
+            charDelay={22}
+          />
+          <View style={bs.list}>
+            {benefitsList.map((b) => (
+              <View
+                key={b.title}
+                style={[bs.card, { backgroundColor: theme.surface, borderColor: theme.gold + '33' }]}
+              >
+                <View style={[bs.iconWrap, { backgroundColor: theme.background, borderWidth: 1.5, borderColor: theme.gold + '55' }]}>
+                  <MaterialCommunityIcons name={b.icon as any} size={20} color={theme.gold} />
+                </View>
+                <View style={bs.cardText}>
+                  <Text style={[bs.cardTitle, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
+                    {b.title}
+                  </Text>
+                  <Text style={[bs.cardDesc, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+                    {b.desc}
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        </ScrollView>
+        <ContinueButton onPress={next} />
+      </SafeAreaView>
+    </View>
+  );
+}
+
+const bs = StyleSheet.create({
+  root: { flex: 1 },
+  safe: { flex: 1 },
+  scroll: { flex: 1 },
+  scrollContent: { paddingHorizontal: 24, paddingTop: 8 },
+  title: { fontSize: 24, fontWeight: '700', lineHeight: 32, marginBottom: 28 },
+  list: { gap: 16 },
+  card: {
+    borderRadius: 16,
+    padding: 20,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 16,
+    borderWidth: 1,
+  },
+  iconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  cardText: { flex: 1 },
+  cardTitle: { fontSize: 13, fontWeight: '600', marginBottom: 4 },
+  cardDesc: { fontSize: 14, lineHeight: 20 },
+});
+
+// ─── Screen: NotificationsScreen ─────────────────────────────────────────────
+
+function NotificationsScreen_({ data, updateData, next, back, progress }: ScreenProps) {
+  const theme = useTheme();
+  const [count, setCount] = useState(data.notificationCount);
+  const [startTime, setStartTime] = useState(data.notificationStart);
+  const [endTime, setEndTime] = useState(data.notificationEnd);
+  const [showSkip, setShowSkip] = useState(false);
+  const [enabling, setEnabling] = useState(false);
+
+  const handleEnable = async () => {
+    setEnabling(true);
+    try {
+      await ensureNotificationChannel();
+      const granted = await requestPermissions();
+      if (granted) {
+        await scheduleQuoteNotifications({
+          count,
+          startHHMM: startTime,
+          endHHMM: endTime,
+        });
+        updateData({ notificationCount: count, notificationStart: startTime, notificationEnd: endTime, notificationsGranted: true });
+      } else {
+        updateData({ notificationCount: count, notificationStart: startTime, notificationEnd: endTime });
+      }
+    } catch {
+      // proceed even if scheduling fails
+    } finally {
+      setEnabling(false);
+      next();
+    }
+  };
+
+  return (
+    <View style={[nots.root, { backgroundColor: theme.background }]}>
+      <SafeAreaView style={nots.safe} edges={['top', 'bottom']}>
+        <OnboardingHeader progress={progress} onBack={back} onSkip={() => setShowSkip(true)} />
+        <ScrollView style={nots.scroll} contentContainerStyle={nots.scrollContent} showsVerticalScrollIndicator={false}>
+          <TypewriterText
+            text="Get motivation throughout the day!"
+            style={[nots.title, { color: theme.text, fontFamily: theme.quoteFontFamily }]}
+            charDelay={30}
+          />
+          <TypewriterText
+            text="Let me know when you'd like to be motivated."
+            style={[nots.sub, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}
+            charDelay={15}
+            startDelay={1200}
+          />
+
+          {/* Notification preview */}
+          <View style={[nots.preview, { backgroundColor: theme.surface }]}>
+            <View style={[nots.previewIcon, { backgroundColor: theme.goldButton }]}>
+              <Text style={[nots.previewQ, { color: theme.gold }]}>Q</Text>
+            </View>
+            <View style={nots.previewText}>
+              <View style={nots.previewRow}>
+                <Text style={[nots.previewApp, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
+                  Quotable
+                </Text>
+                <Text style={[nots.previewTime, { color: theme.textMuted }]}>now</Text>
+              </View>
+              <Text
+                style={[nots.previewMsg, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}
+                numberOfLines={1}
+              >
+                The secret of getting ahead is getting started.
+              </Text>
+            </View>
+          </View>
+
+          {/* Controls */}
+          <View style={nots.controls}>
+            <View style={[nots.controlRow, { backgroundColor: theme.surface }]}>
+              <Text style={[nots.controlLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
+                How many
+              </Text>
+              <View style={nots.stepper}>
+                <TouchableOpacity
+                  style={[nots.stepBtn, { backgroundColor: theme.background }]}
+                  onPress={() => setCount((c) => Math.max(1, c - 1))}
+                >
+                  <MaterialCommunityIcons name="minus" size={16} color={theme.text} />
+                </TouchableOpacity>
+                <Text style={[nots.stepVal, { color: theme.gold, fontFamily: 'PlayfairDisplay_700Bold' }]}>
+                  {count}x
+                </Text>
+                <TouchableOpacity
+                  style={[nots.stepBtn, { backgroundColor: theme.background }]}
+                  onPress={() => setCount((c) => Math.min(10, c + 1))}
+                >
+                  <MaterialCommunityIcons name="plus" size={16} color={theme.text} />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={[nots.controlRow, { backgroundColor: theme.surface }]}>
+              <Text style={[nots.controlLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
+                Start at
+              </Text>
+              <View style={nots.stepper}>
+                <TouchableOpacity
+                  style={[nots.stepBtn, { backgroundColor: theme.background }]}
+                  onPress={() => setStartTime((t) => stepHHMM(t, -NOTIF_STEP))}
+                >
+                  <MaterialCommunityIcons name="minus" size={16} color={theme.text} />
+                </TouchableOpacity>
+                <Text style={[nots.timeVal, { color: theme.gold, fontFamily: 'Inter_600SemiBold' }]}>
+                  {formatHHMMto12h(startTime)}
+                </Text>
+                <TouchableOpacity
+                  style={[nots.stepBtn, { backgroundColor: theme.background }]}
+                  onPress={() => setStartTime((t) => stepHHMM(t, NOTIF_STEP))}
+                >
+                  <MaterialCommunityIcons name="plus" size={16} color={theme.text} />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={[nots.controlRow, { backgroundColor: theme.surface }]}>
+              <Text style={[nots.controlLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
+                Stop at
+              </Text>
+              <View style={nots.stepper}>
+                <TouchableOpacity
+                  style={[nots.stepBtn, { backgroundColor: theme.background }]}
+                  onPress={() => setEndTime((t) => stepHHMM(t, -NOTIF_STEP))}
+                >
+                  <MaterialCommunityIcons name="minus" size={16} color={theme.text} />
+                </TouchableOpacity>
+                <Text style={[nots.timeVal, { color: theme.gold, fontFamily: 'Inter_600SemiBold' }]}>
+                  {formatHHMMto12h(endTime)}
+                </Text>
+                <TouchableOpacity
+                  style={[nots.stepBtn, { backgroundColor: theme.background }]}
+                  onPress={() => setEndTime((t) => stepHHMM(t, NOTIF_STEP))}
+                >
+                  <MaterialCommunityIcons name="plus" size={16} color={theme.text} />
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+
+          <Text style={[nots.summary, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+            {`You'll receive ${count} notification${count > 1 ? 's' : ''} per day between ${formatHHMMto12h(startTime)} and ${formatHHMMto12h(endTime)}`}
+          </Text>
+        </ScrollView>
+
+        <ContinueButton
+          onPress={handleEnable}
+          label={enabling ? 'Enabling…' : 'Enable Notifications'}
+          disabled={enabling}
+        />
+
+        {showSkip && (
+          <SkipModal onGoBack={() => setShowSkip(false)} onSkip={() => { setShowSkip(false); next(); }} />
+        )}
+      </SafeAreaView>
+    </View>
+  );
+}
+
+const nots = StyleSheet.create({
+  root: { flex: 1 },
+  safe: { flex: 1 },
+  scroll: { flex: 1 },
+  scrollContent: { paddingHorizontal: 24, paddingTop: 8, paddingBottom: 8 },
+  title: { fontSize: 24, fontWeight: '700', lineHeight: 32, marginBottom: 8 },
+  sub: { fontSize: 14, marginBottom: 20 },
+  preview: { borderRadius: 16, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 },
+  previewIcon: { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  previewQ: { fontSize: 13, fontWeight: '700' },
+  previewText: { flex: 1 },
+  previewRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  previewApp: { fontSize: 13, fontWeight: '600' },
+  previewTime: { fontSize: 12 },
+  previewMsg: { fontSize: 13, marginTop: 2 },
+  controls: { gap: 10, marginTop: 16 },
+  controlRow: {
+    borderRadius: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  controlLabel: { fontSize: 14, fontWeight: '500' },
+  controlVal: { fontSize: 14, fontWeight: '500' },
+  stepper: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  stepBtn: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  stepVal: { fontSize: 17, fontWeight: '700', minWidth: 32, textAlign: 'center' },
+  timeVal: { fontSize: 14, fontWeight: '600', minWidth: 80, textAlign: 'center' },
+  summary: { fontSize: 13, textAlign: 'center', marginTop: 20, lineHeight: 18 },
+});
+
+// ─── Screen: StreakScreen ─────────────────────────────────────────────────────
+
+const DEMO_STREAK_WEEK: boolean[] = [true, true, true, false, false, false, false];
+
+function StreakScreen_({ next, back, progress }: ScreenProps) {
+  const theme = useTheme();
+  return (
+    <View style={[stk.root, { backgroundColor: theme.background }]}>
+      <SafeAreaView style={stk.safe} edges={['top', 'bottom']}>
+        <OnboardingHeader progress={progress} onBack={back} title="Build your streak" />
+
+        <View style={stk.content}>
+          <View style={stk.textWrap}>
+            <TypewriterText
+              text="Build your daily habit"
+              style={[stk.title, { color: theme.text, fontFamily: 'PlayfairDisplay_700Bold' }]}
+              charDelay={40}
+            />
+            <TypewriterText
+              text="Consistency is key to lasting change"
+              style={[stk.sub, { color: theme.textMuted }]}
+              charDelay={18}
+              startDelay={1050}
+            />
+          </View>
+
+          {/* Real StreakCard — centered */}
+          <View style={stk.streakWrap}>
+            <StreakCard streakCount={3} weekData={DEMO_STREAK_WEEK} />
+          </View>
+
+        </View>
+
+        <ContinueButton onPress={next} label="Next" variant="gold" />
+      </SafeAreaView>
+    </View>
+  );
+}
+
+const stk = StyleSheet.create({
+  root: { flex: 1 },
+  safe: { flex: 1 },
+  content: { flex: 1, paddingHorizontal: 24 },
+  textWrap: { alignItems: 'center', marginBottom: 32, marginTop: 16 },
+  title: { fontSize: 26, fontWeight: '700', textAlign: 'center', lineHeight: 32 },
+  sub: { fontSize: 13, textAlign: 'center', marginTop: 6, fontFamily: 'Inter_400Regular' },
+  streakWrap: { flex: 1, justifyContent: 'center' },
+  tipRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 16 },
+  tip: { fontSize: 13, lineHeight: 18, flex: 1, fontFamily: 'Inter_400Regular' },
+});
+
+// ─── Screen: CategoriesScreen ("What brings you joy?") ───────────────────────
+// Uses CATEGORIES directly so options match the Create Mix page exactly.
+
+function CategoriesScreen_({ data, updateData, next, back, progress }: ScreenProps) {
+  const theme = useTheme();
+  const [selected, setSelected] = useState<string[]>(data.joyCategories);
+
+  const toggle = (name: string) =>
+    setSelected((prev) =>
+      prev.includes(name) ? prev.filter((c) => c !== name) : [...prev, name],
+    );
+
+  return (
+    <View style={[cats.root, { backgroundColor: theme.background }]}>
+      <SafeAreaView style={cats.safe} edges={['top', 'bottom']}>
+        <OnboardingHeader progress={progress} onBack={back} />
+        <View style={cats.titleWrap}>
+          <TypewriterText
+            text="What brings you joy?"
+            style={[cats.title, { color: theme.text, fontFamily: theme.quoteFontFamily }]}
+          />
+        </View>
+        <ScrollView style={cats.scroll} contentContainerStyle={cats.pills} showsVerticalScrollIndicator={false}>
+          {CATEGORIES.map((cat) => {
+            const sel = selected.includes(cat.name);
+            return (
+              <TouchableOpacity
+                key={cat.id}
+                style={[
+                  cats.pill,
+                  {
+                    backgroundColor: theme.surface,
+                    borderColor: sel ? theme.gold : 'transparent',
+                    borderWidth: sel ? 2 : 1,
+                  },
+                ]}
+                onPress={() => toggle(cat.name)}
+                activeOpacity={0.75}
+              >
+                <MaterialCommunityIcons
+                  name={cat.icon as any}
+                  size={15}
+                  color={sel ? theme.gold : theme.textMuted}
+                />
+                <Text
+                  style={[
+                    cats.pillLabel,
+                    { color: sel ? theme.text : theme.textMuted, fontFamily: theme.uiFontFamily, fontWeight: sel ? '600' : '500' },
+                  ]}
+                >
+                  {cat.name}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+        <ContinueButton
+          onPress={() => { updateData({ joyCategories: selected }); next(); }}
+          disabled={selected.length === 0}
+        />
+      </SafeAreaView>
+    </View>
+  );
+}
+
+const cats = StyleSheet.create({
+  root: { flex: 1 },
+  safe: { flex: 1 },
+  titleWrap: { paddingHorizontal: 24, paddingTop: 4, marginBottom: 4 },
+  title: { fontSize: 30, fontWeight: '700', lineHeight: 38 },
+  scroll: { flex: 1 },
+  pills: {
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    paddingBottom: 8,
+  },
+  pill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 99,
+  },
+  pillLabel: { fontSize: 13 },
+});
+
+// ─── Screen: WidgetScreen ─────────────────────────────────────────────────────
+
+function WidgetScreen_({ next, back, progress }: ScreenProps) {
+  const theme = useTheme();
+  const [showSkip, setShowSkip] = useState(false);
+  const [installing, setInstalling] = useState(false);
+  const [showWidgetInstructions, setShowWidgetInstructions] = useState(false);
+
+  const handleInstallWidget = useCallback(async () => {
+    if (!WidgetBridge.isAvailable) {
+      setShowWidgetInstructions(true);
+      return;
+    }
+    setInstalling(true);
+    try {
+      await WidgetBridge.requestPinWidget();
+    } catch {
+      // no-op — native module will handle errors internally
+    } finally {
+      setInstalling(false);
+      next();
+    }
+  }, [next]);
+
+  return (
+    <View style={[wid.root, { backgroundColor: theme.background }]}>
+      <SafeAreaView style={wid.safe} edges={['top', 'bottom']}>
+        <OnboardingHeader progress={progress} onBack={back} title="Widget" onSkip={() => setShowSkip(true)} />
+
+        <View style={wid.content}>
+          <TypewriterText
+            text="Add a widget to your home screen"
+            style={[wid.title, { color: theme.text, fontFamily: 'PlayfairDisplay_700Bold' }]}
+            charDelay={32}
+          />
+          <TypewriterText
+            text="Keep your affirmations visible throughout the day with our beautiful home screen widgets"
+            style={[wid.sub, { color: theme.textMuted }]}
+            charDelay={12}
+            startDelay={1200}
+          />
+
+          {/* Phone mockup */}
+          <View style={wid.mockupWrap}>
+            <View style={wid.phoneFrame}>
+              {/* Inner screen */}
+              <View style={[wid.phoneInner, { backgroundColor: theme.surface }]} />
+              {/* Dynamic Island */}
+              <View style={[wid.dynamicIsland, { backgroundColor: theme.text }]} />
+              {/* Widget card */}
+              <View style={[wid.widgetCard, { backgroundColor: theme.background + 'a0', borderColor: theme.border }]}>
+                <View style={[wid.widgetIcon, { backgroundColor: theme.goldButton }]} />
+                <Text style={[wid.widgetText, { color: theme.text }]}>{"Today's affirmation"}</Text>
+              </View>
+              {/* App grid */}
+              <View style={wid.appGrid}>
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <View key={i} style={[wid.appIcon, { backgroundColor: theme.text + '1a' }]} />
+                ))}
+              </View>
+              {/* Home indicator */}
+              <View style={[wid.homeBar, { backgroundColor: theme.text + '40' }]} />
+            </View>
+          </View>
+        </View>
+
+        <ContinueButton onPress={handleInstallWidget} label={installing ? 'Installing…' : 'Install Widget'} variant="gold" disabled={installing} />
+
+        {showSkip && (
+          <SkipModal onGoBack={() => setShowSkip(false)} onSkip={() => { setShowSkip(false); next(); }} />
+        )}
+
+        <ConfirmSheet
+          visible={showWidgetInstructions}
+          onClose={() => setShowWidgetInstructions(false)}
+          title="Add a Widget"
+          message={'To add a Quotable widget:\n\n1. Long-press your home screen\n2. Tap the "+" button\n3. Search for Quotable\n4. Choose your widget size'}
+          confirmLabel="Got it!"
+          onConfirm={next}
+        />
+      </SafeAreaView>
+    </View>
+  );
+}
+
+const wid = StyleSheet.create({
+  root: { flex: 1 },
+  safe: { flex: 1 },
+  content: { flex: 1, paddingHorizontal: 24, alignItems: 'center', paddingTop: 4 },
+  title: { fontSize: 26, fontWeight: '700', textAlign: 'center', lineHeight: 34, marginBottom: 10, marginTop: 12 },
+  sub: { fontSize: 14, textAlign: 'center', lineHeight: 20, marginBottom: 16, fontFamily: 'Inter_400Regular', maxWidth: 280 },
+  mockupWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  phoneFrame: {
+    width: 200,
+    height: 420,
+    borderRadius: 40,
+    borderWidth: 10,
+    borderColor: 'rgba(240,236,228,0.9)',
+  },
+  phoneInner: {
+    position: 'absolute',
+    top: 10,
+    bottom: 10,
+    left: 10,
+    right: 10,
+    borderRadius: 28,
+  },
+  dynamicIsland: {
+    position: 'absolute',
+    top: 18,
+    left: '50%' as any,
+    width: 80,
+    height: 24,
+    marginLeft: -40,
+    borderRadius: 12,
+  },
+  widgetCard: {
+    position: 'absolute',
+    top: 70,
+    left: '50%' as any,
+    width: 168,
+    marginLeft: -84,
+    borderRadius: 20,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  widgetIcon: { width: 28, height: 28, borderRadius: 12, flexShrink: 0 },
+  widgetText: { fontSize: 14, fontWeight: '500', fontFamily: 'Inter_500Medium', flex: 1, lineHeight: 18 },
+  appGrid: {
+    position: 'absolute',
+    bottom: 56,
+    left: '50%' as any,
+    marginLeft: -56,
+    width: 112,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  appIcon: { width: 28, height: 28, borderRadius: 9 },
+  homeBar: {
+    position: 'absolute',
+    bottom: 24,
+    left: '50%' as any,
+    width: 96,
+    height: 6,
+    marginLeft: -48,
+    borderRadius: 3,
+  },
+});
+
+// ─── Screen: CommitmentScreen ─────────────────────────────────────────────────
+
+const COMMITMENT_DURATION = 2000;
+const COMMITMENT_TICK = 30;
+const CIRCUMFERENCE = 2 * Math.PI * 56;
+
+function CommitmentScreen_({ next, back, progress }: ScreenProps) {
+  const theme = useTheme();
+  const [holdProgress, setHoldProgress] = useState(0);
+  const [completed, setCompleted] = useState(false);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const progressRef = useRef(0);
+
+  const startHold = () => {
+    if (completed) return;
+    progressRef.current = 0;
+    setHoldProgress(0);
+    intervalRef.current = setInterval(() => {
+      progressRef.current += (COMMITMENT_TICK / COMMITMENT_DURATION) * 100;
+      if (progressRef.current >= 100) {
+        progressRef.current = 100;
+        setHoldProgress(100);
+        if (intervalRef.current) clearInterval(intervalRef.current);
+        setCompleted(true);
+      } else {
+        setHoldProgress(progressRef.current);
+      }
+    }, COMMITMENT_TICK);
+  };
+
+  const stopHold = () => {
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    if (!completed) {
+      setHoldProgress(0);
+      progressRef.current = 0;
+    }
+  };
+
+  useEffect(() => {
+    if (completed) {
+      const t = setTimeout(next, 1200);
+      return () => clearTimeout(t);
+    }
+  }, [completed]);
+
+  useEffect(() => {
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+  }, []);
+
+  const dashOffset = CIRCUMFERENCE - (holdProgress / 100) * CIRCUMFERENCE;
+
+  return (
+    <View style={[com.root, { backgroundColor: theme.background }]}>
+      <SafeAreaView style={com.safe} edges={['top', 'bottom']}>
+        <OnboardingHeader progress={progress} onBack={back} />
+        <View style={com.content}>
+          <TypewriterText
+            text="Commit to improving your life!"
+            style={[com.title, { color: theme.text, fontFamily: theme.quoteFontFamily }]}
+          />
+          <View style={com.ringWrap}>
+            <Pressable
+              onPressIn={startHold}
+              onPressOut={stopHold}
+              style={com.pressable}
+            >
+              <Svg
+                width={128}
+                height={128}
+                style={{ transform: [{ rotate: '-90deg' }] }}
+              >
+                <Circle
+                  cx="64"
+                  cy="64"
+                  r="56"
+                  fill="none"
+                  stroke={theme.surface}
+                  strokeWidth="4"
+                />
+                <Circle
+                  cx="64"
+                  cy="64"
+                  r="56"
+                  fill="none"
+                  stroke={theme.gold}
+                  strokeWidth="4"
+                  strokeLinecap="round"
+                  strokeDasharray={CIRCUMFERENCE}
+                  strokeDashoffset={dashOffset}
+                />
+              </Svg>
+              <View style={com.iconCenter}>
+                <MaterialCommunityIcons
+                  name="fingerprint"
+                  size={48}
+                  color={holdProgress > 0 || completed ? theme.gold : theme.textMuted}
+                />
+              </View>
+            </Pressable>
+          </View>
+          <Text style={[com.hint, { color: theme.textMuted, fontFamily: theme.uiFontFamily, opacity: completed ? 0 : 1 }]}>
+            Hold to commit
+          </Text>
+          {completed && (
+            <Text style={[com.done, { color: theme.gold, fontFamily: theme.uiFontFamily }]}>
+              {"You're committed!"}
+            </Text>
+          )}
+        </View>
+      </SafeAreaView>
+    </View>
+  );
+}
+
+const com = StyleSheet.create({
+  root: { flex: 1 },
+  safe: { flex: 1 },
+  content: { flex: 1, paddingHorizontal: 24, paddingTop: 8, alignItems: 'center' },
+  title: { fontSize: 30, fontWeight: '700', lineHeight: 38, alignSelf: 'flex-start', marginBottom: 0 },
+  ringWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  pressable: { width: 128, height: 128, alignItems: 'center', justifyContent: 'center' },
+  iconCenter: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
+  hint: { fontSize: 14, marginBottom: 32 },
+  done: { fontSize: 14, fontWeight: '600', marginBottom: 32 },
+});
+
+// ─── Screen: ReadyScreen (replaces OfferScreen) ───────────────────────────────
+
+const RDY_FEATURES = [
+  'Daily motivation tailored to you',
+  'Mix your favorite quote categories',
+  'Build a streak with daily visits',
+];
+
+function ReadyScreen_({ next }: { next: () => void }) {
+  const theme = useTheme();
+  const featureAnimVals = useRef(RDY_FEATURES.map(() => new RNAnimated.Value(0)));
+
+  useEffect(() => {
+    featureAnimVals.current.forEach((v) => v.setValue(0));
+    const BASE_DELAY = 2200;
+    const anims = featureAnimVals.current.map((val, i) =>
+      RNAnimated.sequence([
+        RNAnimated.delay(BASE_DELAY + i * 200),
+        RNAnimated.timing(val, { toValue: 1, duration: 1, useNativeDriver: true }),
+      ])
+    );
+    RNAnimated.parallel(anims).start();
+  }, []);
+
+  return (
+    <View style={[rdy.root, { backgroundColor: theme.background }]}>
+      <SafeAreaView style={rdy.safe} edges={['top', 'bottom']}>
+        <View style={rdy.content}>
+          <MaterialCommunityIcons name="rocket-launch-outline" size={64} color={theme.gold} />
+          <TypewriterText
+            text="You're all set!"
+            style={[rdy.title, { color: theme.text, fontFamily: theme.quoteFontFamily }]}
+            charDelay={50}
+          />
+          <TypewriterText
+            text="Your personalized quote feed is ready. Swipe to explore wisdom, motivation, and calm every day."
+            style={[rdy.sub, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}
+            charDelay={12}
+            startDelay={950}
+          />
+          <View style={[rdy.divider, { backgroundColor: theme.border }]} />
+          {RDY_FEATURES.map((f, i) => (
+            <RNAnimated.View key={f} style={[rdy.featureRow, { opacity: featureAnimVals.current[i] }]}>
+              <View style={[rdy.checkWrap, { backgroundColor: theme.gold, borderColor: theme.gold }]}>
+                <MaterialCommunityIcons name="check" size={12} color="#1A1208" />
+              </View>
+              <Text style={[rdy.featureLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
+                {f}
+              </Text>
+            </RNAnimated.View>
+          ))}
+        </View>
+        <ContinueButton onPress={next} label={"Let's go →"} variant="gold" />
+      </SafeAreaView>
+    </View>
+  );
+}
+
+const rdy = StyleSheet.create({
+  root: { flex: 1 },
+  safe: { flex: 1 },
+  content: { flex: 1, paddingHorizontal: 24, justifyContent: 'center', alignItems: 'flex-start' },
+  title: { fontSize: 34, fontWeight: '700', lineHeight: 42, marginTop: 24, marginBottom: 16 },
+  sub: { fontSize: 14, lineHeight: 22, marginBottom: 28 },
+  divider: { height: 1, width: '100%', marginBottom: 20 },
+  featureRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14 },
+  checkWrap: { width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
+  featureLabel: { fontSize: 14 },
+});
+
+// ─── Screen: SpecialOfferScreen ──────────────────────────────────────────────
+
+const SOF_FEATURES = [
+  'Unlimited quote categories & mixes',
+  'Unique themes',
+  'Write your own quotes',
+  'Unlock your quote history',
+];
+
+function SpecialOfferScreen_({ next, onSkip }: { next: () => void; onSkip: () => void }) {
+  const theme = useTheme();
+  const featureAnimVals = useRef(SOF_FEATURES.map(() => new RNAnimated.Value(0)));
+
+  useEffect(() => {
+    featureAnimVals.current.forEach((v) => v.setValue(0));
+    // heading (~29 chars × 35ms + 150ms = ~1165ms) + sub (~113 chars × 12ms + 1300ms = ~2656ms)
+    const BASE = 2800;
+    const anims = featureAnimVals.current.map((val, i) =>
+      RNAnimated.sequence([
+        RNAnimated.delay(BASE + i * 200),
+        RNAnimated.timing(val, { toValue: 1, duration: 1, useNativeDriver: true }),
+      ])
+    );
+    RNAnimated.parallel(anims).start();
+  }, []);
+
+  return (
+    <View style={[sof.root, { backgroundColor: theme.background }]}>
+      <SafeAreaView style={sof.safe} edges={['top', 'bottom']}>
+        <View style={sof.content}>
+          <View style={[sof.badge, { backgroundColor: 'rgba(184,151,90,0.15)', borderColor: 'rgba(184,151,90,0.35)', borderWidth: 1 }]}>
+            <MaterialCommunityIcons name="star-four-points" size={12} color="#B8975A" />
+            <Text style={[sof.badgeText, { color: '#B8975A', fontFamily: theme.uiFontFamily }]}>
+              Limited Offer
+            </Text>
+          </View>
+          <TypewriterText
+            text="A special offer just for you."
+            style={[sof.heading, { color: theme.text, fontFamily: theme.quoteFontFamily }]}
+            charDelay={35}
+          />
+          <TypewriterText
+            text="Because you're here, enjoy a 3-day free trial on the house. We'll remind you the day before your trial ends."
+            style={[sof.sub, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}
+            charDelay={12}
+            startDelay={1300}
+          />
+          <View style={[sof.divider, { backgroundColor: theme.border }]} />
+          {SOF_FEATURES.map((f, i) => (
+            <RNAnimated.View key={f} style={[sof.featureRow, { opacity: featureAnimVals.current[i] }]}>
+              <View style={[sof.checkWrap, { backgroundColor: '#B8975A' }]}>
+                <MaterialCommunityIcons name="check" size={11} color="#1A1208" />
+              </View>
+              <Text style={[sof.featureLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}>{f}</Text>
+            </RNAnimated.View>
+          ))}
+        </View>
+        <View style={sof.actions}>
+          <TouchableOpacity
+            style={[sof.cta, { backgroundColor: '#C4A35A' }]}
+            onPress={next}
+            activeOpacity={0.85}
+          >
+            <Text style={[sof.ctaText, { fontFamily: theme.uiFontFamily }]}>
+              Start My Free Trial
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={sof.skipBtn} onPress={onSkip} activeOpacity={0.7}>
+            <Text style={[sof.skipText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+              Maybe Later
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    </View>
+  );
+}
+
+const sof = StyleSheet.create({
+  root: { flex: 1 },
+  safe: { flex: 1 },
+  content: { flex: 1, paddingHorizontal: 28, justifyContent: 'center' },
+  badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    borderRadius: 99,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    marginBottom: 20,
+  },
+  badgeText: { fontSize: 13, fontWeight: '600', letterSpacing: 0.3 },
+  heading: { fontSize: 38, fontWeight: '700', lineHeight: 46, marginBottom: 16 },
+  sub: { fontSize: 14, lineHeight: 22, marginBottom: 28 },
+  divider: { height: 1, width: '100%', marginBottom: 20 },
+  featureRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14 },
+  checkWrap: { width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
+  featureLabel: { fontSize: 14 },
+  actions: { paddingHorizontal: 24, paddingBottom: 24 },
+  cta: { borderRadius: 99, paddingVertical: 18, alignItems: 'center', marginBottom: 12 },
+  ctaText: { fontSize: 16, fontWeight: '600', color: '#1A1208', letterSpacing: 0.2 },
+  skipBtn: { alignItems: 'center', paddingVertical: 10 },
+  skipText: { fontSize: 14 },
+});
+
+// ─── Screen: OnboardingPaywallScreen ─────────────────────────────────────────
+
+function OnboardingPaywallScreen_({ onFinish }: { onFinish: () => void }) {
+  const { refresh } = useRevenueCat();
+  return (
+    <View style={StyleSheet.absoluteFill}>
+      <RevenueCatUI.Paywall
+        onDismiss={onFinish}
+        onPurchaseCompleted={async () => {
+          await refresh();
+          onFinish();
+        }}
+        onRestoreCompleted={async () => {
+          await refresh();
+          onFinish();
+        }}
+        style={{ flex: 1 }}
+      />
+    </View>
+  );
+}
+
+// ─── Main Onboarding Orchestrator ─────────────────────────────────────────────
+
+export default function OnboardingScreen() {
+  const router = useRouter();
+  const theme = useTheme();
+  const { setName, setPreferences, completeOnboarding } = useAppStore();
+
+  const [step, setStep] = useState(0);
+  const [data, setData] = useState<OnboardingData>({
+    name: '',
+    phoneUsage: '',
+    goals: [],
+    age: '',
+    gender: '',
+    joyCategories: [],
+    notificationCount: 3,
+    notificationStart: '09:00',
+    notificationEnd: '22:00',
+    notificationsGranted: false,
+  });
+
+  const screenOpacity = useSharedValue(1);
+  const screenStyle = useAnimatedStyle(() => ({ opacity: screenOpacity.value }));
+
+  const updateData = useCallback((updates: Partial<OnboardingData>) => {
+    setData((prev) => ({ ...prev, ...updates }));
+  }, []);
+
+  const goNext = useCallback(() => setStep((s) => Math.min(s + 1, TOTAL_STEPS - 1)), []);
+  const goBack = useCallback(() => setStep((s) => Math.max(s - 1, 0)), []);
+
+  const transition = useCallback(
+    (fn: () => void) => {
+      screenOpacity.value = withTiming(0, { duration: 150, easing: Easing.out(Easing.cubic) }, () => {
+        runOnJS(fn)();
+        screenOpacity.value = withTiming(1, { duration: 200 });
+      });
+    },
+    [],
+  );
+
+  const next = useCallback(() => transition(goNext), [transition, goNext]);
+  const back = useCallback(() => transition(goBack), [transition, goBack]);
+
+  const progressDenom = Math.max(1, PROGRESS_END_STEP - PROGRESS_START_STEP);
+  const progress =
+    step < PROGRESS_START_STEP || step > PROGRESS_END_STEP
+      ? undefined
+      : ((step - PROGRESS_START_STEP) / progressDenom) * 100;
+
+  const handleFinish = useCallback(() => {
+    router.replace('/');
+  }, [router]);
+
+  const handleComplete = useCallback(() => {
+    // Map joy selections → app category IDs (deduplicated)
+    const appCategoryIds = [
+      ...new Set(
+        data.joyCategories.map((j) => JOY_TO_MIX[j]).filter(Boolean),
+      ),
+    ];
+
+    setName(data.name);
+    setPreferences({
+      categories: appCategoryIds,
+      goals: data.goals,
+      notificationsEnabled: data.notificationsGranted,
+      notificationCount: data.notificationCount,
+      notificationStartTime: data.notificationStart,
+      notificationEndTime: data.notificationEnd,
+    });
+
+    // Auto-configure Mix with joy-derived categories
+    if (appCategoryIds.length > 0) {
+      useMixStore.getState().setCategories(appCategoryIds);
+    }
+
+    completeOnboarding();
+    // Advance to the special offer paywall steps
+    next();
+  }, [data, setName, setPreferences, completeOnboarding, next]);
+
+  const sp: ScreenProps = { data, updateData, next, back, progress };
+
+  return (
+    <View style={{ flex: 1, backgroundColor: theme.background }}>
+    <Animated.View style={[{ flex: 1 }, screenStyle]}>
+      {step === 0 && <SplashScreen_ next={next} progress={progress} />}
+      {step === 1 && <TapScreen_ text="Hey" next={next} back={back} progress={progress} />}
+      {step === 2 && <HookScreen_ next={next} back={back} progress={progress} />}
+      {step === 3 && <NameInputScreen_ {...sp} />}
+      {step === 4 && (
+        <TapScreen_
+          text={`Okay ${data.name || 'friend'}, consider this…`}
+          next={next}
+          back={back}
+          progress={progress}
+        />
+      )}
+      {step === 5 && <PersonalizedHookScreen_ next={next} back={back} progress={progress} />}
+      {step === 6 && <PhoneUsageScreen_ {...sp} />}
+      {step === 7 && <GoalsScreen_ {...sp} />}
+      {step === 8 && <ValidationScreen_ {...sp} />}
+      {step === 9 && <AgeScreen_ {...sp} />}
+      {step === 10 && <GenderScreen_ {...sp} />}
+      {step === 11 && <BenefitsScreen_ {...sp} />}
+      {step === 12 && <NotificationsScreen_ {...sp} />}
+      {step === 13 && <StreakScreen_ {...sp} />}
+      {step === 14 && <CategoriesScreen_ {...sp} />}
+      {step === 15 && <WidgetScreen_ {...sp} />}
+      {step === 16 && <CommitmentScreen_ {...sp} />}
+      {step === 17 && <ReadyScreen_ next={handleComplete} />}
+      {step === 18 && <SpecialOfferScreen_ next={next} onSkip={handleFinish} />}
+      {step === 19 && <OnboardingPaywallScreen_ onFinish={handleFinish} />}
+    </Animated.View>
+    </View>
+  );
+}

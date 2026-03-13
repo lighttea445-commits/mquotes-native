@@ -1,23 +1,23 @@
 import Purchases from 'react-native-purchases';
+import { Platform } from 'react-native';
 
-/** RevenueCat API Key (test key provided) */
-const REVENUECAT_API_KEY = 'test_vMJWzIBFIQvlbwxFbmgSFfPUrKu';
+const REVENUECAT_API_KEY = Platform.select({
+  ios: 'PASTE_YOUR_APPLE_KEY_HERE',      // TODO: replace with your appl_ iOS key
+  android: 'goog_nBgUNhjUDilBhGkZPixZCobHSWu',
+})!;
 
-/** Entitlement identifier for "Quotes Pro" subscription */
-export const ENTITLEMENT_PRO = 'Quotes Pro';
+/** Entitlement identifier for "Quotable Premium" subscription */
+export const ENTITLEMENT_PRO = 'Quotable Premium';
 
 /** Initialize RevenueCat SDK */
 export async function initializeRevenueCat(): Promise<void> {
   try {
     // Configure SDK with API key
-    await Purchases.configure({
-      apiKey: REVENUECAT_API_KEY,
-      appUserID: undefined, // Will auto-generate anonymous ID
-    });
+    Purchases.configure({ apiKey: REVENUECAT_API_KEY });
 
-    console.log('✅ RevenueCat initialized successfully');
+    if (__DEV__) console.log('✅ RevenueCat initialized successfully');
   } catch (error) {
-    console.error('❌ RevenueCat initialization failed:', error);
+    if (__DEV__) console.error('❌ RevenueCat initialization failed:', error);
     throw error;
   }
 }
@@ -27,18 +27,18 @@ export async function getUserID(): Promise<string> {
   try {
     return await Purchases.getAppUserID();
   } catch (error) {
-    console.error('Error getting user ID:', error);
+    if (__DEV__) console.error('Error getting user ID:', error);
     throw error;
   }
 }
 
-/** Check if user has "Quotes Pro" entitlement */
+/** Check if user has "Quotable Premium" entitlement */
 export async function hasProEntitlement(): Promise<boolean> {
   try {
     const customerInfo = await Purchases.getCustomerInfo();
     return customerInfo.entitlements.active[ENTITLEMENT_PRO] !== undefined;
   } catch (error) {
-    console.error('Error checking entitlement:', error);
+    if (__DEV__) console.error('Error checking entitlement:', error);
     return false;
   }
 }
@@ -48,7 +48,7 @@ export async function getCustomerInfo() {
   try {
     return await Purchases.getCustomerInfo();
   } catch (error) {
-    console.error('Error fetching customer info:', error);
+    if (__DEV__) console.error('Error fetching customer info:', error);
     throw error;
   }
 }
@@ -59,7 +59,7 @@ export async function getOfferings() {
     const offerings = await Purchases.getOfferings();
     return offerings;
   } catch (error) {
-    console.error('Error fetching offerings:', error);
+    if (__DEV__) console.error('Error fetching offerings:', error);
     throw error;
   }
 }
@@ -77,7 +77,7 @@ export async function purchasePackage(packageId: string, offering: string) {
     const result = await Purchases.purchasePackage(selectedPackage);
     return result;
   } catch (error) {
-    console.error('Purchase failed:', error);
+    if (__DEV__) console.error('Purchase failed:', error);
     throw error;
   }
 }
@@ -86,10 +86,10 @@ export async function purchasePackage(packageId: string, offering: string) {
 export async function restorePurchases() {
   try {
     const result = await Purchases.restorePurchases();
-    console.log('✅ Purchases restored:', result);
+    if (__DEV__) console.log('✅ Purchases restored');
     return result;
   } catch (error) {
-    console.error('Restore purchases failed:', error);
+    if (__DEV__) console.error('Restore purchases failed:', error);
     throw error;
   }
 }
@@ -98,9 +98,9 @@ export async function restorePurchases() {
 export async function setAppUserID(userID: string) {
   try {
     await Purchases.logIn(userID);
-    console.log('✅ User ID set:', userID);
+    if (__DEV__) console.log('✅ User ID set');
   } catch (error) {
-    console.error('Error setting user ID:', error);
+    if (__DEV__) console.error('Error setting user ID:', error);
     throw error;
   }
 }
@@ -109,9 +109,9 @@ export async function setAppUserID(userID: string) {
 export async function logout() {
   try {
     await Purchases.logOut();
-    console.log('✅ User logged out');
+    if (__DEV__) console.log('✅ User logged out');
   } catch (error) {
-    console.error('Error logging out:', error);
+    if (__DEV__) console.error('Error logging out:', error);
     throw error;
   }
 }

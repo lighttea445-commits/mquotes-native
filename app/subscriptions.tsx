@@ -1,24 +1,44 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, Text, Pressable, SafeAreaView } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, StyleSheet, Text, Pressable, ActivityIndicator } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
 import { useRevenueCat } from '../hooks/useRevenueCat';
-import { PaywallView } from '../components/subscriptions/PaywallView';
+import RevenueCatUI, { PAYWALL_RESULT } from 'react-native-purchases-ui';
 import { CustomerCenterModal } from '../components/subscriptions/CustomerCenterModal';
 
-type SubscriptionView = 'paywall' | 'customer-center';
+type SubscriptionView = 'loading' | 'paywall' | 'customer-center';
 
 export default function SubscriptionsScreen() {
   const router = useRouter();
   const theme = useTheme();
-  const { isPro, customerInfo } = useRevenueCat();
-  const [activeView, setActiveView] = useState<SubscriptionView>('paywall');
+  const { isPro, isLoading: rcLoading, offerings, customerInfo } = useRevenueCat();
+  const [activeView, setActiveView] = useState<SubscriptionView>('loading');
 
-  const handlePurchaseComplete = () => {
-    // Refresh and show success state
-    setActiveView('customer-center');
-  };
+  // Auto-present paywall as a native modal when ready
+  useEffect(() => {
+    if (rcLoading) return;
+    if (isPro) {
+      setActiveView('customer-center');
+      return;
+    }
+    setActiveView('paywall');
+    const offering = offerings?.all['sale'] ?? offerings?.current ?? undefined;
+    RevenueCatUI.presentPaywall({ offering })
+      .then((result) => {
+        if (__DEV__) console.log('Paywall result:', result);
+        if (result === PAYWALL_RESULT.PURCHASED || result === PAYWALL_RESULT.RESTORED) {
+          setActiveView('customer-center');
+        } else {
+          router.back();
+        }
+      })
+      .catch((err) => {
+        if (__DEV__) console.error('Paywall error:', err);
+        router.back();
+      });
+  }, [rcLoading, isPro]);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
@@ -27,65 +47,68 @@ export default function SubscriptionsScreen() {
         <Pressable onPress={() => router.back()}>
           <MaterialCommunityIcons name="arrow-left" size={24} color={theme.text} />
         </Pressable>
-        <Text style={[styles.headerTitle, { color: theme.text }]}>Quotes Pro</Text>
+        <Text style={[styles.headerTitle, { color: theme.text }]}>Quotable Premium</Text>
         <View style={{ width: 24 }} />
       </View>
 
-      {/* Status Badge (if already subscribed) */}
+      {/* Premium Membership Card */}
       {isPro && (
-        <View style={[styles.statusBadge, { backgroundColor: 'rgba(184,151,90,0.12)' }]}>
-          <MaterialCommunityIcons name="check-circle" size={16} color="#B8975A" />
-          <Text style={[styles.statusText, { color: '#B8975A' }]}>You're a Pro member</Text>
+        <View style={[styles.memberCard, { borderColor: `${theme.accent}4D`, backgroundColor: `${theme.accent}14` }]}>
+          <View style={[styles.memberCardIcon, { backgroundColor: `${theme.accent}26` }]}>
+            <MaterialCommunityIcons name="crown" size={28} color={theme.accent} />
+          </View>
+          <View style={styles.memberCardBody}>
+            <Text style={[styles.memberCardTitle, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
+              Quotable Premium
+            </Text>
+            <View style={styles.memberCardStatus}>
+              <MaterialCommunityIcons name="check-circle" size={14} color={theme.accent} />
+              <Text style={[styles.memberCardStatusText, { color: theme.accent, fontFamily: theme.uiFontFamily }]}>
+                Active member
+              </Text>
+            </View>
+            {customerInfo?.entitlements.active['Quotable Premium']?.expirationDate && (
+              <Text style={[styles.memberCardExpiry, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+                Renews {new Date(customerInfo.entitlements.active['Quotable Premium'].expirationDate!).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}
+              </Text>
+            )}
+          </View>
         </View>
       )}
 
-      {/* Tab Navigation */}
+      {/* Tab Navigation — pro users only */}
       {isPro && (
         <View style={[styles.tabNavigation, { borderBottomColor: theme.surface }]}>
           <Pressable
-            style={[styles.tab, activeView === 'paywall' && styles.tabActive]}
-            onPress={() => setActiveView('paywall')}
+            style={[styles.tab, { borderBottomColor: activeView !== 'customer-center' ? theme.accent : 'transparent' }]}
+            onPress={() => {
+              const offering = offerings?.all['sale'] ?? offerings?.current ?? undefined;
+              RevenueCatUI.presentPaywall({ offering }).catch(() => {});
+            }}
           >
-            <Text
-              style={[
-                styles.tabText,
-                {
-                  color: activeView === 'paywall' ? theme.text : theme.secondaryText,
-                  fontWeight: activeView === 'paywall' ? '600' : '400',
-                },
-              ]}
-            >
+            <Text style={[styles.tabText, { color: activeView !== 'customer-center' ? theme.text : theme.secondaryText, fontWeight: activeView !== 'customer-center' ? '600' : '400' }]}>
               Benefits
             </Text>
           </Pressable>
           <Pressable
-            style={[styles.tab, activeView === 'customer-center' && styles.tabActive]}
+            style={[styles.tab, { borderBottomColor: activeView === 'customer-center' ? theme.accent : 'transparent' }]}
             onPress={() => setActiveView('customer-center')}
           >
-            <Text
-              style={[
-                styles.tabText,
-                {
-                  color: activeView === 'customer-center' ? theme.text : theme.secondaryText,
-                  fontWeight: activeView === 'customer-center' ? '600' : '400',
-                },
-              ]}
-            >
+            <Text style={[styles.tabText, { color: activeView === 'customer-center' ? theme.text : theme.secondaryText, fontWeight: activeView === 'customer-center' ? '600' : '400' }]}>
               Account
             </Text>
           </Pressable>
         </View>
       )}
 
-      {/* Content */}
-      {activeView === 'paywall' && (
-        <PaywallView
-          offering="default"
-          onPurchaseComplete={handlePurchaseComplete}
-          onDismiss={() => router.back()}
-        />
+      {/* Loading while RC initializes */}
+      {activeView === 'loading' && (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.accent} />
+        </View>
       )}
 
+      {/* Customer center for pro users */}
       {activeView === 'customer-center' && (
         <CustomerCenterModal onClose={() => router.back()} />
       )}
@@ -96,6 +119,11 @@ export default function SubscriptionsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   header: {
     flexDirection: 'row',
@@ -110,19 +138,44 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
   },
-  statusBadge: {
+  memberCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-    marginVertical: 12,
-    gap: 6,
+    marginHorizontal: 16,
+    marginVertical: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 14,
   },
-  statusText: {
-    fontSize: 12,
+  memberCardIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  memberCardBody: {
+    flex: 1,
+    gap: 4,
+  },
+  memberCardTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  memberCardStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  memberCardStatusText: {
+    fontSize: 13,
     fontWeight: '600',
+  },
+  memberCardExpiry: {
+    fontSize: 12,
+    marginTop: 2,
   },
   tabNavigation: {
     flexDirection: 'row',
@@ -134,9 +187,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderBottomWidth: 2,
     borderBottomColor: 'transparent',
-  },
-  tabActive: {
-    borderBottomColor: '#B8975A',
   },
   tabText: {
     fontSize: 14,

@@ -16,6 +16,7 @@ interface UserQuotesState {
   addQuote: (text: string, author?: string) => void;
   removeQuote: (id: string) => void;
   editQuote: (id: string, text: string, author: string) => void;
+  clearUserQuotes: () => void;
 }
 
 export const useUserQuotesStore = create<UserQuotesState>()(
@@ -47,6 +48,8 @@ export const useUserQuotesStore = create<UserQuotesState>()(
             q.id === id ? { ...q, text, author } : q,
           ),
         })),
+
+      clearUserQuotes: () => set({ userQuotes: [] }),
     }),
     {
       name: 'user-quotes-store',

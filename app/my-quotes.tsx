@@ -8,18 +8,18 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
 import { useUserQuotesStore, UserQuote } from '../store/useUserQuotesStore';
+import { ConfirmSheet } from '../components/ui/ConfirmSheet';
 
 type Mode = 'list' | 'form';
 const MAX_CHARS = 300;
 
-export default function MyQuotesScreen({ onClose }: { onClose?: () => void }) {
+export default function MyQuotesScreen({ onClose, onBack }: { onClose?: () => void; onBack?: () => void }) {
   const theme = useTheme();
   const router = useRouter();
   const { userQuotes, addQuote, editQuote, removeQuote } = useUserQuotesStore();
@@ -27,9 +27,11 @@ export default function MyQuotesScreen({ onClose }: { onClose?: () => void }) {
   const [mode, setMode] = useState<Mode>('list');
   const [editingQuote, setEditingQuote] = useState<UserQuote | null>(null);
   const [draftText, setDraftText] = useState('');
+  const [deleteId, setDeleteId] = useState<string | null>(null);
   const inputRef = useRef<TextInput>(null);
 
   const close = onClose ?? (() => router.back());
+  const back = onBack ?? close;
 
   const openAdd = () => {
     setEditingQuote(null);
@@ -56,16 +58,7 @@ export default function MyQuotesScreen({ onClose }: { onClose?: () => void }) {
     setMode('list');
   };
 
-  const handleDelete = (id: string) => {
-    Alert.alert(
-      'Delete quote',
-      'Remove this quote from your collection?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: () => removeQuote(id) },
-      ],
-    );
-  };
+  const handleDelete = (id: string) => setDeleteId(id);
 
   const canSave = draftText.trim().length > 0 && draftText.trim().length <= MAX_CHARS;
 
@@ -86,8 +79,8 @@ export default function MyQuotesScreen({ onClose }: { onClose?: () => void }) {
           <>
             {/* ── List header ── */}
             <View style={styles.header}>
-              <TouchableOpacity onPress={close} style={styles.iconBtn}>
-                <MaterialCommunityIcons name="close" size={20} color={theme.textMuted} />
+              <TouchableOpacity onPress={back} style={styles.iconBtn}>
+                <MaterialCommunityIcons name="chevron-left" size={24} color={theme.textMuted} />
               </TouchableOpacity>
               <Text style={[styles.title, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
                 My Quotes
@@ -230,6 +223,17 @@ export default function MyQuotesScreen({ onClose }: { onClose?: () => void }) {
           </>
         )}
       </SafeAreaView>
+
+      <ConfirmSheet
+        visible={deleteId !== null}
+        onClose={() => setDeleteId(null)}
+        title="Delete Quote"
+        message="Remove this quote from your collection?"
+        confirmLabel="Delete"
+        destructive
+        cancelLabel="Cancel"
+        onConfirm={() => { if (deleteId) removeQuote(deleteId); }}
+      />
     </KeyboardAvoidingView>
   );
 }

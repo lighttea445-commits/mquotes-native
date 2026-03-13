@@ -1,10 +1,11 @@
-import React from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ThemeBackground } from '../components/layout/ThemeBackground';
 import { useFavoritesStore, FavoriteQuote } from '../store/useFavoritesStore';
 import { useTheme } from '../hooks/useTheme';
+import { ConfirmSheet } from '../components/ui/ConfirmSheet';
 
 function FavoriteItem({
   quote,
@@ -28,34 +29,28 @@ function FavoriteItem({
         style={styles.removeBtn}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       >
-        <Text style={{ color: '#ef4444', fontSize: 18 }}>♥</Text>
+        <MaterialCommunityIcons name="heart" size={18} color="#ef4444" />
       </TouchableOpacity>
     </View>
   );
 }
 
-export default function FavoritesScreen() {
+export default function FavoritesScreen({ onClose, onBack }: { onClose?: () => void; onBack?: () => void }) {
   const theme = useTheme();
   const router = useRouter();
+  const close = onClose ?? (() => router.back());
+  const back = onBack ?? close;
   const { favorites, removeFavorite, clearFavorites } = useFavoritesStore();
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
-  const handleClearAll = () => {
-    Alert.alert(
-      'Clear All Favorites',
-      'Are you sure you want to remove all favorites?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Clear All', style: 'destructive', onPress: clearFavorites },
-      ],
-    );
-  };
+  const handleClearAll = () => setShowClearConfirm(true);
 
   return (
-    <ThemeBackground>
-      <SafeAreaView style={styles.safe} edges={['top']}>
+    <View style={{ flex: 1 }}>
+      <SafeAreaView style={styles.safe} edges={['bottom']}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <Text style={[styles.backText, { color: theme.textMuted }]}>‹</Text>
+          <TouchableOpacity onPress={back} style={[styles.backBtn, { backgroundColor: theme.surface }]}>
+            <MaterialCommunityIcons name="chevron-left" size={22} color={theme.textMuted} />
           </TouchableOpacity>
           <Text style={[styles.title, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
             Favorites
@@ -71,7 +66,7 @@ export default function FavoritesScreen() {
 
         {favorites.length === 0 ? (
           <View style={styles.empty}>
-            <Text style={{ fontSize: 48, marginBottom: 16 }}>♡</Text>
+            <MaterialCommunityIcons name="heart-outline" size={48} color={theme.textMuted} style={{ marginBottom: 16 }} />
             <Text style={[styles.emptyText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
               No favorites yet
             </Text>
@@ -91,7 +86,18 @@ export default function FavoritesScreen() {
           />
         )}
       </SafeAreaView>
-    </ThemeBackground>
+
+      <ConfirmSheet
+        visible={showClearConfirm}
+        onClose={() => setShowClearConfirm(false)}
+        title="Clear All Favorites"
+        message="Are you sure you want to remove all favorites?"
+        confirmLabel="Clear All"
+        destructive
+        cancelLabel="Cancel"
+        onConfirm={clearFavorites}
+      />
+    </View>
   );
 }
 
@@ -108,12 +114,9 @@ const styles = StyleSheet.create({
   backBtn: {
     width: 36,
     height: 36,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  backText: {
-    fontSize: 28,
-    lineHeight: 32,
   },
   title: {
     fontSize: 22,

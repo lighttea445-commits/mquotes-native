@@ -19,7 +19,7 @@ export function useSubscriptions() {
   /**
    * Initiate purchase flow for a specific package
    */
-  const purchase = useCallback(async (packageId: string, offering: string = 'default') => {
+  const purchase = useCallback(async (packageId: string, offering: string = 'sale') => {
     try {
       const result = await RevenueChat.purchasePackage(packageId, offering);
       return {
@@ -58,7 +58,7 @@ export function useSubscriptions() {
    * Get formatted price for a package
    */
   const getPackagePrice = useCallback(
-    async (packageId: string, offering: string = 'default'): Promise<string | null> => {
+    async (packageId: string, offering: string = 'sale'): Promise<string | null> => {
       try {
         const offerings = await RevenueChat.getOfferings();
         const pkg = offerings.all[offering]?.packagesById[packageId];
@@ -74,7 +74,7 @@ export function useSubscriptions() {
   /**
    * Get all available packages in an offering
    */
-  const getPackages = useCallback(async (offering: string = 'default') => {
+  const getPackages = useCallback(async (offering: string = 'sale') => {
     try {
       const offerings = await RevenueChat.getOfferings();
       return offerings.all[offering]?.availablePackages || [];
