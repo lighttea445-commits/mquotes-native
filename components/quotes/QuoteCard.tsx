@@ -5,8 +5,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
-
-  Share,
   useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -31,11 +29,14 @@ import { useHistoryStore } from '../../store/useHistoryStore';
 import { useMixStore } from '../../store/useMixStore';
 import { useAppStore } from '../../store/useAppStore';
 import { ApiQuote, convertApiQuote, fetchMultipleRandomQuotes, fetchQuotesByCategory, inferCategory } from '../../lib/quotesApi';
+import { useUserQuotesStore } from '../../store/useUserQuotesStore';
+import { useDeepLinkStore } from '../../store/useDeepLinkStore';
 import { useMix } from '../../hooks/useMix';
 import { CATEGORIES } from '../../constants/categories';
 import { useModal } from '../../contexts/ModalContext';
 import { DailyReflectPill } from './DailyReflectPill';
 import { PremiumModal } from '../subscriptions/PremiumModal';
+import { ShareSheet } from './ShareSheet';
 import { errorReporting } from '../../lib/errorReporting';
 import { analytics } from '../../lib/analytics';
 
@@ -71,7 +72,10 @@ export function QuoteCard() {
   const [isEmpty, setIsEmpty] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [showPremiumModal, setShowPremiumModal] = useState(false);
+  const [showShareSheet, setShowShareSheet] = useState(false);
   const isFetching = useRef(false);
+  // Incremented by the deep-link effect to cancel any in-flight loadQuotes fetch.
+  const loadGenRef = useRef(0);
 
   const translateY = useSharedValue(0);
   const opacity = useSharedValue(1);
@@ -104,12 +108,90 @@ export function QuoteCard() {
   const progressFraction = progressNumerator / progressDenominator;
 
   const selectedCategoriesKey = selectedCategories.join(',');
+  const pendingQuote = useDeepLinkStore((s) => s.pendingQuote);
+  const clearPendingQuote = useDeepLinkStore((s) => s.clearPendingQuote);
+  const widgetCheckDone = useDeepLinkStore((s) => s.widgetCheckDone);
+
+  // Flag set by the deep-link effect so the loadQuotes effect (which fires in the
+  // same render cycle on mount) knows NOT to start a competing fetch.
+  const deepLinkHandledRef = useRef(false);
+
+  // When a notification or widget tap sends us a specific quote, show it immediately.
+  // We use the content carried in the deep-link payload (text + author) so no network
+  // call is needed — the quote text was already embedded in the notification or cached
+  // in the widget store. This effect must run BEFORE the loadQuotes effect.
+  useEffect(() => {
+    if (!pendingQuote) return;
+    console.log('[QuoteCard] Deep-link effect fired, pendingQuote:', pendingQuote.id, pendingQuote.text?.slice(0, 40));
+    deepLinkHandledRef.current = true;
+    // Bump the generation so any in-flight loadQuotes discards its result and
+    // doesn't overwrite the buffer we're about to set.
+    loadGenRef.current++;
+    const { id, text, author } = pendingQuote;
+    clearPendingQuote();
+
+    // Resolve quote text: payload may be empty for user quotes.
+    let resolvedText = text;
+    let resolvedAuthor = author;
+    if (!resolvedText) {
+      if (id.startsWith('user-')) {
+        const userQuote = useUserQuotesStore.getState().userQuotes.find(q => q.id === id);
+        if (userQuote) {
+          resolvedText = userQuote.text;
+          resolvedAuthor = userQuote.author;
+        }
+      }
+      // Still no text — fall back to a normal random load.
+      if (!resolvedText) {
+        loadQuotes();
+        return;
+      }
+    }
+
+    const quote: ApiQuote = {
+      _id: id,
+      content: resolvedText,
+      author: resolvedAuthor || 'Unknown',
+      tags: [],
+      authorSlug: '',
+      length: resolvedText.length,
+    };
+    const c = convertApiQuote(quote);
+    addToHistory({ id: c.id, text: c.text, author: c.author, category: c.category });
+    setBuffer([quote]);
+    setCurrentIndex(0);
+    setLoading(false);
+    prefetchMore();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingQuote]);
 
   useEffect(() => {
+    // Wait until _layout.tsx has finished checking for a pending widget tap.
+    // Without this gate, loadQuotes fires before the async native bridge call
+    // resolves and loads random quotes that overwrite the widget quote.
+    if (!widgetCheckDone) {
+      console.log('[QuoteCard] loadQuotes effect: waiting for widgetCheckDone');
+      return;
+    }
+    // Skip normal load when the deep-link effect just set the buffer in this
+    // same render cycle. Without this guard, loadQuotes overwrites the deep-link
+    // quote because clearPendingQuote() already ran (store reads null).
+    if (deepLinkHandledRef.current) {
+      console.log('[QuoteCard] loadQuotes effect: skipping (deepLinkHandled)');
+      deepLinkHandledRef.current = false;
+      return;
+    }
+    if (useDeepLinkStore.getState().pendingQuote) {
+      console.log('[QuoteCard] loadQuotes effect: skipping (pendingQuote in store)');
+      return;
+    }
+    console.log('[QuoteCard] loadQuotes effect: calling loadQuotes()');
     loadQuotes();
-  }, [activeCategory, mixActive, selectedCategoriesKey, mood]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeCategory, mixActive, selectedCategoriesKey, mood, widgetCheckDone]);
 
   async function loadQuotes() {
+    const gen = ++loadGenRef.current;
     setLoading(true);
     setIsEmpty(false);
     setFetchError(null);
@@ -124,12 +206,15 @@ export function QuoteCard() {
         quotes = await fetchMultipleRandomQuotes(20);
       }
     } catch (err) {
+      if (gen !== loadGenRef.current) return; // cancelled by deep-link
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       errorReporting.captureError(err, { context: 'loadQuotes', activeCategory: activeCategory ?? undefined, mixActive });
       setFetchError("Couldn't load quotes. Check your connection.");
       setLoading(false);
       return;
     }
+    // A deep-link arrived while we were fetching — discard these results.
+    if (gen !== loadGenRef.current) return;
     if (quotes.length === 0 && mixActive) {
       setIsEmpty(true);
       setBuffer([]);
@@ -255,17 +340,11 @@ export function QuoteCard() {
     }
   }, [converted, favorited, toggleFavorite]);
 
-  const handleShare = useCallback(async () => {
+  const handleShare = useCallback(() => {
     if (!converted) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     analytics.track('quote_shared', { author: converted.author, category: converted.category });
-    try {
-      await Share.share({
-        message: converted.text,
-      });
-    } catch (e) {
-      errorReporting.captureException(e);
-    }
+    setShowShareSheet(true);
   }, [converted]);
 
   // Pan gesture
@@ -427,7 +506,7 @@ export function QuoteCard() {
             onPress={() => {
               Haptics.selectionAsync();
               if (isPro) setShowPremiumModal(true);
-              else modal ? modal.openPaywall() : undefined;
+              else modal ? modal.openSheet('features') : undefined;
             }}
             style={[styles.crownBtn, { backgroundColor: theme.surface }]}
             accessibilityLabel={isPro ? 'Premium member' : 'Upgrade to premium'}
@@ -508,6 +587,12 @@ export function QuoteCard() {
         {containerContent}
       </GestureDetector>
       <PremiumModal visible={showPremiumModal} onClose={() => setShowPremiumModal(false)} />
+      <ShareSheet
+        visible={showShareSheet}
+        quote={converted?.text ?? ''}
+        author={converted?.author ?? ''}
+        onClose={() => setShowShareSheet(false)}
+      />
     </>
   );
 }
