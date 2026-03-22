@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   useWindowDimensions,
+  Share,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
@@ -36,9 +37,13 @@ import { CATEGORIES } from '../../constants/categories';
 import { useModal } from '../../contexts/ModalContext';
 import { DailyReflectPill } from './DailyReflectPill';
 import { PremiumModal } from '../subscriptions/PremiumModal';
-import { ShareSheet } from './ShareSheet';
+import * as ExpoSharing from 'expo-sharing';
+import { ShareCard } from './ShareCard';
 import { errorReporting } from '../../lib/errorReporting';
 import { analytics } from '../../lib/analytics';
+
+let captureRef: ((ref: React.RefObject<any>, opts: object) => Promise<string>) | null = null;
+try { captureRef = require('react-native-view-shot').captureRef; } catch {}
 
 // Maximum quotes to keep prefetched ahead. Prevents unbounded buffer growth.
 const MAX_BUFFER_AHEAD = 20;
@@ -72,7 +77,8 @@ export function QuoteCard() {
   const [isEmpty, setIsEmpty] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [showPremiumModal, setShowPremiumModal] = useState(false);
-  const [showShareSheet, setShowShareSheet] = useState(false);
+  const [isSharingMedia, setIsSharingMedia] = useState(false);
+  const shareCardRef = useRef<View>(null);
   const isFetching = useRef(false);
   // Incremented by the deep-link effect to cancel any in-flight loadQuotes fetch.
   const loadGenRef = useRef(0);
@@ -110,7 +116,6 @@ export function QuoteCard() {
   const selectedCategoriesKey = selectedCategories.join(',');
   const pendingQuote = useDeepLinkStore((s) => s.pendingQuote);
   const clearPendingQuote = useDeepLinkStore((s) => s.clearPendingQuote);
-  const widgetCheckDone = useDeepLinkStore((s) => s.widgetCheckDone);
 
   // Flag set by the deep-link effect so the loadQuotes effect (which fires in the
   // same render cycle on mount) knows NOT to start a competing fetch.
@@ -166,29 +171,21 @@ export function QuoteCard() {
   }, [pendingQuote]);
 
   useEffect(() => {
-    // Wait until _layout.tsx has finished checking for a pending widget tap.
-    // Without this gate, loadQuotes fires before the async native bridge call
-    // resolves and loads random quotes that overwrite the widget quote.
-    if (!widgetCheckDone) {
-      console.log('[QuoteCard] loadQuotes effect: waiting for widgetCheckDone');
-      return;
-    }
-    // Skip normal load when the deep-link effect just set the buffer in this
-    // same render cycle. Without this guard, loadQuotes overwrites the deep-link
-    // quote because clearPendingQuote() already ran (store reads null).
+    // Skip if the deep-link effect just populated the buffer in this same
+    // render cycle. clearPendingQuote() has already run so the store reads null
+    // — we use the ref to detect this case without a stale closure.
     if (deepLinkHandledRef.current) {
-      console.log('[QuoteCard] loadQuotes effect: skipping (deepLinkHandled)');
       deepLinkHandledRef.current = false;
       return;
     }
+    // Best-effort: if a widget/notification quote is already waiting in the
+    // store (set before QuoteCard mounted), skip the network load entirely.
     if (useDeepLinkStore.getState().pendingQuote) {
-      console.log('[QuoteCard] loadQuotes effect: skipping (pendingQuote in store)');
       return;
     }
-    console.log('[QuoteCard] loadQuotes effect: calling loadQuotes()');
     loadQuotes();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeCategory, mixActive, selectedCategoriesKey, mood, widgetCheckDone]);
+  }, [activeCategory, mixActive, selectedCategoriesKey, mood]);
 
   async function loadQuotes() {
     const gen = ++loadGenRef.current;
@@ -340,16 +337,33 @@ export function QuoteCard() {
     }
   }, [converted, favorited, toggleFavorite]);
 
-  const handleShare = useCallback(() => {
-    if (!converted) return;
+  const handleShare = useCallback(async () => {
+    if (!converted || isSharingMedia) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     analytics.track('quote_shared', { author: converted.author, category: converted.category });
-    setShowShareSheet(true);
-  }, [converted]);
+    setIsSharingMedia(true);
+    try {
+      if (captureRef) {
+        const uri = await captureRef(shareCardRef, { format: 'png', quality: 1.0, result: 'tmpfile' });
+        const canShare = await ExpoSharing.isAvailableAsync();
+        if (canShare) {
+          await ExpoSharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Share Quote' });
+          return;
+        }
+      }
+      await Share.share({ message: `"${converted.text}"\n\n— ${converted.author}` });
+    } catch (e) {
+      errorReporting.captureException(e as Error, { context: 'handleShare' });
+    } finally {
+      setIsSharingMedia(false);
+    }
+  }, [converted, isSharingMedia]);
 
-  // Pan gesture
+  // Pan gesture — require 15px vertical movement before activating so taps
+  // on the share/heart buttons pass through cleanly to TouchableOpacity.
   const startY = useSharedValue(0);
   const panGesture = Gesture.Pan()
+    .activeOffsetY([-15, 15])
     .onStart(() => { startY.value = translateY.value; })
     .onUpdate((e) => {
       const dy = e.translationY;
@@ -537,12 +551,12 @@ export function QuoteCard() {
             </View>
             <View style={styles.actionRow}>
               <TouchableOpacity onPress={handleShare} hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}>
-                <MaterialCommunityIcons name="export-variant" size={30} color={theme.textMuted} />
+                <MaterialCommunityIcons name="export-variant" size={32} color={theme.textMuted} />
               </TouchableOpacity>
               <TouchableOpacity onPress={handleFavorite} hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}>
                 <MaterialCommunityIcons
                   name={favorited ? 'heart' : 'heart-outline'}
-                  size={30}
+                  size={32}
                   color={favorited ? theme.gold : theme.textMuted}
                 />
               </TouchableOpacity>
@@ -587,12 +601,17 @@ export function QuoteCard() {
         {containerContent}
       </GestureDetector>
       <PremiumModal visible={showPremiumModal} onClose={() => setShowPremiumModal(false)} />
-      <ShareSheet
-        visible={showShareSheet}
-        quote={converted?.text ?? ''}
-        author={converted?.author ?? ''}
-        onClose={() => setShowShareSheet(false)}
-      />
+      {/* Hidden off-screen card used for image capture — must be rendered so captureRef works */}
+      <View style={{ position: 'absolute', left: -9999, top: -9999 }} pointerEvents="none">
+        <View ref={shareCardRef} collapsable={false} style={{ borderRadius: 16, overflow: 'hidden' }}>
+          <ShareCard
+            quote={converted?.text ?? ''}
+            author={converted?.author ?? ''}
+            theme={theme}
+            size={400}
+          />
+        </View>
+      </View>
     </>
   );
 }
