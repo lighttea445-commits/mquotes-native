@@ -11,7 +11,8 @@ import {
   Dimensions,
   ImageBackground,
   KeyboardAvoidingView,
-  Animated as RNAnimated,
+  Linking,
+
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -26,36 +27,27 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Svg, { Circle } from 'react-native-svg';
 import RevenueCatUI from 'react-native-purchases-ui';
 import { useAppStore } from '../../store/useAppStore';
-import { useMixStore } from '../../store/useMixStore';
 import { useRevenueCat } from '../../hooks/useRevenueCat';
-import {
-  requestPermissions,
-  scheduleQuoteNotifications,
-  ensureNotificationChannel,
-  formatHHMMto12h,
-} from '../../lib/notifications';
 import { useTheme } from '../../hooks/useTheme';
 import { StreakCard } from '../../components/ui/StreakCard';
 import { WidgetBridge } from '../../modules/widget-bridge';
 import { CATEGORIES } from '../../constants/categories';
 import { ConfirmSheet } from '../../components/ui/ConfirmSheet';
+import { BottomSheet } from '../../components/layout/BottomSheet';
+import { PaywallSheet } from '../../components/subscriptions/PaywallSheet';
+import FeaturesScreen from '../../components/subscriptions/FeaturesScreen';
+import TrialScreen from '../../components/subscriptions/TrialScreen';
+import SpecialOfferScreen from '../../components/subscriptions/SpecialOfferScreen';
+import NotificationsScreen from '../notifications';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
-const TOTAL_STEPS = 20;
+const TOTAL_STEPS = 16;
 const PROGRESS_START_STEP = 6;
-const PROGRESS_END_STEP = 17;
-const NOTIF_STEP = 30; // minutes per step for time pickers
-
+const PROGRESS_END_STEP = 15;
 // ─── Helpers ────────────────────────────────────────────────────────────────
-
-function stepHHMM(hhmm: string, deltaMinutes: number): string {
-  const [h, m] = hhmm.split(':').map(Number);
-  const total = ((h * 60 + m + deltaMinutes) % 1440 + 1440) % 1440;
-  return `${Math.floor(total / 60).toString().padStart(2, '0')}:${(total % 60).toString().padStart(2, '0')}`;
-}
 
 // ─── TypewriterText ──────────────────────────────────────────────────────────
 
@@ -146,12 +138,6 @@ function TypewriterColorText({
   return <Text style={style}>{parts}</Text>;
 }
 
-// ─── Joy → Mix mapping ──────────────────────────────────────────────────────
-// Direct 1:1 mapping from CATEGORIES (name → id)
-const JOY_TO_MIX: Record<string, string> = Object.fromEntries(
-  CATEGORIES.map((c) => [c.name, c.id]),
-);
-
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 interface OnboardingData {
@@ -164,6 +150,13 @@ interface OnboardingData {
   notificationCount: number;
   notificationStart: string; // "HH:MM" 24h
   notificationEnd: string;   // "HH:MM" 24h
+  notificationDays: number[]; // empty = all 7
+  qodEnabled: boolean;
+  qodTime: string;
+  reflectEnabled: boolean;
+  reflectTime: string;
+  streakEnabled: boolean;
+  streakTime: string;
   notificationsGranted: boolean;
 }
 
@@ -260,7 +253,7 @@ function ContinueButton({
   onPress,
   label = 'Continue',
   disabled = false,
-  variant = 'muted',
+  variant = 'gold',
 }: {
   onPress: () => void;
   label?: string;
@@ -514,7 +507,7 @@ const hookWords: { text: string; highlight: boolean }[] = [
   { text: 'need', highlight: false },
   { text: 'to', highlight: false },
   { text: 'be', highlight: false },
-  { text: 'productive.', highlight: false },
+  { text: 'productive.', highlight: true },
 ];
 
 function HookScreen_({ next, back, progress }: { next: () => void; back?: () => void; progress?: number }) {
@@ -591,7 +584,7 @@ function NameInputScreen_({ data, updateData, next }: ScreenProps) {
         <SafeAreaView style={ns.safe} edges={['top', 'bottom']}>
           <View style={ns.content}>
             <TypewriterText
-              text="But first."
+              text="But first"
               style={[ns.eyebrow, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}
               charDelay={55}
               startDelay={100}
@@ -686,12 +679,6 @@ function PersonalizedHookScreen_({ next, back, progress }: { next: () => void; b
               style={[phs.main, { fontFamily: 'Allkin_400Regular' }]}
               charDelay={30}
               startDelay={150}
-            />
-            <TypewriterText
-              text="Now let's build that habit together."
-              style={[phs.sub, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}
-              charDelay={18}
-              startDelay={2200}
             />
           </View>
           <View style={[phs.footer, { opacity: footerVisible ? 1 : 0 }]}>
@@ -1198,7 +1185,7 @@ function BenefitsScreen_({ next, back, progress }: ScreenProps) {
         <OnboardingHeader progress={progress} onBack={back} />
         <ScrollView style={bs.scroll} contentContainerStyle={bs.scrollContent} showsVerticalScrollIndicator={false}>
           <TypewriterText
-            text="The benefits of daily motivation and affirmations."
+            text="The benefits of daily motivation and affirmations"
             style={[bs.title, { color: theme.text, fontFamily: theme.quoteFontFamily }]}
             charDelay={22}
           />
@@ -1259,198 +1246,11 @@ const bs = StyleSheet.create({
 
 // ─── Screen: NotificationsScreen ─────────────────────────────────────────────
 
-function NotificationsScreen_({ data, updateData, next, back, progress }: ScreenProps) {
-  const theme = useTheme();
-  const [count, setCount] = useState(data.notificationCount);
-  const [startTime, setStartTime] = useState(data.notificationStart);
-  const [endTime, setEndTime] = useState(data.notificationEnd);
-  const [showSkip, setShowSkip] = useState(false);
-  const [enabling, setEnabling] = useState(false);
 
-  const handleEnable = async () => {
-    setEnabling(true);
-    try {
-      await ensureNotificationChannel();
-      const granted = await requestPermissions();
-      if (granted) {
-        await scheduleQuoteNotifications({
-          count,
-          startHHMM: startTime,
-          endHHMM: endTime,
-        });
-        updateData({ notificationCount: count, notificationStart: startTime, notificationEnd: endTime, notificationsGranted: true });
-      } else {
-        updateData({ notificationCount: count, notificationStart: startTime, notificationEnd: endTime });
-      }
-    } catch {
-      // proceed even if scheduling fails
-    } finally {
-      setEnabling(false);
-      next();
-    }
-  };
-
-  return (
-    <View style={[nots.root, { backgroundColor: theme.background }]}>
-      <SafeAreaView style={nots.safe} edges={['top', 'bottom']}>
-        <OnboardingHeader progress={progress} onBack={back} onSkip={() => setShowSkip(true)} />
-        <ScrollView style={nots.scroll} contentContainerStyle={nots.scrollContent} showsVerticalScrollIndicator={false}>
-          <TypewriterText
-            text="Get motivation throughout the day!"
-            style={[nots.title, { color: theme.text, fontFamily: theme.quoteFontFamily }]}
-            charDelay={30}
-          />
-          <TypewriterText
-            text="Let me know when you'd like to be motivated."
-            style={[nots.sub, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}
-            charDelay={15}
-            startDelay={1200}
-          />
-
-          {/* Notification preview */}
-          <View style={[nots.preview, { backgroundColor: theme.surface }]}>
-            <View style={[nots.previewIcon, { backgroundColor: theme.goldButton }]}>
-              <Text style={[nots.previewQ, { color: theme.gold }]}>Q</Text>
-            </View>
-            <View style={nots.previewText}>
-              <View style={nots.previewRow}>
-                <Text style={[nots.previewApp, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
-                  Quotable
-                </Text>
-                <Text style={[nots.previewTime, { color: theme.textMuted }]}>now</Text>
-              </View>
-              <Text
-                style={[nots.previewMsg, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}
-                numberOfLines={1}
-              >
-                The secret of getting ahead is getting started.
-              </Text>
-            </View>
-          </View>
-
-          {/* Controls */}
-          <View style={nots.controls}>
-            <View style={[nots.controlRow, { backgroundColor: theme.surface }]}>
-              <Text style={[nots.controlLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
-                How many
-              </Text>
-              <View style={nots.stepper}>
-                <TouchableOpacity
-                  style={[nots.stepBtn, { backgroundColor: theme.background }]}
-                  onPress={() => setCount((c) => Math.max(1, c - 1))}
-                >
-                  <MaterialCommunityIcons name="minus" size={16} color={theme.text} />
-                </TouchableOpacity>
-                <Text style={[nots.stepVal, { color: theme.gold, fontFamily: 'PlayfairDisplay_700Bold' }]}>
-                  {count}x
-                </Text>
-                <TouchableOpacity
-                  style={[nots.stepBtn, { backgroundColor: theme.background }]}
-                  onPress={() => setCount((c) => Math.min(10, c + 1))}
-                >
-                  <MaterialCommunityIcons name="plus" size={16} color={theme.text} />
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            <View style={[nots.controlRow, { backgroundColor: theme.surface }]}>
-              <Text style={[nots.controlLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
-                Start at
-              </Text>
-              <View style={nots.stepper}>
-                <TouchableOpacity
-                  style={[nots.stepBtn, { backgroundColor: theme.background }]}
-                  onPress={() => setStartTime((t) => stepHHMM(t, -NOTIF_STEP))}
-                >
-                  <MaterialCommunityIcons name="minus" size={16} color={theme.text} />
-                </TouchableOpacity>
-                <Text style={[nots.timeVal, { color: theme.gold, fontFamily: 'Inter_600SemiBold' }]}>
-                  {formatHHMMto12h(startTime)}
-                </Text>
-                <TouchableOpacity
-                  style={[nots.stepBtn, { backgroundColor: theme.background }]}
-                  onPress={() => setStartTime((t) => stepHHMM(t, NOTIF_STEP))}
-                >
-                  <MaterialCommunityIcons name="plus" size={16} color={theme.text} />
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            <View style={[nots.controlRow, { backgroundColor: theme.surface }]}>
-              <Text style={[nots.controlLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
-                Stop at
-              </Text>
-              <View style={nots.stepper}>
-                <TouchableOpacity
-                  style={[nots.stepBtn, { backgroundColor: theme.background }]}
-                  onPress={() => setEndTime((t) => stepHHMM(t, -NOTIF_STEP))}
-                >
-                  <MaterialCommunityIcons name="minus" size={16} color={theme.text} />
-                </TouchableOpacity>
-                <Text style={[nots.timeVal, { color: theme.gold, fontFamily: 'Inter_600SemiBold' }]}>
-                  {formatHHMMto12h(endTime)}
-                </Text>
-                <TouchableOpacity
-                  style={[nots.stepBtn, { backgroundColor: theme.background }]}
-                  onPress={() => setEndTime((t) => stepHHMM(t, NOTIF_STEP))}
-                >
-                  <MaterialCommunityIcons name="plus" size={16} color={theme.text} />
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-
-          <Text style={[nots.summary, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-            {`You'll receive ${count} notification${count > 1 ? 's' : ''} per day between ${formatHHMMto12h(startTime)} and ${formatHHMMto12h(endTime)}`}
-          </Text>
-        </ScrollView>
-
-        <ContinueButton
-          onPress={handleEnable}
-          label={enabling ? 'Enabling…' : 'Enable Notifications'}
-          disabled={enabling}
-        />
-
-        {showSkip && (
-          <SkipModal onGoBack={() => setShowSkip(false)} onSkip={() => { setShowSkip(false); next(); }} />
-        )}
-      </SafeAreaView>
-    </View>
-  );
+function NotificationsScreen_({ next, back }: ScreenProps) {
+  return <NotificationsScreen onBack={back} onContinue={next} />;
 }
 
-const nots = StyleSheet.create({
-  root: { flex: 1 },
-  safe: { flex: 1 },
-  scroll: { flex: 1 },
-  scrollContent: { paddingHorizontal: 24, paddingTop: 8, paddingBottom: 8 },
-  title: { fontSize: 24, fontWeight: '700', lineHeight: 32, marginBottom: 8 },
-  sub: { fontSize: 14, marginBottom: 20 },
-  preview: { borderRadius: 16, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 },
-  previewIcon: { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  previewQ: { fontSize: 13, fontWeight: '700' },
-  previewText: { flex: 1 },
-  previewRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  previewApp: { fontSize: 13, fontWeight: '600' },
-  previewTime: { fontSize: 12 },
-  previewMsg: { fontSize: 13, marginTop: 2 },
-  controls: { gap: 10, marginTop: 16 },
-  controlRow: {
-    borderRadius: 16,
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  controlLabel: { fontSize: 14, fontWeight: '500' },
-  controlVal: { fontSize: 14, fontWeight: '500' },
-  stepper: { flexDirection: 'row', alignItems: 'center', gap: 16 },
-  stepBtn: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
-  stepVal: { fontSize: 17, fontWeight: '700', minWidth: 32, textAlign: 'center' },
-  timeVal: { fontSize: 14, fontWeight: '600', minWidth: 80, textAlign: 'center' },
-  summary: { fontSize: 13, textAlign: 'center', marginTop: 20, lineHeight: 18 },
-});
 
 // ─── Screen: StreakScreen ─────────────────────────────────────────────────────
 
@@ -1461,9 +1261,14 @@ function StreakScreen_({ next, back, progress }: ScreenProps) {
   return (
     <View style={[stk.root, { backgroundColor: theme.background }]}>
       <SafeAreaView style={stk.safe} edges={['top', 'bottom']}>
-        <OnboardingHeader progress={progress} onBack={back} title="Build your streak" />
+        <OnboardingHeader progress={progress} onBack={back} />
 
         <View style={stk.content}>
+          {/* Real StreakCard — centered */}
+          <View style={stk.streakWrap}>
+            <StreakCard streakCount={3} weekData={DEMO_STREAK_WEEK} />
+          </View>
+
           <View style={stk.textWrap}>
             <TypewriterText
               text="Build your daily habit"
@@ -1477,12 +1282,6 @@ function StreakScreen_({ next, back, progress }: ScreenProps) {
               startDelay={1050}
             />
           </View>
-
-          {/* Real StreakCard — centered */}
-          <View style={stk.streakWrap}>
-            <StreakCard streakCount={3} weekData={DEMO_STREAK_WEEK} />
-          </View>
-
         </View>
 
         <ContinueButton onPress={next} label="Next" variant="gold" />
@@ -1494,11 +1293,11 @@ function StreakScreen_({ next, back, progress }: ScreenProps) {
 const stk = StyleSheet.create({
   root: { flex: 1 },
   safe: { flex: 1 },
-  content: { flex: 1, paddingHorizontal: 24 },
-  textWrap: { alignItems: 'center', marginBottom: 32, marginTop: 16 },
-  title: { fontSize: 26, fontWeight: '700', textAlign: 'center', lineHeight: 32 },
-  sub: { fontSize: 13, textAlign: 'center', marginTop: 6, fontFamily: 'Inter_400Regular' },
-  streakWrap: { flex: 1, justifyContent: 'center' },
+  content: { flex: 1, paddingHorizontal: 24, justifyContent: 'center' },
+  streakWrap: { alignItems: 'center', marginBottom: 24 },
+  textWrap: { alignItems: 'center' },
+  title: { fontSize: 32, fontWeight: '700', textAlign: 'center', lineHeight: 40 },
+  sub: { fontSize: 17, textAlign: 'center', marginTop: 8, fontFamily: 'Inter_400Regular' },
   tipRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 16 },
   tip: { fontSize: 13, lineHeight: 18, flex: 1, fontFamily: 'Inter_400Regular' },
 });
@@ -1597,12 +1396,11 @@ const cats = StyleSheet.create({
 
 function WidgetScreen_({ next, back, progress }: ScreenProps) {
   const theme = useTheme();
-  const [showSkip, setShowSkip] = useState(false);
   const [installing, setInstalling] = useState(false);
   const [showWidgetInstructions, setShowWidgetInstructions] = useState(false);
 
   const handleInstallWidget = useCallback(async () => {
-    if (!WidgetBridge.isAvailable) {
+    if (!WidgetBridge.canPinWidget) {
       setShowWidgetInstructions(true);
       return;
     }
@@ -1620,7 +1418,7 @@ function WidgetScreen_({ next, back, progress }: ScreenProps) {
   return (
     <View style={[wid.root, { backgroundColor: theme.background }]}>
       <SafeAreaView style={wid.safe} edges={['top', 'bottom']}>
-        <OnboardingHeader progress={progress} onBack={back} title="Widget" onSkip={() => setShowSkip(true)} />
+        <OnboardingHeader progress={progress} onBack={back} />
 
         <View style={wid.content}>
           <TypewriterText
@@ -1629,7 +1427,7 @@ function WidgetScreen_({ next, back, progress }: ScreenProps) {
             charDelay={32}
           />
           <TypewriterText
-            text="Keep your affirmations visible throughout the day with our beautiful home screen widgets"
+            text="Be motivated through out the day with our home screen widget!"
             style={[wid.sub, { color: theme.textMuted }]}
             charDelay={12}
             startDelay={1200}
@@ -1659,11 +1457,7 @@ function WidgetScreen_({ next, back, progress }: ScreenProps) {
           </View>
         </View>
 
-        <ContinueButton onPress={handleInstallWidget} label={installing ? 'Installing…' : 'Install Widget'} variant="gold" disabled={installing} />
-
-        {showSkip && (
-          <SkipModal onGoBack={() => setShowSkip(false)} onSkip={() => { setShowSkip(false); next(); }} />
-        )}
+        <ContinueButton onPress={handleInstallWidget} label={installing ? 'Installing…' : 'Continue'} variant="gold" disabled={installing} />
 
         <ConfirmSheet
           visible={showWidgetInstructions}
@@ -1751,7 +1545,8 @@ const wid = StyleSheet.create({
 
 const COMMITMENT_DURATION = 2000;
 const COMMITMENT_TICK = 30;
-const CIRCUMFERENCE = 2 * Math.PI * 56;
+const RING_RADIUS = 70;
+const CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
 function CommitmentScreen_({ next, back, progress }: ScreenProps) {
   const theme = useTheme();
@@ -1814,25 +1609,25 @@ function CommitmentScreen_({ next, back, progress }: ScreenProps) {
               style={com.pressable}
             >
               <Svg
-                width={128}
-                height={128}
+                width={200}
+                height={200}
                 style={{ transform: [{ rotate: '-90deg' }] }}
               >
                 <Circle
-                  cx="64"
-                  cy="64"
-                  r="56"
+                  cx="100"
+                  cy="100"
+                  r={RING_RADIUS}
                   fill="none"
                   stroke={theme.surface}
-                  strokeWidth="4"
+                  strokeWidth="6"
                 />
                 <Circle
-                  cx="64"
-                  cy="64"
-                  r="56"
+                  cx="100"
+                  cy="100"
+                  r={RING_RADIUS}
                   fill="none"
                   stroke={theme.gold}
-                  strokeWidth="4"
+                  strokeWidth="6"
                   strokeLinecap="round"
                   strokeDasharray={CIRCUMFERENCE}
                   strokeDashoffset={dashOffset}
@@ -1841,20 +1636,15 @@ function CommitmentScreen_({ next, back, progress }: ScreenProps) {
               <View style={com.iconCenter}>
                 <MaterialCommunityIcons
                   name="fingerprint"
-                  size={48}
+                  size={65}
                   color={holdProgress > 0 || completed ? theme.gold : theme.textMuted}
                 />
               </View>
             </Pressable>
           </View>
-          <Text style={[com.hint, { color: theme.textMuted, fontFamily: theme.uiFontFamily, opacity: completed ? 0 : 1 }]}>
-            Hold to commit
+          <Text style={[com.hint, { color: completed ? theme.gold : theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+            {completed ? "You're committed!" : 'Hold to commit'}
           </Text>
-          {completed && (
-            <Text style={[com.done, { color: theme.gold, fontFamily: theme.uiFontFamily }]}>
-              {"You're committed!"}
-            </Text>
-          )}
         </View>
       </SafeAreaView>
     </View>
@@ -1867,186 +1657,9 @@ const com = StyleSheet.create({
   content: { flex: 1, paddingHorizontal: 24, paddingTop: 8, alignItems: 'center' },
   title: { fontSize: 30, fontWeight: '700', lineHeight: 38, alignSelf: 'flex-start', marginBottom: 0 },
   ringWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  pressable: { width: 128, height: 128, alignItems: 'center', justifyContent: 'center' },
+  pressable: { width: 200, height: 200, alignItems: 'center', justifyContent: 'center' },
   iconCenter: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
-  hint: { fontSize: 14, marginBottom: 32 },
-  done: { fontSize: 14, fontWeight: '600', marginBottom: 32 },
-});
-
-// ─── Screen: ReadyScreen (replaces OfferScreen) ───────────────────────────────
-
-const RDY_FEATURES = [
-  'Daily motivation tailored to you',
-  'Mix your favorite quote categories',
-  'Build a streak with daily visits',
-];
-
-function ReadyScreen_({ next }: { next: () => void }) {
-  const theme = useTheme();
-  const featureAnimVals = useRef(RDY_FEATURES.map(() => new RNAnimated.Value(0)));
-
-  useEffect(() => {
-    featureAnimVals.current.forEach((v) => v.setValue(0));
-    const BASE_DELAY = 2200;
-    const anims = featureAnimVals.current.map((val, i) =>
-      RNAnimated.sequence([
-        RNAnimated.delay(BASE_DELAY + i * 200),
-        RNAnimated.timing(val, { toValue: 1, duration: 1, useNativeDriver: true }),
-      ])
-    );
-    RNAnimated.parallel(anims).start();
-  }, []);
-
-  return (
-    <View style={[rdy.root, { backgroundColor: theme.background }]}>
-      <SafeAreaView style={rdy.safe} edges={['top', 'bottom']}>
-        <View style={rdy.content}>
-          <MaterialCommunityIcons name="rocket-launch-outline" size={64} color={theme.gold} />
-          <TypewriterText
-            text="You're all set!"
-            style={[rdy.title, { color: theme.text, fontFamily: theme.quoteFontFamily }]}
-            charDelay={50}
-          />
-          <TypewriterText
-            text="Your personalized quote feed is ready. Swipe to explore wisdom, motivation, and calm every day."
-            style={[rdy.sub, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}
-            charDelay={12}
-            startDelay={950}
-          />
-          <View style={[rdy.divider, { backgroundColor: theme.border }]} />
-          {RDY_FEATURES.map((f, i) => (
-            <RNAnimated.View key={f} style={[rdy.featureRow, { opacity: featureAnimVals.current[i] }]}>
-              <View style={[rdy.checkWrap, { backgroundColor: theme.gold, borderColor: theme.gold }]}>
-                <MaterialCommunityIcons name="check" size={12} color="#1A1208" />
-              </View>
-              <Text style={[rdy.featureLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
-                {f}
-              </Text>
-            </RNAnimated.View>
-          ))}
-        </View>
-        <ContinueButton onPress={next} label={"Let's go →"} variant="gold" />
-      </SafeAreaView>
-    </View>
-  );
-}
-
-const rdy = StyleSheet.create({
-  root: { flex: 1 },
-  safe: { flex: 1 },
-  content: { flex: 1, paddingHorizontal: 24, justifyContent: 'center', alignItems: 'flex-start' },
-  title: { fontSize: 34, fontWeight: '700', lineHeight: 42, marginTop: 24, marginBottom: 16 },
-  sub: { fontSize: 14, lineHeight: 22, marginBottom: 28 },
-  divider: { height: 1, width: '100%', marginBottom: 20 },
-  featureRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14 },
-  checkWrap: { width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
-  featureLabel: { fontSize: 14 },
-});
-
-// ─── Screen: SpecialOfferScreen ──────────────────────────────────────────────
-
-const SOF_FEATURES = [
-  'Unlimited quote categories & mixes',
-  'Unique themes',
-  'Write your own quotes',
-  'Unlock your quote history',
-];
-
-function SpecialOfferScreen_({ next, onSkip }: { next: () => void; onSkip: () => void }) {
-  const theme = useTheme();
-  const featureAnimVals = useRef(SOF_FEATURES.map(() => new RNAnimated.Value(0)));
-
-  useEffect(() => {
-    featureAnimVals.current.forEach((v) => v.setValue(0));
-    // heading (~29 chars × 35ms + 150ms = ~1165ms) + sub (~113 chars × 12ms + 1300ms = ~2656ms)
-    const BASE = 2800;
-    const anims = featureAnimVals.current.map((val, i) =>
-      RNAnimated.sequence([
-        RNAnimated.delay(BASE + i * 200),
-        RNAnimated.timing(val, { toValue: 1, duration: 1, useNativeDriver: true }),
-      ])
-    );
-    RNAnimated.parallel(anims).start();
-  }, []);
-
-  return (
-    <View style={[sof.root, { backgroundColor: theme.background }]}>
-      <SafeAreaView style={sof.safe} edges={['top', 'bottom']}>
-        <View style={sof.content}>
-          <View style={[sof.badge, { backgroundColor: 'rgba(184,151,90,0.15)', borderColor: 'rgba(184,151,90,0.35)', borderWidth: 1 }]}>
-            <MaterialCommunityIcons name="star-four-points" size={12} color="#B8975A" />
-            <Text style={[sof.badgeText, { color: '#B8975A', fontFamily: theme.uiFontFamily }]}>
-              Limited Offer
-            </Text>
-          </View>
-          <TypewriterText
-            text="A special offer just for you."
-            style={[sof.heading, { color: theme.text, fontFamily: theme.quoteFontFamily }]}
-            charDelay={35}
-          />
-          <TypewriterText
-            text="Because you're here, enjoy a 3-day free trial on the house. We'll remind you the day before your trial ends."
-            style={[sof.sub, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}
-            charDelay={12}
-            startDelay={1300}
-          />
-          <View style={[sof.divider, { backgroundColor: theme.border }]} />
-          {SOF_FEATURES.map((f, i) => (
-            <RNAnimated.View key={f} style={[sof.featureRow, { opacity: featureAnimVals.current[i] }]}>
-              <View style={[sof.checkWrap, { backgroundColor: '#B8975A' }]}>
-                <MaterialCommunityIcons name="check" size={11} color="#1A1208" />
-              </View>
-              <Text style={[sof.featureLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}>{f}</Text>
-            </RNAnimated.View>
-          ))}
-        </View>
-        <View style={sof.actions}>
-          <TouchableOpacity
-            style={[sof.cta, { backgroundColor: '#C4A35A' }]}
-            onPress={next}
-            activeOpacity={0.85}
-          >
-            <Text style={[sof.ctaText, { fontFamily: theme.uiFontFamily }]}>
-              Start My Free Trial
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={sof.skipBtn} onPress={onSkip} activeOpacity={0.7}>
-            <Text style={[sof.skipText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-              Maybe Later
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    </View>
-  );
-}
-
-const sof = StyleSheet.create({
-  root: { flex: 1 },
-  safe: { flex: 1 },
-  content: { flex: 1, paddingHorizontal: 28, justifyContent: 'center' },
-  badge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    alignSelf: 'flex-start',
-    borderRadius: 99,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    marginBottom: 20,
-  },
-  badgeText: { fontSize: 13, fontWeight: '600', letterSpacing: 0.3 },
-  heading: { fontSize: 38, fontWeight: '700', lineHeight: 46, marginBottom: 16 },
-  sub: { fontSize: 14, lineHeight: 22, marginBottom: 28 },
-  divider: { height: 1, width: '100%', marginBottom: 20 },
-  featureRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14 },
-  checkWrap: { width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
-  featureLabel: { fontSize: 14 },
-  actions: { paddingHorizontal: 24, paddingBottom: 24 },
-  cta: { borderRadius: 99, paddingVertical: 18, alignItems: 'center', marginBottom: 12 },
-  ctaText: { fontSize: 16, fontWeight: '600', color: '#1A1208', letterSpacing: 0.2 },
-  skipBtn: { alignItems: 'center', paddingVertical: 10 },
-  skipText: { fontSize: 14 },
+  hint: { fontSize: 18, fontWeight: '600', marginBottom: 32 },
 });
 
 // ─── Screen: OnboardingPaywallScreen ─────────────────────────────────────────
@@ -2079,6 +1692,7 @@ export default function OnboardingScreen() {
   const { setName, setPreferences, completeOnboarding } = useAppStore();
 
   const [step, setStep] = useState(0);
+  const [premiumStep, setPremiumStep] = useState<'features' | 'trial' | 'special' | 'paywall' | null>(null);
   const [data, setData] = useState<OnboardingData>({
     name: '',
     phoneUsage: '',
@@ -2089,6 +1703,13 @@ export default function OnboardingScreen() {
     notificationCount: 3,
     notificationStart: '09:00',
     notificationEnd: '22:00',
+    notificationDays: [],
+    qodEnabled: true,
+    qodTime: '08:00',
+    reflectEnabled: true,
+    reflectTime: '20:00',
+    streakEnabled: true,
+    streakTime: '21:00',
     notificationsGranted: false,
   });
 
@@ -2126,32 +1747,20 @@ export default function OnboardingScreen() {
   }, [router]);
 
   const handleComplete = useCallback(() => {
-    // Map joy selections → app category IDs (deduplicated)
-    const appCategoryIds = [
-      ...new Set(
-        data.joyCategories.map((j) => JOY_TO_MIX[j]).filter(Boolean),
-      ),
-    ];
-
     setName(data.name);
+    // Notification settings are managed entirely by NotificationsScreen's applySettings
+    // (which saves to the store and calls rescheduleAll on every change). Overwriting
+    // them here with the onboarding local-state defaults would clobber whatever the
+    // user configured, and always sets notificationsEnabled=false (data.notificationsGranted
+    // is never updated by NotificationsScreen). So we only save non-notification prefs.
     setPreferences({
-      categories: appCategoryIds,
+      categories: [],
       goals: data.goals,
-      notificationsEnabled: data.notificationsGranted,
-      notificationCount: data.notificationCount,
-      notificationStartTime: data.notificationStart,
-      notificationEndTime: data.notificationEnd,
     });
 
-    // Auto-configure Mix with joy-derived categories
-    if (appCategoryIds.length > 0) {
-      useMixStore.getState().setCategories(appCategoryIds);
-    }
-
     completeOnboarding();
-    // Advance to the special offer paywall steps
-    next();
-  }, [data, setName, setPreferences, completeOnboarding, next]);
+    setPremiumStep('features');
+  }, [data, setName, setPreferences, completeOnboarding]);
 
   const sp: ScreenProps = { data, updateData, next, back, progress };
 
@@ -2173,19 +1782,45 @@ export default function OnboardingScreen() {
       {step === 5 && <PersonalizedHookScreen_ next={next} back={back} progress={progress} />}
       {step === 6 && <PhoneUsageScreen_ {...sp} />}
       {step === 7 && <GoalsScreen_ {...sp} />}
-      {step === 8 && <ValidationScreen_ {...sp} />}
-      {step === 9 && <AgeScreen_ {...sp} />}
-      {step === 10 && <GenderScreen_ {...sp} />}
-      {step === 11 && <BenefitsScreen_ {...sp} />}
-      {step === 12 && <NotificationsScreen_ {...sp} />}
-      {step === 13 && <StreakScreen_ {...sp} />}
-      {step === 14 && <CategoriesScreen_ {...sp} />}
-      {step === 15 && <WidgetScreen_ {...sp} />}
-      {step === 16 && <CommitmentScreen_ {...sp} />}
-      {step === 17 && <ReadyScreen_ next={handleComplete} />}
-      {step === 18 && <SpecialOfferScreen_ next={next} onSkip={handleFinish} />}
-      {step === 19 && <OnboardingPaywallScreen_ onFinish={handleFinish} />}
+      {step === 8 && <AgeScreen_ {...sp} />}
+      {step === 9 && <GenderScreen_ {...sp} />}
+      {step === 10 && <BenefitsScreen_ {...sp} />}
+      {step === 11 && <NotificationsScreen_ {...sp} />}
+      {step === 12 && <StreakScreen_ {...sp} />}
+      {step === 13 && <CategoriesScreen_ {...sp} />}
+      {step === 14 && <WidgetScreen_ {...sp} />}
+      {step === 15 && <CommitmentScreen_ {...sp} next={handleComplete} />}
     </Animated.View>
+
+      {/* Premium flow — slides up as BottomSheets over the ReadyScreen */}
+      <BottomSheet
+        visible={premiumStep === 'features'}
+        onClose={handleFinish}
+        backgroundColor={theme.background}
+      >
+        <FeaturesScreen onContinue={() => setPremiumStep('trial')} onClose={handleFinish} />
+      </BottomSheet>
+
+      <BottomSheet
+        visible={premiumStep === 'trial'}
+        onClose={handleFinish}
+        backgroundColor={theme.background}
+      >
+        <TrialScreen onContinue={() => setPremiumStep('special')} onClose={handleFinish} />
+      </BottomSheet>
+
+      <BottomSheet
+        visible={premiumStep === 'special'}
+        onClose={handleFinish}
+        backgroundColor={theme.background}
+      >
+        <SpecialOfferScreen onContinue={() => setPremiumStep('paywall')} onClose={handleFinish} />
+      </BottomSheet>
+
+      <PaywallSheet
+        visible={premiumStep === 'paywall'}
+        onClose={handleFinish}
+      />
     </View>
   );
 }
