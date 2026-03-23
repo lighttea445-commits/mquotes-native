@@ -175,6 +175,8 @@ function RootLayoutInner() {
         <Stack.Screen name="subscriptions" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="reflect" options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
         <Stack.Screen name="journal" options={{ animation: 'slide_from_right' }} />
+        {/* Trampoline for widget tap deep links — invisible, navigates straight to index */}
+        <Stack.Screen name="widget-open" options={{ animation: 'none', headerShown: false }} />
       </Stack>
     </>
   );
@@ -209,7 +211,13 @@ export default function RootLayout() {
   // won't re-run) and for any timing edge cases.
   useEffect(() => {
     async function handleWidgetUrl(rawUrl: string) {
-      if (!rawUrl.includes('src=widget')) return;
+      // Handle both old format (quotable://?src=widget&...) and
+      // new format (quotable://widget-open?...) — the route-based handler
+      // (widget-open.tsx) is primary; this is the fallback for repeated taps
+      // and timing edge cases.
+      const isOldFormat = rawUrl.includes('src=widget');
+      const isNewFormat = rawUrl.includes('widget-open');
+      if (!isOldFormat && !isNewFormat) return;
       try {
         const queryString = rawUrl.includes('?') ? rawUrl.split('?')[1] : '';
         const params: Record<string, string> = {};

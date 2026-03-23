@@ -34,19 +34,16 @@ function HomeScreenInner() {
   const isSwitching = previousSheet !== null;
   const { streakCount, weekData, showStreakBanner, dismissStreakBanner } = useStreak();
 
-  // ── Widget tap deep-link handler (Expo Router v6 primary path) ───────────
+  // ── Old-format widget tap fallback (Expo Router v6 / index route params) ──
   //
-  // In expo-router v6, when the app opens via a deep link URL, the router
-  // automatically parses the URL and injects its params into the screen via
-  // useLocalSearchParams — no manual Linking calls needed. This is the most
-  // reliable mechanism for cold starts (including when the app relaunches
-  // after being killed) because the router processes the URL as part of its
-  // own navigation initialization, before our Linking handlers in _layout.tsx
-  // have had a chance to run.
+  // New widget renders use "quotable://widget-open?..." which routes to
+  // app/widget-open.tsx and never lands here.
   //
-  // The Linking handler in RootLayout covers the remaining cases:
-  //   • Warm start — same URL tapped twice (params don't change, router skips).
-  //   • Any edge cases where the router doesn't surface the params.
+  // Old widget renders (before the widget-open update) used
+  // "quotable://?src=widget&..." which expo-router maps to the root route
+  // ("/") with query params. This effect catches those params as a fallback.
+  //
+  // The Linking handler in RootLayout covers repeated-tap edge cases.
   const widgetParams = useLocalSearchParams<{
     src?: string;
     widgetId?: string;

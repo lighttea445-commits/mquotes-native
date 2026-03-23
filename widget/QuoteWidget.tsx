@@ -40,10 +40,12 @@ export function QuoteWidget({ quote, config, widgetInfo }: Props) {
   // Show fewer lines of quote text in short widgets so nothing overflows
   const maxLines   = widgetInfo.height < 80 ? 3 : widgetInfo.height < 140 ? 5 : 8;
 
-  // Embed the quote content in the tap URI so the deep-link handler can display
-  // the exact quote visible on-screen without reading AsyncStorage (which may
-  // have already been overwritten by a concurrent background refresh).
-  const tapUri = `quotable://?src=widget&widgetId=${widgetInfo.widgetId}&id=${encodeURIComponent(quote.id ?? '')}&text=${encodeURIComponent(quote.text)}&author=${encodeURIComponent(quote.author)}`;
+  // Use "quotable://widget-open?..." with an explicit named route so expo-router
+  // v6 maps it deterministically to app/widget-open.tsx. An empty-authority
+  // root URL ("quotable://?...") is mis-parsed by Android on some devices.
+  // The quote text/author are embedded so the trampoline screen needs no
+  // AsyncStorage read and is immune to background-refresh race conditions.
+  const tapUri = `quotable://widget-open?widgetId=${widgetInfo.widgetId}&id=${encodeURIComponent(quote.id ?? '')}&text=${encodeURIComponent(quote.text)}&author=${encodeURIComponent(quote.author)}`;
 
   return (
     <FlexWidget
