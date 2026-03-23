@@ -42,6 +42,11 @@ const FEATURES = [
     title: 'Explore all categories',
     subtitle: 'Unlock the full library: philosophy, science, freedom & more',
   },
+  {
+    icon: 'view-grid-outline' as const,
+    title: 'Widget editor',
+    subtitle: 'Customize your home screen widget — category, refresh rate & text size',
+  },
 ];
 
 interface Props {

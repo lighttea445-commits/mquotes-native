@@ -577,55 +577,21 @@ export default function WidgetsScreen({ onClose, onBack, onContinue }: { onClose
     Object.entries(TEXT_SIZE_LABELS) as [WidgetTextSize, string][]
   ).map(([value, label]) => ({ value, label }));
 
-  // ── Render: pro gate ───────────────────────────────────────────────────────
+  // ── Pro-gate helper ────────────────────────────────────────────────────────
 
-  if (!rcLoading && !isPro) {
-    const handleUnlock = () =>
-      modal ? modal.openSheet('features') : router.push('/subscriptions');
-
-    return (
-      <View style={{ flex: 1, backgroundColor: theme.background }}>
-        <SafeAreaView style={styles.safe} edges={['bottom']}>
-          <View style={styles.header}>
-            <TouchableOpacity onPress={back} style={[styles.backBtn, { backgroundColor: theme.surface }]} activeOpacity={0.7}>
-              <MaterialCommunityIcons name="arrow-left" size={22} color={theme.textMuted} />
-            </TouchableOpacity>
-            <Text style={[styles.headerTitle, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
-              Widgets
-            </Text>
-            <View style={{ width: 36 }} />
-          </View>
-          <View style={gateStyles.container}>
-            <View style={[gateStyles.iconBg, { backgroundColor: 'rgba(184,151,90,0.12)' }]}>
-              <MaterialCommunityIcons name="crown" size={32} color="#B8975A" />
-            </View>
-            <Text style={[gateStyles.title, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
-              Widget Editor is Pro
-            </Text>
-            <Text style={[gateStyles.body, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-              Upgrade to Quotable Pro to customize your widgets — choose quote categories, refresh intervals, text size, and more.
-            </Text>
-            <TouchableOpacity
-              style={[gateStyles.unlockBtn, { backgroundColor: '#B8975A' }]}
-              onPress={handleUnlock}
-              activeOpacity={0.85}
-            >
-              <MaterialCommunityIcons name="crown" size={16} color="#1A1208" />
-              <Text style={[gateStyles.unlockBtnText, { fontFamily: theme.uiFontFamily }]}>
-                Unlock Pro
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </SafeAreaView>
-      </View>
-    );
-  }
+  const openPaywall = () =>
+    modal ? modal.openSheet('features') : router.push('/subscriptions');
 
   // ── Render: editor ─────────────────────────────────────────────────────────
 
   if (editorId !== null && editorConfig) {
     const meta = WIDGET_META[editorConfig.type];
     const handleEditorBack = onClose ? () => setLocalEditorId(null) : () => router.back();
+
+    // Gates a callback behind Pro — opens paywall for free users instead.
+    function gated<T extends unknown[]>(fn: (...args: T) => void) {
+      return (...args: T) => { if (isPro) { fn(...args); } else { openPaywall(); } };
+    }
 
     return (
       <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -666,7 +632,7 @@ export default function WidgetsScreen({ onClose, onBack, onContinue }: { onClose
                 icon="circle-opacity"
                 label="Transparent background"
                 value={editorConfig.transparentBg}
-                onToggle={(v) => updateConfig({ transparentBg: v })}
+                onToggle={gated((v) => updateConfig({ transparentBg: v }))}
                 theme={theme}
               />
 
@@ -676,7 +642,7 @@ export default function WidgetsScreen({ onClose, onBack, onContinue }: { onClose
                 icon="account-outline"
                 label="Show author"
                 value={editorConfig.showAuthor}
-                onToggle={(v) => updateConfig({ showAuthor: v })}
+                onToggle={gated((v) => updateConfig({ showAuthor: v }))}
                 theme={theme}
               />
 
@@ -686,7 +652,7 @@ export default function WidgetsScreen({ onClose, onBack, onContinue }: { onClose
                 icon="refresh"
                 label="Update interval"
                 value={REFRESH_FREQUENCY_LABELS[editorConfig.updateInterval]}
-                onPress={() => setActivePicker('interval')}
+                onPress={gated(() => setActivePicker('interval'))}
                 theme={theme}
               />
 
@@ -695,7 +661,7 @@ export default function WidgetsScreen({ onClose, onBack, onContinue }: { onClose
                 icon="tag-outline"
                 label="Quote category"
                 value={QUOTE_TYPE_LABELS[editorConfig.quoteType]}
-                onPress={() => setActivePicker('quoteType')}
+                onPress={gated(() => setActivePicker('quoteType'))}
                 theme={theme}
               />
 
@@ -704,7 +670,7 @@ export default function WidgetsScreen({ onClose, onBack, onContinue }: { onClose
                 icon="format-size"
                 label="Text size"
                 value={TEXT_SIZE_LABELS[editorConfig.textSize]}
-                onPress={() => setActivePicker('textSize')}
+                onPress={gated(() => setActivePicker('textSize'))}
                 theme={theme}
                 isLast
               />
@@ -917,48 +883,5 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-});
-
-const gateStyles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 36,
-    gap: 16,
-  },
-  iconBg: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 4,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  body: {
-    fontSize: 15,
-    lineHeight: 22,
-    textAlign: 'center',
-    opacity: 0.75,
-  },
-  unlockBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 28,
-    paddingVertical: 14,
-    borderRadius: 28,
-    marginTop: 8,
-  },
-  unlockBtnText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#1A1208',
   },
 });

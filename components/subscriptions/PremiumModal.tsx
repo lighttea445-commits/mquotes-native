@@ -19,6 +19,7 @@ const BENEFITS = [
   { icon: 'palette-outline', label: 'All Themes Unlocked', desc: 'Every color theme and visual style' },
   { icon: 'shape-outline', label: 'All Topics Unlocked', desc: 'Access every quote category' },
   { icon: 'pencil-outline', label: 'Write Your Own Quotes', desc: 'Add personal quotes to your collection' },
+  { icon: 'view-grid-outline', label: 'Widget Editor', desc: 'Customize widget category, refresh rate & text size' },
 ];
 
 interface PremiumModalProps {
