@@ -11,12 +11,23 @@ export type WidgetQuoteType =
   | 'general'
   | 'favorites'
   | 'my-quotes'
+  // For You
   | 'wisdom'
-  | 'motivational'
   | 'inspirational'
   | 'love'
+  | 'happiness'
   | 'life'
-  | 'happiness';
+  | 'change'
+  | 'friendship'
+  // By Type
+  | 'success'
+  | 'motivational'
+  | 'future'
+  | 'philosophy'
+  | 'character'
+  | 'history'
+  | 'science'
+  | 'freedom';
 
 export const TEXT_SIZE_LABELS: Record<WidgetTextSize, string> = {
   small:  'Small',
@@ -43,15 +54,27 @@ export const REFRESH_FREQUENCY_MINUTES: Record<WidgetRefreshFrequency, number> =
 };
 
 export const QUOTE_TYPE_LABELS: Record<WidgetQuoteType, string> = {
+  // Special
   general:       'General',
   favorites:     'My Favorites',
   'my-quotes':   'My Own Quotes',
+  // For You
   wisdom:        'Wisdom',
-  motivational:  'Motivational',
-  inspirational: 'Inspirational',
+  inspirational: 'Inspiration',
   love:          'Love',
-  life:          'Life',
   happiness:     'Happiness',
+  life:          'Life',
+  change:        'Change',
+  friendship:    'Friendship',
+  // By Type
+  success:       'Success',
+  motivational:  'Motivation',
+  future:        'Future',
+  philosophy:    'Philosophy',
+  character:     'Character',
+  history:       'History',
+  science:       'Science',
+  freedom:       'Freedom',
 };
 
 // ── Per-instance config ───────────────────────────────────────────────────────

@@ -506,12 +506,20 @@ export default function WidgetsScreen({ onClose, onBack, onContinue }: { onClose
       if (favs.length > 0) {
         const f = favs[Math.floor(Math.random() * favs.length)];
         quote = { id: f.id, text: f.text, author: f.author };
+      } else {
+        // No favorites yet — fall back to general
+        const fresh = await fetchMultipleRandomQuotes(1);
+        if (fresh[0]) quote = { id: fresh[0]._id, text: fresh[0].content, author: fresh[0].author };
       }
     } else if (qt === 'my-quotes') {
       const myQuotes = useUserQuotesStore.getState().userQuotes;
       if (myQuotes.length > 0) {
         const q = myQuotes[Math.floor(Math.random() * myQuotes.length)];
         quote = { id: q.id, text: q.text, author: q.author };
+      } else {
+        // No user quotes yet — fall back to general
+        const fresh = await fetchMultipleRandomQuotes(1);
+        if (fresh[0]) quote = { id: fresh[0]._id, text: fresh[0].content, author: fresh[0].author };
       }
     } else {
       const fresh = await fetchQuotesByCategory(qt);
