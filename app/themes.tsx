@@ -36,7 +36,7 @@ export default function ThemesScreen({ onClose }: { onClose?: () => void }) {
 
   const handleSelect = (themeId: string) => {
     if (!isPro) {
-      modal ? modal.openPaywall() : router.push('/subscriptions');
+      modal ? modal.openSheet('features') : router.push('/subscriptions');
       return;
     }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);

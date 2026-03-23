@@ -59,7 +59,7 @@ export const ShareCard = forwardRef<View, Props>(({ quote, author, theme, size }
 
         <Text
           style={{
-            color: '#ffffff',
+            color: theme.text,
             fontFamily: theme.uiFontFamily,
             fontSize: authorFontSize,
             letterSpacing: 2.5,

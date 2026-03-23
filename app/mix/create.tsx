@@ -104,7 +104,7 @@ export default function CreateMixScreen({ onClose }: { onClose?: () => void }) {
     ...CATEGORIES,
   ];
 
-  const openPaywall = () => modal ? modal.openPaywall() : router.push('/subscriptions');
+  const openPaywall = () => modal ? modal.openSheet('features') : router.push('/subscriptions');
 
   const toggle = (id: string) => {
     if (!localSelected.includes(id) && !isPro && localSelected.length >= FREE_MIX_LIMIT) {

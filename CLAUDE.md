@@ -64,3 +64,6 @@ React Native / Expo app (Expo Go compatible). Do NOT attempt to run a web server
 - Do not stop after one screenshot pass
 - Do not use `transition-all`
 - Do not use default Tailwind blue/indigo as primary color
+
+## Git Workflow
+- **After every code edit, create a git commit.** Stage only the files you changed and commit with a concise message describing what was done.

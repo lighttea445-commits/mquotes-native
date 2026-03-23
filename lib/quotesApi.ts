@@ -238,6 +238,26 @@ export async function fetchQuotesByTags(tags: string[]): Promise<ApiQuote[]> {
   return fetchQuotesByCategory(tags[0]);
 }
 
+/**
+ * Fetch a single quote by its Quotable API id.
+ * Used when a notification or widget tap passes a specific quoteId.
+ * Returns null if the quote is not found or on network error.
+ */
+export async function fetchQuoteById(id: string): Promise<ApiQuote | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${QUOTABLE_BASE}/quotes/${id}`, { signal: controller.signal });
+    if (!res.ok) return null;
+    const data = await res.json() as KurokuoteQuote;
+    return toApiQuote(data);
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // ─── Conversion helpers ───────────────────────────────────────────────────────
 
 /** Map a quote's Quotable tags back to an app category id. Falls back to 'wisdom'. */

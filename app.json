@@ -24,7 +24,14 @@
       },
       "package": "com.eriksen_dawson.quotable",
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.SCHEDULE_EXACT_ALARM",
+        "android.permission.USE_EXACT_ALARM",
+        "android.permission.VIBRATE",
+        "android.permission.POST_NOTIFICATIONS"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -34,13 +41,33 @@
     "plugins": [
       "expo-router",
       "expo-font",
-      "./plugins/withQuotesWidget",
+      "./plugins/withWidgetExported",
+      [
+        "react-native-android-widget",
+        {
+          "widgets": [
+            {
+              "name": "BasicWidget",
+              "label": "Quotable",
+              "description": "Daily quotes on your home screen",
+              "minWidth": "100dp",
+              "minHeight": "50dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 1,
+              "resizeMode": "horizontal|vertical",
+              "updatePeriodMillis": 1800000,
+              "widgetFeatures": "reconfigurable|configuration_optional"
+            }
+          ]
+        }
+      ],
       [
         "expo-notifications",
         {
           "icon": "./assets/icon.png",
-          "color": "#7C3AED",
-          "sounds": []
+          "color": "#B8975A",
+          "sounds": [],
+          "allowsSchedulingExactAlarms": true
         }
       ],
       "@react-native-community/datetimepicker"

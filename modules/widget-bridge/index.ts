@@ -1,138 +1,125 @@
 /**
- * WidgetBridge — JS API for the native Android widget bridge module.
+ * WidgetBridge — thin wrappers around react-native-android-widget APIs.
  *
- * All widget instances are identified by their numeric appWidgetId.
- * Config changes affect only the specified widgetId — never global state.
- *
- * In Expo Go: all calls are silent no-ops (native module absent).
- * Activate by building with EAS: `eas build --platform android`
+ * The old custom Kotlin native module is replaced by the library's built-in
+ * bridge. This module keeps the same call-site API so widget-consuming code
+ * (widgets.tsx, widgetRefreshTask.ts) requires minimal changes.
  */
 
-import { NativeModules } from 'react-native';
-import type { WidgetType } from '../../store/useWidgetStore';
+import { Platform, NativeModules } from 'react-native';
+import { getWidgetInfo, requestWidgetUpdateById } from 'react-native-android-widget';
+import type { WidgetInfo } from 'react-native-android-widget';
+import type { WidgetInstanceConfig } from '../../store/useWidgetStore';
+import type { QuoteData } from '../../widget/QuoteWidget';
 
-export interface WidgetUpdatePayload {
-  widgetId: number;
-  widgetType: WidgetType;
-  quoteText: string;
-  transparentBg: boolean;
-  intervalMs: number;
-  quoteType: string;
-  textSize: string;
-}
+export const WIDGET_NAME = 'BasicWidget';
 
 export interface ActiveWidget {
   widgetId: number;
-  type: WidgetType;
+  type: 'basic';
 }
 
-export interface PendingWidgetConfig {
+export interface RenderPayload {
   widgetId: number;
-  type: WidgetType;
+  quote: QuoteData;
+  config: Pick<WidgetInstanceConfig, 'showAuthor' | 'transparentBg' | 'textSize'>;
 }
-
-const Native = NativeModules.WidgetBridge as
-  | {
-      updateWidget(jsonPayload: string): Promise<void>;
-      updateAllWidgets(): Promise<void>;
-      getPendingConfiguration(): Promise<PendingWidgetConfig | null>;
-      finishConfiguration(widgetId: number): Promise<void>;
-      getActiveWidgets(): Promise<ActiveWidget[]>;
-      removeWidgetConfig(widgetId: number): Promise<void>;
-    }
-  | undefined;
 
 class WidgetBridgeClass {
-  /** True when the native module is available (EAS build, not Expo Go). */
   get isAvailable(): boolean {
-    return !!Native;
+    return Platform.OS === 'android';
   }
 
-  /** Push quote + config for a specific widget instance to SharedPreferences. */
-  async updateWidget(payload: WidgetUpdatePayload): Promise<void> {
-    if (!Native) {
-      console.warn('[WidgetBridge] Native module not available. Build with EAS to enable widgets.');
-      return;
-    }
-    try {
-      await Native.updateWidget(JSON.stringify(payload));
-    } catch (err) {
-      console.warn('[WidgetBridge] updateWidget error:', err);
-    }
-  }
-
-  /** Trigger an immediate refresh of all placed widget instances. */
-  async reloadTimelines(): Promise<void> {
-    if (!Native) return;
-    try {
-      await Native.updateAllWidgets();
-    } catch (err) {
-      console.warn('[WidgetBridge] reloadTimelines error:', err);
-    }
+  /** True when running on Android — pin widget is always available via long-press. */
+  get canPinWidget(): boolean {
+    return Platform.OS === 'android';
   }
 
   /**
-   * Returns the pending configuration set by WidgetConfigActivity when a widget
-   * was just placed, or null if there is nothing pending.
+   * On Android 8+, invokes the system's native widget-pin dialog via
+   * AppWidgetManager.requestPinAppWidget(). Falls back silently if the
+   * launcher doesn't support it (e.g. Android < 8 or unsupported launcher).
    */
-  async getPendingConfiguration(): Promise<PendingWidgetConfig | null> {
-    if (!Native) return null;
+  async requestPinWidget(): Promise<void> {
+    if (Platform.OS !== 'android') return;
     try {
-      return await Native.getPendingConfiguration();
-    } catch (err) {
-      console.warn('[WidgetBridge] getPendingConfiguration error:', err);
-      return null;
+      await NativeModules.WidgetPin?.requestPin();
+    } catch {
+      // Launcher rejected or doesn't support pinning — no-op.
     }
   }
 
-  /**
-   * Call after the user finishes configuring a newly placed widget.
-   * Completes the Android placement flow (RESULT_OK) and triggers a widget render.
-   */
-  async finishConfiguration(widgetId: number): Promise<void> {
-    if (!Native) return;
-    try {
-      await Native.finishConfiguration(widgetId);
-    } catch (err) {
-      console.warn('[WidgetBridge] finishConfiguration error:', err);
-    }
-  }
-
-  /** Returns all currently placed widget instances with their types. */
+  /** Returns all currently placed BasicWidget instances. */
   async getActiveWidgets(): Promise<ActiveWidget[]> {
-    if (!Native) return [];
+    if (Platform.OS !== 'android') return [];
     try {
-      return await Native.getActiveWidgets();
+      const infos: WidgetInfo[] = await getWidgetInfo(WIDGET_NAME);
+      console.log(
+        `[WidgetBridge] getWidgetInfo("${WIDGET_NAME}") →`,
+        infos.length,
+        'widget(s):',
+        infos.map((i) => `id=${i.widgetId} ${i.width}×${i.height}dp`).join(', ') || '(none)',
+      );
+      return infos.map((i) => ({ widgetId: i.widgetId, type: 'basic' as const }));
     } catch (err) {
-      console.warn('[WidgetBridge] getActiveWidgets error:', err);
+      console.error('[WidgetBridge] getActiveWidgets error:', err);
       return [];
     }
   }
 
   /**
-   * Requests the system to pin the app widget to the home screen (Android 8+).
-   * Triggers the native "Add Widget" picker sheet.
-   * No-op in Expo Go (native module absent).
+   * Re-render a specific widget instance with new quote/config.
+   * Dynamic imports avoid pulling React into the headless task bundle at module-load time.
    */
-  async requestPinWidget(): Promise<void> {
-    if (!Native) {
-      console.warn('[WidgetBridge] Native module not available. Build with EAS to enable widgets.');
-      return;
-    }
+  async updateWidget(payload: RenderPayload): Promise<void> {
+    if (Platform.OS !== 'android') return;
     try {
-      await (Native as any).requestPinWidget?.();
+      const React = (await import('react')).default;
+      const { QuoteWidget } = await import('../../widget/QuoteWidget');
+
+      await requestWidgetUpdateById({
+        widgetName: WIDGET_NAME,
+        widgetId: payload.widgetId,
+        renderWidget: (info) =>
+          React.createElement(QuoteWidget, {
+            quote: payload.quote,
+            config: payload.config,
+            widgetInfo: info,
+          }),
+      });
     } catch (err) {
-      console.warn('[WidgetBridge] requestPinWidget error:', err);
+      console.warn('[WidgetBridge] updateWidget error:', err);
     }
   }
 
-  /** Remove config data for a specific widget instance. */
-  async removeWidgetConfig(widgetId: number): Promise<void> {
-    if (!Native) return;
+  /** Re-render all placed instances (e.g. after settings change). */
+  async reloadTimelines(): Promise<void> {
+    if (Platform.OS !== 'android') return;
     try {
-      await Native.removeWidgetConfig(widgetId);
+      const React = (await import('react')).default;
+      const { QuoteWidget } = await import('../../widget/QuoteWidget');
+      const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+      const { requestWidgetUpdate } = await import('react-native-android-widget');
+      const { defaultInstanceConfig } = await import('../../store/useWidgetStore');
+
+      const raw = await AsyncStorage.getItem('widget-store-v2');
+      const configs = raw
+        ? (JSON.parse(raw) as { state: { widgetConfigs: Record<string, WidgetInstanceConfig> } }).state.widgetConfigs
+        : {};
+
+      await requestWidgetUpdate({
+        widgetName: WIDGET_NAME,
+        renderWidget: (info) => {
+          const config = configs[info.widgetId.toString()] ?? defaultInstanceConfig('basic');
+          const cached = config.cachedQuote;
+          const quote: QuoteData = cached
+            ? { id: cached.quoteId, text: cached.text, author: cached.author }
+            : { id: '', text: 'The only way to do great work is to love what you do.', author: 'Steve Jobs' };
+          return React.createElement(QuoteWidget, { quote, config, widgetInfo: info });
+        },
+      });
     } catch (err) {
-      console.warn('[WidgetBridge] removeWidgetConfig error:', err);
+      console.warn('[WidgetBridge] reloadTimelines error:', err);
     }
   }
 }

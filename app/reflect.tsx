@@ -17,6 +17,14 @@ import { useReflectStore, MOODS, MoodLabel } from '../store/useReflectStore';
 
 type Step = 'mood' | 'write';
 
+const PLACEHOLDERS = [
+  "What does this quote mean to you today?",
+  "How does this resonate with where you are right now?",
+  "What thought or memory does this bring up for you?",
+  "In what part of your life does this feel most true?",
+  "What would change if you truly believed this?",
+];
+
 export default function ReflectScreen({ onClose }: { onClose?: () => void }) {
   const theme = useTheme();
   const router = useRouter();
@@ -32,6 +40,7 @@ export default function ReflectScreen({ onClose }: { onClose?: () => void }) {
     existing ? existing.mood as MoodLabel : null,
   );
   const [text, setText] = useState(existing?.reflectionText ?? '');
+  const [placeholderIdx] = useState(() => Math.floor(Math.random() * PLACEHOLDERS.length));
 
   useEffect(() => {
     const e = getTodaysReflection();
@@ -153,7 +162,7 @@ export default function ReflectScreen({ onClose }: { onClose?: () => void }) {
               "{dailyQuote.quoteText}"
             </Text>
             <Text style={[styles.quoteAuthor, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-              — {dailyQuote.quoteAuthor}
+              {dailyQuote.quoteAuthor}
             </Text>
           </View>
         )}
@@ -170,7 +179,7 @@ export default function ReflectScreen({ onClose }: { onClose?: () => void }) {
           ]}
           multiline
           textAlignVertical="top"
-          placeholder="What does this quote mean to you today?"
+          placeholder={PLACEHOLDERS[placeholderIdx]}
           placeholderTextColor={theme.textMuted}
           value={text}
           onChangeText={setText}

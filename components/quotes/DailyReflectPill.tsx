@@ -28,7 +28,7 @@ export function DailyReflectPill() {
     if (isPro) {
       modal?.openSheet('reflect');
     } else {
-      modal?.openPaywall();
+      modal?.openSheet('features');
     }
   };
 
@@ -46,7 +46,7 @@ export function DailyReflectPill() {
           },
         ]}
         activeOpacity={0.8}
-        accessibilityLabel={done ? 'Reflected today' : "Today's Reflect — tap to write"}
+        accessibilityLabel={done ? 'Reflected today' : "Today's Reflect - tap to write"}
       >
         <MaterialCommunityIcons
           name={done ? 'check' : 'pencil-outline'}

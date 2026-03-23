@@ -58,18 +58,22 @@ export const QUOTE_TYPE_LABELS: Record<WidgetQuoteType, string> = {
 
 export interface WidgetInstanceConfig {
   type: WidgetType;
+  name: string;
   transparentBg: boolean;
+  showAuthor: boolean;
   updateInterval: WidgetRefreshFrequency;
   quoteType: WidgetQuoteType;
   textSize: WidgetTextSize;
-  cachedQuote: { text: string; author: string } | null;
+  cachedQuote: { text: string; author: string; quoteId?: string } | null;
   lastRefreshed: string | null;
 }
 
 export function defaultInstanceConfig(type: WidgetType): WidgetInstanceConfig {
   return {
     type,
+    name: '',
     transparentBg: false,
+    showAuthor: false,
     updateInterval: 'hourly',
     quoteType: 'general',
     textSize: 'medium',
@@ -86,6 +90,7 @@ interface WidgetStore {
 
   setWidgetConfig: (widgetId: string, updates: Partial<WidgetInstanceConfig>) => void;
   removeWidgetConfig: (widgetId: string) => void;
+  clearWidgetConfigs: () => void;
   /** Returns the config for a widget, creating a default if it doesn't exist yet. */
   getOrCreateConfig: (widgetId: string, type: WidgetType) => WidgetInstanceConfig;
 }
@@ -109,6 +114,8 @@ export const useWidgetStore = create<WidgetStore>()(
           delete next[widgetId];
           return { widgetConfigs: next };
         }),
+
+      clearWidgetConfigs: () => set({ widgetConfigs: {} }),
 
       getOrCreateConfig: (widgetId, type) => {
         const existing = get().widgetConfigs[widgetId];

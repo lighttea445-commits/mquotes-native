@@ -9,7 +9,8 @@ import {
   Modal,
   FlatList,
   AppState,
-  Dimensions,
+  TextInput,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -22,18 +23,37 @@ import {
   WidgetQuoteType,
   WidgetTextSize,
   REFRESH_FREQUENCY_LABELS,
-  REFRESH_FREQUENCY_MINUTES,
   QUOTE_TYPE_LABELS,
   TEXT_SIZE_LABELS,
-  TEXT_SIZE_MULTIPLIERS,
   defaultInstanceConfig,
 } from '../store/useWidgetStore';
-import { fetchQuotesByCategory, fetchWidgetRandomQuote } from '../lib/quotesApi';
+import { fetchQuotesByCategory, fetchMultipleRandomQuotes } from '../lib/quotesApi';
 import { WidgetBridge, ActiveWidget } from '../modules/widget-bridge';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFavoritesStore } from '../store/useFavoritesStore';
 import { useUserQuotesStore } from '../store/useUserQuotesStore';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const WIDGET_STORE_KEY = 'widget-store-v2';
+
+async function persistWidgetQuote(
+  widgetId: number,
+  config: ReturnType<typeof defaultInstanceConfig>,
+  quote: { id?: string; text: string; author: string },
+) {
+  try {
+    const raw = await AsyncStorage.getItem(WIDGET_STORE_KEY);
+    const parsed = raw
+      ? (JSON.parse(raw) as { state: { widgetConfigs: Record<string, typeof config> }; version?: number })
+      : { state: { widgetConfigs: {} } };
+    parsed.state.widgetConfigs[widgetId.toString()] = {
+      ...config,
+      cachedQuote: { text: quote.text, author: quote.author, quoteId: quote.id },
+    };
+    await AsyncStorage.setItem(WIDGET_STORE_KEY, JSON.stringify(parsed));
+  } catch {
+    // Non-critical
+  }
+}
 
 // ── Widget type meta ──────────────────────────────────────────────────────────
 
@@ -41,67 +61,6 @@ const WIDGET_META: Record<WidgetType, { label: string; subtitle: string; icon: k
   basic: { label: 'Basic', subtitle: 'Rotating quotes', icon: 'format-quote-open' },
 };
 
-// ── Widget preview (no quote mark, no author, gold streak) ───────────────────
-
-function WidgetPreview({
-  transparentBg,
-  quoteText,
-  textSize = 'medium',
-  small,
-}: {
-  transparentBg: boolean;
-  quoteText?: string;
-  textSize?: WidgetTextSize;
-  small?: boolean;
-}) {
-  const theme = useTheme();
-  const W = small ? 110 : SCREEN_WIDTH * 0.56;
-  const H = small ? 72  : W * 0.62;
-
-  const displayQuote = quoteText || 'The only way to do great work is to love what you do.';
-  const textLen = displayQuote.length;
-
-  // Mirror the adaptive font logic from Kotlin (increased for better fill)
-  const hDp = small ? 72 : Math.round(H * 0.6);
-  let fontSize: number;
-  if (textLen > 200)      fontSize = Math.min(Math.max(hDp / 11, 10), small ? 9  : 18);
-  else if (textLen > 120) fontSize = Math.min(Math.max(hDp / 9,  12), small ? 10 : 22);
-  else if (textLen > 60)  fontSize = Math.min(Math.max(hDp / 7,  14), small ? 11 : 28);
-  else                    fontSize = Math.min(Math.max(hDp / 6,  16), small ? 12 : 34);
-  fontSize = Math.round(fontSize * TEXT_SIZE_MULTIPLIERS[textSize]);
-
-  const bgColor = transparentBg ? 'transparent' : theme.background;
-  // NOTE: do NOT use borderStyle:'dashed' here — combining it with overflow:'hidden'
-  // on the same View corrupts Android's render state and makes text disappear.
-  const borderStyle = transparentBg
-    ? { borderWidth: 1, borderColor: theme.border }
-    : { borderWidth: 0 };
-
-  return (
-    <View style={[previewStyles.card, { width: W, height: H, backgroundColor: bgColor }, borderStyle]}>
-      <Text
-        style={[previewStyles.quoteText, { color: theme.text, fontSize, lineHeight: fontSize * 1.45 }]}
-        numberOfLines={small ? 4 : 8}
-      >
-        {displayQuote}
-      </Text>
-    </View>
-  );
-}
-
-const previewStyles = StyleSheet.create({
-  card: {
-    borderRadius: 18,
-    padding: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    overflow: 'hidden',
-  },
-  quoteText: {
-    fontFamily: 'PlayfairDisplay_700Bold',
-    textAlign: 'center',
-  },
-});
 
 // ── Picker modal ──────────────────────────────────────────────────────────────
 
@@ -262,11 +221,7 @@ function WidgetCard({
 }) {
   const config = useWidgetStore((s) => s.widgetConfigs[widgetId.toString()]);
   const meta   = WIDGET_META[type];
-  const quoteSnippet = config?.cachedQuote?.text
-    ? (config.cachedQuote.text.length > 80
-        ? config.cachedQuote.text.slice(0, 80) + '…'
-        : config.cachedQuote.text)
-    : null;
+  const displayName = config?.name || 'Unnamed Widget';
 
   return (
     <View style={[cardStyles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
@@ -274,14 +229,12 @@ function WidgetCard({
         <View style={cardStyles.typeRow}>
           <MaterialCommunityIcons name={meta.icon} size={15} color={theme.gold} />
           <Text style={[cardStyles.typeLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
-            {meta.label}
+            {displayName}
           </Text>
         </View>
-        {quoteSnippet && (
-          <Text style={[cardStyles.quoteSnippet, { color: theme.textMuted, fontFamily: theme.quoteFontFamily }]} numberOfLines={2}>
-            {quoteSnippet}
-          </Text>
-        )}
+        <Text style={[cardStyles.quoteSnippet, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]} numberOfLines={1}>
+          {meta.label} · {QUOTE_TYPE_LABELS[config?.quoteType ?? 'general']}
+        </Text>
       </View>
 
       <TouchableOpacity
@@ -333,35 +286,114 @@ const cardStyles = StyleSheet.create({
 
 // ── Empty state ───────────────────────────────────────────────────────────────
 
-function EmptyState({ theme }: { theme: ReturnType<typeof useTheme> }) {
+function EmptyState({ theme, onRefresh }: { theme: ReturnType<typeof useTheme>; onRefresh: () => void }) {
+  const [adding, setAdding] = useState(false);
+
+  const handleAddWidget = async () => {
+    setAdding(true);
+    try {
+      await WidgetBridge.requestPinWidget();
+    } finally {
+      setAdding(false);
+    }
+  };
+
   return (
     <View style={emptyStyles.container}>
       <MaterialCommunityIcons name="view-grid-plus-outline" size={48} color={theme.textMuted} style={{ opacity: 0.4 }} />
       <Text style={[emptyStyles.title, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
         No widgets yet
       </Text>
-      <Text style={[emptyStyles.body, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-        Long-press your home screen → tap Widgets → find Quotable → choose Basic and add it.
-      </Text>
-      <Text style={[emptyStyles.note, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-        The editor opens automatically when you place a widget.
-      </Text>
+
+      <TouchableOpacity
+        style={[emptyStyles.addBtn, { backgroundColor: theme.gold }]}
+        onPress={handleAddWidget}
+        activeOpacity={0.82}
+        disabled={adding}
+      >
+        <MaterialCommunityIcons name="plus-circle-outline" size={18} color="#1A1208" />
+        <Text style={[emptyStyles.addBtnText, { fontFamily: theme.uiFontFamily }]}>
+          {adding ? 'Opening…' : 'Add Widget'}
+        </Text>
+      </TouchableOpacity>
+
+      <View style={[emptyStyles.stepsCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        {[
+          'Tap "Add Widget" above',
+          'Confirm in the system prompt',
+          'Position it on your home screen',
+          'Come back here and tap ↻ Refresh',
+        ].map((step, i) => (
+          <View key={i} style={emptyStyles.stepRow}>
+            <View style={[emptyStyles.stepBadge, { backgroundColor: theme.gold + '22' }]}>
+              <Text style={[emptyStyles.stepNum, { color: theme.gold, fontFamily: theme.uiFontFamily }]}>{i + 1}</Text>
+            </View>
+            <Text style={[emptyStyles.stepText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>{step}</Text>
+          </View>
+        ))}
+      </View>
+
+      <TouchableOpacity
+        style={[emptyStyles.refreshBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}
+        onPress={onRefresh}
+        activeOpacity={0.7}
+      >
+        <MaterialCommunityIcons name="refresh" size={16} color={theme.textMuted} />
+        <Text style={[emptyStyles.refreshBtnText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+          Refresh
+        </Text>
+      </TouchableOpacity>
     </View>
   );
 }
 
 const emptyStyles = StyleSheet.create({
-  container: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 36, gap: 12 },
+  container: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28, gap: 16 },
   title: { fontSize: 20, fontWeight: '700', textAlign: 'center' },
-  body: { fontSize: 14, lineHeight: 22, textAlign: 'center', opacity: 0.75 },
-  note: { fontSize: 12, lineHeight: 18, textAlign: 'center', opacity: 0.5 },
+  stepsCard: {
+    width: '100%',
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 16,
+    gap: 12,
+  },
+  stepRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  stepBadge: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  stepNum: { fontSize: 13, fontWeight: '700' },
+  stepText: { fontSize: 14, lineHeight: 20, flex: 1 },
+  refreshBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  refreshBtnText: { fontSize: 14, fontWeight: '500' },
+  addBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 28,
+    paddingVertical: 14,
+    borderRadius: 28,
+  },
+  addBtnText: { fontSize: 16, fontWeight: '700', color: '#1A1208' },
 });
 
 // ── Main screen ───────────────────────────────────────────────────────────────
 
 type ActivePicker = 'interval' | 'quoteType' | 'textSize' | null;
 
-export default function WidgetsScreen({ onClose, onBack }: { onClose?: () => void; onBack?: () => void }) {
+export default function WidgetsScreen({ onClose, onBack, onContinue }: { onClose?: () => void; onBack?: () => void; onContinue?: () => void }) {
   const theme = useTheme();
   const router = useRouter();
   const close = onClose ?? (() => router.back());
@@ -369,10 +401,9 @@ export default function WidgetsScreen({ onClose, onBack }: { onClose?: () => voi
   const { widgetConfigs, setWidgetConfig, removeWidgetConfig } = useWidgetStore();
 
   // Route params: set when launched from WidgetConfigActivity (standalone route mode)
-  const params = useLocalSearchParams<{ widgetId?: string; type?: string; configuring?: string }>();
+  const params = useLocalSearchParams<{ widgetId?: string; type?: string }>();
   const routeWidgetId   = params.widgetId ? parseInt(params.widgetId, 10) : null;
   const routeWidgetType = (params.type as WidgetType | undefined) ?? 'basic';
-  const isConfiguring   = params.configuring === 'true';
 
   // Local editor state for BottomSheet (in-app) mode
   const [localEditorId, setLocalEditorId] = useState<number | null>(null);
@@ -422,6 +453,12 @@ export default function WidgetsScreen({ onClose, onBack }: { onClose?: () => voi
     for (const id of Object.keys(widgetConfigsRef.current)) {
       if (!activeIds.has(id)) removeWidgetConfig(id);
     }
+
+    // Force-re-render all placed widgets so their PendingIntents are always
+    // up-to-date (e.g. after a code change to clickAction).
+    if (list.length > 0) {
+      WidgetBridge.reloadTimelines().catch(() => {});
+    }
   }, [removeWidgetConfig]);
 
   useEffect(() => {
@@ -454,57 +491,65 @@ export default function WidgetsScreen({ onClose, onBack }: { onClose?: () => voi
   const handleUpdateWidget = useCallback(async () => {
     if (editorId === null || !editorConfig) return;
 
-    let quoteText   = editorConfig.cachedQuote?.text   ?? '';
-    let quoteAuthor = editorConfig.cachedQuote?.author ?? '';
-
     const qt = editorConfig.quoteType;
+    let quote: { id?: string; text: string; author: string } | null = null;
+
     if (qt === 'general') {
-      const fresh = await fetchWidgetRandomQuote();
-      if (fresh) { quoteText = fresh.content; quoteAuthor = fresh.author; }
+      const fresh = await fetchMultipleRandomQuotes(1);
+      if (fresh[0]) quote = { id: fresh[0]._id, text: fresh[0].content, author: fresh[0].author };
     } else if (qt === 'favorites') {
       const favs = useFavoritesStore.getState().favorites;
       if (favs.length > 0) {
-        const pick = favs[Math.floor(Math.random() * favs.length)];
-        quoteText   = pick.text;
-        quoteAuthor = pick.author;
+        const f = favs[Math.floor(Math.random() * favs.length)];
+        quote = { id: f.id, text: f.text, author: f.author };
       }
     } else if (qt === 'my-quotes') {
       const myQuotes = useUserQuotesStore.getState().userQuotes;
       if (myQuotes.length > 0) {
-        const pick = myQuotes[Math.floor(Math.random() * myQuotes.length)];
-        quoteText   = pick.text;
-        quoteAuthor = pick.author;
+        const q = myQuotes[Math.floor(Math.random() * myQuotes.length)];
+        quote = { id: q.id, text: q.text, author: q.author };
       }
     } else {
       const fresh = await fetchQuotesByCategory(qt);
-      if (fresh.length > 0) { quoteText = fresh[0].content; quoteAuthor = fresh[0].author; }
+      if (fresh.length > 0) {
+        const q = fresh[Math.floor(Math.random() * fresh.length)];
+        quote = { id: q._id, text: q.content, author: q.author };
+      }
     }
 
-    // Persist the fetched quote so the list card and editor preview stay current.
-    updateConfig({ cachedQuote: { text: quoteText, author: quoteAuthor } });
+    // Fall back to cached quote if fetch returned nothing.
+    if (!quote && editorConfig.cachedQuote) {
+      quote = {
+        id: editorConfig.cachedQuote.quoteId,
+        text: editorConfig.cachedQuote.text,
+        author: editorConfig.cachedQuote.author,
+      };
+    }
+    if (!quote) return;
+
+    // Persist to Zustand store (for UI preview) and to AsyncStorage (for
+    // widget tap deep-link resolution and task handler access).
+    updateConfig({ cachedQuote: { text: quote.text, author: quote.author, quoteId: quote.id } });
+    await persistWidgetQuote(editorId, editorConfig, quote);
 
     await WidgetBridge.updateWidget({
-      widgetId:      editorId,
-      widgetType:    editorConfig.type,
-      quoteText,
-      transparentBg: editorConfig.transparentBg,
-      intervalMs:    REFRESH_FREQUENCY_MINUTES[editorConfig.updateInterval] * 60_000,
-      quoteType:     editorConfig.quoteType,
-      textSize:      editorConfig.textSize,
+      widgetId: editorId,
+      quote,
+      config: {
+        showAuthor:    editorConfig.showAuthor,
+        transparentBg: editorConfig.transparentBg,
+        textSize:      editorConfig.textSize,
+      },
     });
 
-    if (isConfiguring) {
-      await WidgetBridge.finishConfiguration(editorId);
-    } else {
-      await WidgetBridge.reloadTimelines();
-    }
+    await WidgetBridge.reloadTimelines();
 
     if (onClose) {
       setLocalEditorId(null);
     } else {
       router.back();
     }
-  }, [editorId, editorConfig, isConfiguring, router, updateConfig]);
+  }, [editorId, editorConfig, router, updateConfig]);
 
   // ── Picker options ─────────────────────────────────────────────────────────
 
@@ -527,7 +572,7 @@ export default function WidgetsScreen({ onClose, onBack }: { onClose?: () => voi
     const handleEditorBack = onClose ? () => setLocalEditorId(null) : () => router.back();
 
     return (
-      <View style={{ flex: 1 }}>
+      <View style={{ flex: 1, backgroundColor: theme.background }}>
         <SafeAreaView style={styles.safe} edges={['bottom']}>
           <View style={styles.header}>
             <TouchableOpacity onPress={handleEditorBack} style={[styles.backBtn, { backgroundColor: theme.surface }]} activeOpacity={0.7}>
@@ -545,11 +590,18 @@ export default function WidgetsScreen({ onClose, onBack }: { onClose?: () => voi
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
-            <View style={styles.previewContainer}>
-              <WidgetPreview
-                transparentBg={editorConfig.transparentBg}
-                quoteText={editorConfig.cachedQuote?.text}
-                textSize={editorConfig.textSize}
+            <View style={styles.nameContainer}>
+              <Text style={[styles.nameLabel, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+                Widget Name
+              </Text>
+              <TextInput
+                style={[styles.nameInput, { color: theme.text, backgroundColor: theme.surface, borderColor: theme.border, fontFamily: theme.uiFontFamily }]}
+                value={editorConfig.name}
+                onChangeText={(v) => updateConfig({ name: v })}
+                placeholder="e.g. Morning Motivation"
+                placeholderTextColor={theme.textMuted + '66'}
+                autoCapitalize="words"
+                returnKeyType="done"
               />
             </View>
 
@@ -559,6 +611,16 @@ export default function WidgetsScreen({ onClose, onBack }: { onClose?: () => voi
                 label="Transparent background"
                 value={editorConfig.transparentBg}
                 onToggle={(v) => updateConfig({ transparentBg: v })}
+                theme={theme}
+              />
+
+              <View style={[rowStyles.separator, { backgroundColor: theme.border }]} />
+
+              <ToggleRow
+                icon="account-outline"
+                label="Show author"
+                value={editorConfig.showAuthor}
+                onToggle={(v) => updateConfig({ showAuthor: v })}
                 theme={theme}
               />
 
@@ -640,7 +702,7 @@ export default function WidgetsScreen({ onClose, onBack }: { onClose?: () => voi
   // ── Render: card list ──────────────────────────────────────────────────────
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1, backgroundColor: theme.background }}>
       <SafeAreaView style={styles.safe} edges={['bottom']}>
         <View style={styles.header}>
           <TouchableOpacity onPress={back} style={[styles.backBtn, { backgroundColor: theme.surface }]} activeOpacity={0.7}>
@@ -656,10 +718,10 @@ export default function WidgetsScreen({ onClose, onBack }: { onClose?: () => voi
 
         {loadingList ? (
           <View style={styles.centered}>
-            <MaterialCommunityIcons name="loading" size={32} color={theme.textMuted} style={{ opacity: 0.4 }} />
+            <ActivityIndicator size="large" color={theme.textMuted} />
           </View>
         ) : activeWidgets.length === 0 ? (
-          <EmptyState theme={theme} />
+          <EmptyState theme={theme} onRefresh={loadActiveWidgets} />
         ) : (
           <ScrollView contentContainerStyle={styles.cardList} showsVerticalScrollIndicator={false}>
             {activeWidgets.map((w) => (
@@ -685,6 +747,19 @@ export default function WidgetsScreen({ onClose, onBack }: { onClose?: () => voi
               To add more widgets, long-press your home screen → Widgets → Quotable.
             </Text>
           </ScrollView>
+        )}
+        {onContinue && (
+          <View style={[styles.saveBtnWrapper, { backgroundColor: theme.background }]}>
+            <TouchableOpacity
+              style={[styles.saveBtn, { backgroundColor: theme.gold }]}
+              onPress={onContinue}
+              activeOpacity={0.82}
+            >
+              <Text style={[styles.saveBtnText, { fontFamily: theme.uiFontFamily, color: '#1A1208' }]}>
+                Continue
+              </Text>
+            </TouchableOpacity>
+          </View>
         )}
       </SafeAreaView>
     </View>
@@ -724,11 +799,24 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   typeBadgeText: { fontSize: 12 },
-  previewContainer: {
-    alignItems: 'center',
+  nameContainer: {
     paddingHorizontal: 20,
     paddingTop: 20,
     paddingBottom: 24,
+  },
+  nameLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 8,
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+  },
+  nameInput: {
+    fontSize: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
   },
   settingsCard: {
     marginHorizontal: 16,

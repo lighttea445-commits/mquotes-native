@@ -81,8 +81,7 @@ function buildTimes(count: number, startHHMM: string, endHHMM: string): Array<{ 
   const windowMins = effectiveEnd - startMins;
 
   if (count === 1) {
-    const total = startMins + Math.round(windowMins / 2);
-    return [{ hour: Math.floor(total / 60) % 24, minute: total % 60 }];
+    return [{ hour: startH, minute: startM }];
   }
   const interval = windowMins / (count - 1);
   return Array.from({ length: count }, (_, i) => {
@@ -111,12 +110,17 @@ let _scheduleGen = 0;
  * Cancels all scheduled notifications and reschedules all enabled types.
  * Safe to call concurrently — only the most recent invocation completes.
  *
- * Day-of-week filtering:
- *   Specific days selected → CALENDAR triggers with `weekday` (weekly repeat).
- *   All 7 days / empty    → DAILY triggers (simpler, fewer notifications).
+ * Daily quotes use one-shot DATE triggers so every notification has a unique
+ * quote. The scheduler fills as many future days as fit within the iOS 64-
+ * notification cap. The app re-calls this on every foreground to top up.
  *
- * iOS limit: 64 scheduled notifications. With DAILY triggers the 4 types
- * use at most count+3 total; with CALENDAR+weekday: days×(count+3) at most.
+ * QoD / reflect / streak use repeating DAILY or WEEKLY triggers since their
+ * content is static.
+ *
+ * Day-of-week filtering:
+ *   Specific days selected → only matching dates get quote notifications;
+ *                            static types use WEEKLY triggers with `weekday`.
+ *   All 7 days / empty    → every day gets quotes; static types use DAILY.
  */
 export async function rescheduleAll(opts: RescheduleOptions): Promise<void> {
   const gen = ++_scheduleGen;
@@ -128,19 +132,13 @@ export async function rescheduleAll(opts: RescheduleOptions): Promise<void> {
   await ensureNotificationChannel();
   if (gen !== _scheduleGen) return;
 
-  // null → DAILY (all days); array → CALENDAR per specific weekday
   const specificDays = resolveActiveDays(opts.days);
   const MAX_TITLE = 120;
-  // iOS caps scheduled notifications at 64; Android has no meaningful limit.
   const IOS_NOTIF_LIMIT = Platform.OS === 'ios' ? 64 : Infinity;
   let scheduledCount = 0;
 
-  /**
-   * Schedule one notification content at one time, either as a DAILY
-   * trigger or as one WEEKLY trigger per specific weekday.
-   * Silently stops once the iOS 64-notification cap is reached.
-   */
-  async function sched(
+  /** Schedule a repeating notification (for static-content types). */
+  async function schedRepeating(
     content: Notifications.NotificationContentInput,
     time: { hour: number; minute: number },
   ) {
@@ -174,45 +172,105 @@ export async function rescheduleAll(opts: RescheduleOptions): Promise<void> {
     }
   }
 
-  // ── 1. Daily Quotes ──────────────────────────────────────────────────────
+  // Count how many repeating-trigger slots the static types will consume
+  // so we know how many DATE slots remain for daily quotes.
+  const repeatingSlots = (() => {
+    let n = 0;
+    const multiplier = specificDays ? specificDays.length : 1;
+    if (opts.qodEnabled) n += multiplier;
+    if (opts.reflectEnabled) n += multiplier;
+    if (opts.streakEnabled) n += multiplier;
+    return n;
+  })();
+  const quoteDateSlots = Math.max(0, IOS_NOTIF_LIMIT - repeatingSlots);
+
+  // ── 1. Daily Quotes (one-shot DATE triggers, unique quote per slot) ────
   if (opts.quotesEnabled && opts.quoteCount > 0) {
     const times = buildTimes(opts.quoteCount, opts.startHHMM, opts.endHHMM);
+    const activeDaySet = specificDays ? new Set(specificDays) : null;
+
+    // Figure out how many future days we can schedule
+    const slotsPerDay = times.length;
+    const maxDays = slotsPerDay > 0
+      ? Math.min(Math.floor(quoteDateSlots / slotsPerDay), 14) // cap at 14 days
+      : 0;
+
+    // Build the list of future dates that match the allowed weekdays
+    const now = new Date();
+    const futureDates: Date[] = [];
+    for (let offset = 0; futureDates.length < maxDays && offset < 30; offset++) {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset);
+      if (activeDaySet && !activeDaySet.has(d.getDay())) continue;
+      // Skip today if all time slots have already passed
+      if (offset === 0) {
+        const lastTime = times[times.length - 1];
+        if (now.getHours() > lastTime.hour ||
+            (now.getHours() === lastTime.hour && now.getMinutes() >= lastTime.minute)) {
+          continue;
+        }
+      }
+      futureDates.push(d);
+    }
+
+    const totalQuotesNeeded = futureDates.length * slotsPerDay;
+
     let quotes: { content: string; author: string; id: string }[] = [];
     try {
-      const needed = (specificDays?.length ?? 1) * opts.quoteCount + 5;
-      const fetched = await fetchQuotesForNotifications(Math.min(needed, 100));
+      const fetched = await fetchQuotesForNotifications(Math.min(totalQuotesNeeded + 10, 100));
       quotes = fetched.map(q => ({ content: q.content, author: q.author, id: q._id }));
     } catch {
       quotes = [{ content: 'The only way to do great work is to love what you do.', author: 'Steve Jobs', id: 'fallback' }];
     }
     if (gen !== _scheduleGen) return;
 
-    for (let i = 0; i < times.length; i++) {
-      if (gen !== _scheduleGen) return;
-      const quote = quotes[i % quotes.length];
-      const title = quote.content.length > MAX_TITLE
-        ? quote.content.slice(0, MAX_TITLE - 1) + '…'
-        : quote.content;
-      await sched(
-        {
-          title,
-          ...(opts.showAuthor && { body: `— ${quote.author}` }),
-          sound: true,
-          data: { category: 'daily-quote' as NotifCategory, quoteId: quote.id },
-          ...(Platform.OS === 'android' && { channelId: 'daily-quotes' }),
-        },
-        times[i],
-      );
+    let quoteIdx = 0;
+    for (const date of futureDates) {
+      for (const time of times) {
+        if (gen !== _scheduleGen) return;
+        if (scheduledCount >= IOS_NOTIF_LIMIT) break;
+
+        // For today, skip time slots that are already past
+        if (date.toDateString() === now.toDateString()) {
+          if (now.getHours() > time.hour ||
+              (now.getHours() === time.hour && now.getMinutes() >= time.minute)) {
+            continue;
+          }
+        }
+
+        const quote = quotes[quoteIdx % quotes.length];
+        quoteIdx++;
+        const title = quote.content.length > MAX_TITLE
+          ? quote.content.slice(0, MAX_TITLE - 1) + '…'
+          : quote.content;
+
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title,
+            ...(opts.showAuthor && { body: quote.author }),
+            sound: true,
+            data: { category: 'daily-quote' as NotifCategory, quoteId: quote.id, quoteText: quote.content, quoteAuthor: quote.author },
+            ...(Platform.OS === 'android' && { channelId: 'daily-quotes' }),
+          },
+          trigger: {
+            type: Notifications.SchedulableTriggerInputTypes.DATE,
+            date: new Date(
+              date.getFullYear(), date.getMonth(), date.getDate(),
+              time.hour, time.minute, 0,
+            ),
+          },
+        });
+        scheduledCount++;
+      }
     }
   }
 
-  // ── 2. Quote of the Day ──────────────────────────────────────────────────
+  // ── 2. Quote of the Day (repeating — static content) ──────────────────
   if (opts.qodEnabled) {
     if (gen !== _scheduleGen) return;
     const [hour, minute] = opts.qodTime.split(':').map(Number);
-    await sched(
+    await schedRepeating(
       {
-        title: '✨ Quote of the Day',
+        title: 'Quote of the Day',
         body: 'Tap to read today\'s quote',
         sound: true,
         data: { category: 'qod' as NotifCategory },
@@ -222,13 +280,13 @@ export async function rescheduleAll(opts: RescheduleOptions): Promise<void> {
     );
   }
 
-  // ── 3. Reflect Reminder ──────────────────────────────────────────────────
+  // ── 3. Reflect Reminder (repeating — static content) ──────────────────
   if (opts.reflectEnabled) {
     if (gen !== _scheduleGen) return;
     const [hour, minute] = opts.reflectTime.split(':').map(Number);
-    await sched(
+    await schedRepeating(
       {
-        title: '📖 Time to reflect',
+        title: 'Time to reflect',
         body: 'A few words a day builds a life of intention.',
         sound: true,
         data: { category: 'reflect' as NotifCategory },
@@ -238,13 +296,13 @@ export async function rescheduleAll(opts: RescheduleOptions): Promise<void> {
     );
   }
 
-  // ── 4. Streak Reminder ───────────────────────────────────────────────────
+  // ── 4. Streak Reminder (repeating — static content) ───────────────────
   if (opts.streakEnabled) {
     if (gen !== _scheduleGen) return;
     const [hour, minute] = opts.streakTime.split(':').map(Number);
-    await sched(
+    await schedRepeating(
       {
-        title: '🔥 Keep your streak alive',
+        title: 'Keep your streak alive',
         body: "Don't break your streak today!",
         sound: true,
         data: { category: 'streak' as NotifCategory },

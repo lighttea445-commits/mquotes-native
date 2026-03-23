@@ -11,11 +11,17 @@ import { useHistoryStore } from '../store/useHistoryStore';
 import { useMixStore } from '../store/useMixStore';
 import { useUserQuotesStore } from '../store/useUserQuotesStore';
 import { useReflectStore } from '../store/useReflectStore';
+import { useWidgetStore } from '../store/useWidgetStore';
 import { StreakCard } from '../components/ui/StreakCard';
-import RevenueCatUI, { PAYWALL_RESULT } from 'react-native-purchases-ui';
 import { useRevenueCat, setForcePro, getForcePro } from '../hooks/useRevenueCat';
 import { useModal } from '../contexts/ModalContext';
 import { ConfirmSheet } from '../components/ui/ConfirmSheet';
+
+const STAT_ICONS: Record<string, string> = {
+  Favorites: 'heart',
+  'Quotes Read': 'book-open-variant',
+  Reflections: 'pencil',
+};
 
 function StatCard({ label, value, theme }: { label: string; value: string | number; theme: ReturnType<typeof useTheme> }) {
   return (
@@ -33,39 +39,32 @@ export default function ProfileScreen({ onClose }: { onClose?: () => void }) {
   const { streakCount, weekData } = useStreak();
   const favorites = useFavoritesStore((s) => s.favorites);
   const totalQuotesRead = useHistoryStore((s) => s.totalQuotesRead);
-  const { isPro, offerings } = useRevenueCat();
+  const { isPro } = useRevenueCat();
   const clearFavorites = useFavoritesStore((s) => s.clearFavorites);
   const clearHistory = useHistoryStore((s) => s.clearHistory);
   const clearMix = useMixStore((s) => s.clearMix);
   const clearUserQuotes = useUserQuotesStore((s) => s.clearUserQuotes);
   const clearReflections = useReflectStore((s) => s.clearReflections);
+  const clearWidgetConfigs = useWidgetStore((s) => s.clearWidgetConfigs);
   const reflectionsCount = useReflectStore((s) => s.reflections.length);
   const modal = useModal();
   const close = onClose ?? (() => router.back());
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const openThemes = () => modal ? modal.openSheet('themes') : router.push('/themes');
 
-  const handleHistory = async () => {
+  const handleHistory = () => {
     if (isPro) {
       modal ? modal.openSheet('history') : router.push('/history');
     } else {
-      const offering = offerings?.all['sale'] ?? offerings?.current ?? undefined;
-      const result = await RevenueCatUI.presentPaywall({ offering });
-      if (result === PAYWALL_RESULT.PURCHASED || result === PAYWALL_RESULT.RESTORED) {
-        modal ? modal.openSheet('history') : router.push('/history');
-      }
+      modal ? modal.openSheet('features') : router.push('/history');
     }
   };
 
-  const handleJournal = async () => {
+  const handleJournal = () => {
     if (isPro) {
       modal ? modal.openSheet('journal') : router.push('/journal');
     } else {
-      const offering = offerings?.all['sale'] ?? offerings?.current ?? undefined;
-      const result = await RevenueCatUI.presentPaywall({ offering });
-      if (result === PAYWALL_RESULT.PURCHASED || result === PAYWALL_RESULT.RESTORED) {
-        modal ? modal.openSheet('journal') : router.push('/journal');
-      }
+      modal ? modal.openSheet('features') : router.push('/journal');
     }
   };
 
@@ -77,6 +76,7 @@ export default function ProfileScreen({ onClose }: { onClose?: () => void }) {
     clearMix();
     clearUserQuotes();
     clearReflections();
+    clearWidgetConfigs();
     resetApp();
     router.replace('/onboarding');
   };
@@ -206,7 +206,7 @@ export default function ProfileScreen({ onClose }: { onClose?: () => void }) {
         visible={showDeleteConfirm}
         onClose={() => setShowDeleteConfirm(false)}
         title="Delete Account"
-        message="This will permanently erase all your data — favorites, history, quotes, and preferences. This cannot be undone."
+        message="This will permanently erase all your data: favorites, history, quotes, and preferences. This cannot be undone."
         confirmLabel="Delete"
         destructive
         cancelLabel="Cancel"
@@ -270,24 +270,30 @@ const styles = StyleSheet.create({
   statsRow: {
     flexDirection: 'row',
     marginHorizontal: 16,
-    gap: 12,
+    gap: 10,
     marginBottom: 24,
   },
   statCard: {
     flex: 1,
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: 18,
+    paddingVertical: 16,
+    paddingHorizontal: 8,
     borderWidth: 1,
+    flexDirection: 'column',
     alignItems: 'center',
+    gap: 4,
+    overflow: 'hidden',
   },
   statValue: {
-    fontSize: 28,
+    fontSize: 20,
     fontWeight: '700',
+    lineHeight: 24,
   },
   statLabel: {
-    fontSize: 12,
-    letterSpacing: 0.5,
-    marginTop: 2,
+    fontSize: 10,
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+    textAlign: 'center',
   },
   section: {
     paddingHorizontal: 16,

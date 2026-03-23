@@ -8,7 +8,11 @@ import {
   ScrollView,
   Linking,
   AppState,
+  Animated,
+  Modal,
+  Platform,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -16,38 +20,54 @@ import { useTheme } from '../hooks/useTheme';
 import { useAppStore } from '../store/useAppStore';
 import {
   requestPermissions,
+  getPermissionStatus,
   rescheduleAll,
   cancelAllNotifications,
   formatHHMMto12h,
 } from '../lib/notifications';
 
+// ── Helpers ────────────────────────────────────────────────────────────────
+function hhmmToDate(hhmm: string): Date {
+  const [h, m] = hhmm.split(':').map(Number);
+  const d = new Date();
+  d.setHours(h, m, 0, 0);
+  return d;
+}
+function dateToHHMM(date: Date): string {
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+}
+function buildNotifTimes(
+  count: number, startHHMM: string, endHHMM: string,
+): Array<{ hour: number; minute: number }> {
+  const [sh, sm] = startHHMM.split(':').map(Number);
+  const [eh, em] = endHHMM.split(':').map(Number);
+  const startMins = sh * 60 + sm;
+  const endMins = (eh * 60 + em) > startMins ? (eh * 60 + em) : startMins + 60;
+  if (count === 1) return [{ hour: sh, minute: sm }];
+  const interval = (endMins - startMins) / (count - 1);
+  return Array.from({ length: count }, (_, i) => {
+    const t = Math.round(startMins + i * interval);
+    return { hour: Math.floor(t / 60) % 24, minute: t % 60 };
+  });
+}
+
+// ── Types ──────────────────────────────────────────────────────────────────
+type PickerTarget = 'startTime' | 'endTime' | 'qodTime' | 'reflectTime' | 'streakTime';
+interface Settings {
+  enabled: boolean; days: number[];
+  quotesEnabled: boolean; showAuthor: boolean;
+  count: number; startTime: string; endTime: string;
+  qodEnabled: boolean; qodTime: string;
+  reflectEnabled: boolean; reflectTime: string;
+  streakEnabled: boolean; streakTime: string;
+}
+
 const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
 const DAY_LABELS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
-const STEP = 15; // minutes per press
+const COUNT_PRESETS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
-function stepHHMM(hhmm: string, deltaMinutes: number): string {
-  const [h, m] = hhmm.split(':').map(Number);
-  const total = ((h * 60 + m + deltaMinutes) % 1440 + 1440) % 1440;
-  return `${Math.floor(total / 60).toString().padStart(2, '0')}:${(total % 60).toString().padStart(2, '0')}`;
-}
-
-interface Settings {
-  enabled: boolean;
-  days: number[];
-  quotesEnabled: boolean;
-  showAuthor: boolean;
-  count: number;
-  startTime: string;
-  endTime: string;
-  qodEnabled: boolean;
-  qodTime: string;
-  reflectEnabled: boolean;
-  reflectTime: string;
-  streakEnabled: boolean;
-  streakTime: string;
-}
-
-export default function NotificationsScreen({ onClose, onBack }: { onClose?: () => void; onBack?: () => void }) {
+// ── Main screen ────────────────────────────────────────────────────────────
+export default function NotificationsScreen({ onClose, onBack, onContinue }: { onClose?: () => void; onBack?: () => void; onContinue?: () => void }) {
   const theme = useTheme();
   const router = useRouter();
   const close = onClose ?? (() => router.back());
@@ -55,13 +75,8 @@ export default function NotificationsScreen({ onClose, onBack }: { onClose?: () 
   const { preferences, setPreferences } = useAppStore();
   const pref = preferences;
 
-  // ── Local state (initialized from persisted preferences) ──────────────────
   const [enabled, setEnabled] = useState(pref.notificationsEnabled);
-  // Expand the store's "empty = all days" convention to an explicit list so
-  // chip toggle logic (which uses .includes()) always behaves correctly.
-  const [days, setDays] = useState<number[]>(
-    pref.notificationDays?.length ? pref.notificationDays : ALL_DAYS,
-  );
+  const [days, setDays] = useState<number[]>(pref.notificationDays?.length ? pref.notificationDays : ALL_DAYS);
   const [quotesEnabled, setQuotesEnabled] = useState(pref.quotesEnabled ?? true);
   const [showAuthor, setShowAuthor] = useState(pref.notificationShowAuthor ?? false);
   const [count, setCount] = useState(pref.notificationCount ?? 5);
@@ -74,92 +89,87 @@ export default function NotificationsScreen({ onClose, onBack }: { onClose?: () 
   const [streakEnabled, setStreakEnabled] = useState(pref.streakEnabled ?? true);
   const [streakTime, setStreakTime] = useState(pref.streakTime ?? '21:00');
   const [permissionGranted, setPermissionGranted] = useState<boolean | null>(null);
+  const [pickerTarget, setPickerTarget] = useState<PickerTarget | null>(null);
+  const [pickerTempDate, setPickerTempDate] = useState<Date>(new Date());
 
-  const [saved, setSaved] = useState(false);
+  // ── Stagger animation refs (E) ─────────────────────────────────────────
+  const anim0 = useRef(new Animated.Value(enabled ? 1 : 0)).current; // days card
+  const anim1 = useRef(new Animated.Value(enabled ? 1 : 0)).current; // quotes card
+  const anim2 = useRef(new Animated.Value(enabled ? 1 : 0)).current; // reminders card
+  const anim3 = useRef(new Animated.Value(enabled ? 1 : 0)).current; // schedule card
+  const savedOpacity = useRef(new Animated.Value(0)).current;
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const permissionGrantedRef = useRef<boolean | null>(null);
   const prevPermissionRef = useRef<boolean | null>(null);
+  const didInitRef = useRef(true); // skip animation on very first render
 
-  // ── Permissions ───────────────────────────────────────────────────────────
   useEffect(() => {
-    requestPermissions().then(granted => {
-      setPermissionGranted(granted);
-      permissionGrantedRef.current = granted;
-    });
+    requestPermissions().then(g => setPermissionGranted(g));
   }, []);
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', next => {
-      if (next === 'active') {
-        requestPermissions().then(granted => {
-          setPermissionGranted(granted);
-          permissionGrantedRef.current = granted;
-        });
-      }
+      if (next === 'active') requestPermissions().then(g => setPermissionGranted(g));
     });
     return () => sub.remove();
   }, []);
 
-  // Auto-reschedule when permission is newly granted
   useEffect(() => {
-    if (permissionGranted === true && prevPermissionRef.current !== true && enabled) {
-      applySettings(buildSettings());
-    }
+    if (permissionGranted === true && prevPermissionRef.current !== true && enabled) applySettings(buildSettings());
     prevPermissionRef.current = permissionGranted;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [permissionGranted]);
 
-  useEffect(() => {
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
-    };
-  }, []);
+  useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current); }, []);
 
-  // ── Settings helpers ──────────────────────────────────────────────────────
-  function buildSettings(overrides: Partial<Settings> = {}): Settings {
-    return {
-      enabled, days, quotesEnabled, showAuthor, count, startTime, endTime,
-      qodEnabled, qodTime, reflectEnabled, reflectTime, streakEnabled, streakTime,
-      ...overrides,
-    };
+  // Stagger in/out when enabled changes
+  useEffect(() => {
+    if (didInitRef.current) { didInitRef.current = false; return; }
+    if (enabled) {
+      [anim0, anim1, anim2, anim3].forEach(a => a.setValue(0));
+      Animated.stagger(90, [anim0, anim1, anim2, anim3].map(a =>
+        Animated.spring(a, { toValue: 1, useNativeDriver: true, tension: 65, friction: 11 }),
+      )).start();
+    } else {
+      Animated.parallel([anim0, anim1, anim2, anim3].map(a =>
+        Animated.timing(a, { toValue: 0, duration: 180, useNativeDriver: true }),
+      )).start();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled]);
+
+  function buildSettings(o: Partial<Settings> = {}): Settings {
+    return { enabled, days, quotesEnabled, showAuthor, count, startTime, endTime, qodEnabled, qodTime, reflectEnabled, reflectTime, streakEnabled, streakTime, ...o };
   }
+
+  const flashSaved = useCallback(() => {
+    Animated.sequence([
+      Animated.timing(savedOpacity, { toValue: 1, duration: 120, useNativeDriver: true }),
+      Animated.delay(900),
+      Animated.timing(savedOpacity, { toValue: 0, duration: 300, useNativeDriver: true }),
+    ]).start();
+  }, [savedOpacity]);
 
   const applySettings = useCallback((s: Settings) => {
     setPreferences({
-      notificationsEnabled: s.enabled,
-      notificationCount: s.count,
-      notificationStartTime: s.startTime,
-      notificationEndTime: s.endTime,
-      notificationDays: s.days,
-      quotesEnabled: s.quotesEnabled,
-      notificationShowAuthor: s.showAuthor,
-      qodEnabled: s.qodEnabled,
-      qodTime: s.qodTime,
-      reflectEnabled: s.reflectEnabled,
-      reflectTime: s.reflectTime,
-      streakEnabled: s.streakEnabled,
-      streakTime: s.streakTime,
+      notificationsEnabled: s.enabled, notificationCount: s.count,
+      notificationStartTime: s.startTime, notificationEndTime: s.endTime,
+      notificationDays: s.days, quotesEnabled: s.quotesEnabled,
+      notificationShowAuthor: s.showAuthor, qodEnabled: s.qodEnabled, qodTime: s.qodTime,
+      reflectEnabled: s.reflectEnabled, reflectTime: s.reflectTime,
+      streakEnabled: s.streakEnabled, streakTime: s.streakTime,
     });
-
-    if (s.enabled && permissionGrantedRef.current) {
-      rescheduleAll({
-        enabled: s.enabled,
-        days: s.days,
-        quotesEnabled: s.quotesEnabled,
-        showAuthor: s.showAuthor,
-        quoteCount: s.count,
-        startHHMM: s.startTime,
-        endHHMM: s.endTime,
-        qodEnabled: s.qodEnabled,
-        qodTime: s.qodTime,
-        reflectEnabled: s.reflectEnabled,
-        reflectTime: s.reflectTime,
-        streakEnabled: s.streakEnabled,
-        streakTime: s.streakTime,
-      }).then(() => {
-        setPreferences({ lastNotifScheduledAt: new Date().toISOString() });
+    if (s.enabled) {
+      getPermissionStatus().then(status => {
+        setPermissionGranted(status === 'granted');
+        if (status !== 'granted') { cancelAllNotifications().catch(console.warn); return; }
+        return rescheduleAll({
+          enabled: s.enabled, days: s.days, quotesEnabled: s.quotesEnabled,
+          showAuthor: s.showAuthor, quoteCount: s.count,
+          startHHMM: s.startTime, endHHMM: s.endTime,
+          qodEnabled: s.qodEnabled, qodTime: s.qodTime,
+          reflectEnabled: s.reflectEnabled, reflectTime: s.reflectTime,
+          streakEnabled: s.streakEnabled, streakTime: s.streakTime,
+        }).then(() => setPreferences({ lastNotifScheduledAt: new Date().toISOString() }));
       }).catch(console.warn);
     } else {
       cancelAllNotifications().catch(console.warn);
@@ -168,394 +178,552 @@ export default function NotificationsScreen({ onClose, onBack }: { onClose?: () 
 
   const debouncedApply = useCallback((s: Settings) => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => applySettings(s), 400);
-  }, [applySettings]);
+    debounceRef.current = setTimeout(() => { applySettings(s); flashSaved(); }, 400);
+  }, [applySettings, flashSaved]);
 
-  // ── Handlers ──────────────────────────────────────────────────────────────
-  function handleToggleEnabled(value: boolean) {
-    setEnabled(value);
-    debouncedApply(buildSettings({ enabled: value }));
+  function handleToggleEnabled(v: boolean) {
+    setEnabled(v);
+    debouncedApply(buildSettings({ enabled: v }));
+  }
+
+  function openPicker(target: PickerTarget, currentHHMM: string) {
+    setPickerTempDate(hhmmToDate(currentHHMM));
+    setPickerTarget(target);
+  }
+
+  function commitPicker(date: Date) {
+    const hhmm = dateToHHMM(date);
+    let next = buildSettings();
+    if (pickerTarget === 'startTime') { setStartTime(hhmm); next = buildSettings({ startTime: hhmm }); }
+    else if (pickerTarget === 'endTime') { setEndTime(hhmm); next = buildSettings({ endTime: hhmm }); }
+    else if (pickerTarget === 'qodTime') { setQodTime(hhmm); next = buildSettings({ qodTime: hhmm }); }
+    else if (pickerTarget === 'reflectTime') { setReflectTime(hhmm); next = buildSettings({ reflectTime: hhmm }); }
+    else if (pickerTarget === 'streakTime') { setStreakTime(hhmm); next = buildSettings({ streakTime: hhmm }); }
+    debouncedApply(next);
   }
 
   function handleToggleDay(day: number) {
-    const next = days.includes(day)
-      ? (days.length > 1 ? days.filter(d => d !== day) : days)
-      : [...days, day];
-    setDays(next);
-    debouncedApply(buildSettings({ days: next }));
+    const next = days.includes(day) ? (days.length > 1 ? days.filter(d => d !== day) : days) : [...days, day];
+    setDays(next); debouncedApply(buildSettings({ days: next }));
   }
 
-  function handleCountStep(delta: number) {
-    const next = Math.min(10, Math.max(1, count + delta));
-    setCount(next);
-    debouncedApply(buildSettings({ count: next }));
+  // ── Schedule timeline data (D) ─────────────────────────────────────────
+  function buildScheduleItems() {
+    const items: { hhmm: string; label: string; icon: string }[] = [];
+    if (qodEnabled) items.push({ hhmm: qodTime, label: 'Quote of the Day', icon: 'white-balance-sunny' });
+    if (quotesEnabled && count > 0) {
+      const times = buildNotifTimes(count, startTime, endTime);
+      times.forEach(t => {
+        const hhmm = `${String(t.hour).padStart(2, '0')}:${String(t.minute).padStart(2, '0')}`;
+        items.push({ hhmm, label: 'Daily Quote', icon: 'format-quote-close' });
+      });
+    }
+    if (reflectEnabled) items.push({ hhmm: reflectTime, label: 'Reflection', icon: 'book-open-variant' });
+    if (streakEnabled) items.push({ hhmm: streakTime, label: 'Streak Reminder', icon: 'fire' });
+    return items.sort((a, b) => a.hhmm.localeCompare(b.hhmm));
   }
 
-  function handleTimeStep(
-    setter: (v: string) => void,
-    current: string,
-    delta: number,
-    key: 'startTime' | 'endTime' | 'qodTime' | 'reflectTime' | 'streakTime',
-  ) {
-    const next = stepHHMM(current, delta);
-    setter(next);
-    debouncedApply(buildSettings({ [key]: next }));
+  // ── Sub-components ────────────────────────────────────────────────────
+  function animStyle(anim: Animated.Value) {
+    return {
+      opacity: anim,
+      transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [18, 0] }) }],
+    };
   }
 
-  // ── Save pill ─────────────────────────────────────────────────────────────
-  function handleSave() {
-    if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
-    applySettings(buildSettings());
-    setSaved(true);
-    savedTimerRef.current = setTimeout(() => setSaved(false), 1500);
-  }
-
-  // ── Summary text ──────────────────────────────────────────────────────────
-  function buildSummary(): string {
-    const allSelected = days.length === 0 || days.length === 7;
-    const dayStr = allSelected
-      ? 'every day'
-      : [...days].sort((a, b) => a - b)
-          .map(d => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d])
-          .join(', ');
-
-    const parts: string[] = [];
-    if (quotesEnabled) parts.push(
-      `${count} quote${count !== 1 ? 's' : ''} between ${formatHHMMto12h(startTime)} and ${formatHHMMto12h(endTime)}`
+  // Card with Playfair header (F — no more SectionLabel)
+  function SectionCard({ title, anim, children }: { title: string; anim: Animated.Value; children: React.ReactNode }) {
+    const items = React.Children.toArray(children).filter(Boolean);
+    return (
+      <Animated.View style={[animStyle(anim), ss.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        <View style={[ss.cardHeader, { borderBottomColor: theme.border }]}>
+          <Text style={[ss.cardTitle, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>{title}</Text>
+        </View>
+        {items.map((child, i) => (
+          <React.Fragment key={i}>
+            {i > 0 && <View style={[ss.divider, { backgroundColor: theme.border }]} />}
+            {child}
+          </React.Fragment>
+        ))}
+      </Animated.View>
     );
-    if (qodEnabled) parts.push(`a Quote of the Day at ${formatHHMMto12h(qodTime)}`);
-    if (reflectEnabled) parts.push(`a reflection prompt at ${formatHHMMto12h(reflectTime)}`);
-    if (streakEnabled) parts.push(`a streak nudge at ${formatHHMMto12h(streakTime)}`);
-
-    if (parts.length === 0) return 'All reminder types are off. Enable one above to get started.';
-
-    const list =
-      parts.length === 1
-        ? parts[0]
-        : parts.slice(0, -1).join(', ') + ', and ' + parts[parts.length - 1];
-
-    return `You'll receive ${list} — ${dayStr}.`;
   }
 
-  // ── Render helpers ────────────────────────────────────────────────────────
-  function renderStep(onPress: () => void, label: string, disabled?: boolean) {
+  function Row({ icon, label, sub, muted, children }: { icon?: string; label: string; sub?: string; muted?: boolean; children?: React.ReactNode }) {
+    return (
+      <View style={ss.row}>
+        {icon && (
+          <View style={ss.rowIcon}>
+            <MaterialCommunityIcons name={icon as any} size={15} color={theme.gold} />
+          </View>
+        )}
+        <View style={{ flex: 1 }}>
+          <Text style={[ss.rowLabel, { color: muted ? theme.textMuted : theme.text, fontFamily: theme.uiFontFamily }]}>{label}</Text>
+          {sub && <Text style={[ss.rowSub, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>{sub}</Text>}
+        </View>
+        {children}
+      </View>
+    );
+  }
+
+  function TimePill({ target, value }: { target: PickerTarget; value: string }) {
     return (
       <TouchableOpacity
-        onPress={onPress}
-        disabled={disabled}
-        style={[styles.stepBtn, { backgroundColor: theme.background, borderColor: theme.border }]}
+        onPress={() => openPicker(target, value)}
+        style={[ss.timePill, { backgroundColor: 'rgba(184,151,90,0.08)', borderColor: 'rgba(184,151,90,0.35)' }]}
+        activeOpacity={0.65}
       >
-        <Text style={[styles.stepBtnText, { color: disabled ? theme.border : theme.text }]}>{label}</Text>
+        <MaterialCommunityIcons name="clock-outline" size={13} color={theme.gold} />
+        <Text style={[ss.timePillText, { color: theme.gold, fontFamily: theme.uiFontFamily }]}>
+          {formatHHMMto12h(value)}
+        </Text>
+        <MaterialCommunityIcons name="pencil-outline" size={11} color={theme.gold} style={{ opacity: 0.6 }} />
       </TouchableOpacity>
     );
   }
 
-  function renderTimeRow(label: string, hhmm: string, onDec: () => void, onInc: () => void) {
+  function CountSegments() {
     return (
-      <View style={[styles.pill, styles.rowPill, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-        <Text style={[styles.rowLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}>{label}</Text>
-        <View style={styles.stepper}>
-          {renderStep(onDec, '−')}
-          <Text style={[styles.timeLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
-            {formatHHMMto12h(hhmm)}
-          </Text>
-          {renderStep(onInc, '+')}
-        </View>
-      </View>
-    );
-  }
-
-  function renderSectionRow(iconName: string, label: string, value: boolean, onToggle: (v: boolean) => void) {
-    return (
-      <View style={[styles.pill, styles.rowPill, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-        <MaterialCommunityIcons name={iconName as any} size={20} color={theme.gold} style={styles.pillIcon} />
-        <Text style={[styles.rowLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}>{label}</Text>
-        <Switch
-          value={value}
-          onValueChange={onToggle}
-          trackColor={{ false: theme.border, true: theme.gold }}
-          thumbColor={theme.surface}
-        />
-      </View>
-    );
-  }
-
-  function renderSectionLabel(text: string) {
-    return (
-      <Text style={[styles.sectionLabel, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>{text}</Text>
-    );
-  }
-
-  // ── Render ────────────────────────────────────────────────────────────────
-  return (
-    <View style={{ flex: 1 }}>
-      <SafeAreaView style={styles.safe} edges={['bottom']}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={back} style={[styles.backBtn, { backgroundColor: theme.surface }]}>
-            <MaterialCommunityIcons name="chevron-left" size={22} color={theme.textMuted} />
-          </TouchableOpacity>
-          <Text style={[styles.title, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
-            Notifications
-          </Text>
-          <View style={{ width: 40 }} />
-        </View>
-
-        <ScrollView
-          style={styles.scroll}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Permission denied banner */}
-          {permissionGranted === false && (
-            <View style={[styles.banner, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-              <MaterialCommunityIcons name="bell-off-outline" size={20} color={theme.textMuted} />
-              <Text style={[styles.bannerText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-                Notifications are disabled. Enable them in your device settings to receive daily quotes.
-              </Text>
-              <TouchableOpacity onPress={() => Linking.openSettings()}>
-                <Text style={[styles.bannerLink, { color: theme.gold, fontFamily: theme.uiFontFamily }]}>
-                  Open Settings
+      <View style={[ss.segBar, { borderColor: theme.border, backgroundColor: theme.background }]}>
+        {COUNT_PRESETS.map((val, i) => {
+          const sel = val === count;
+          return (
+            <React.Fragment key={val}>
+              {i > 0 && <View style={[ss.segDivider, { backgroundColor: theme.border }]} />}
+              <TouchableOpacity
+                onPress={() => { setCount(val); debouncedApply(buildSettings({ count: val })); }}
+                style={[ss.seg, {
+                  backgroundColor: sel ? theme.gold : 'transparent',
+                  borderTopLeftRadius: i === 0 ? 11 : 0,
+                  borderBottomLeftRadius: i === 0 ? 11 : 0,
+                  borderTopRightRadius: i === COUNT_PRESETS.length - 1 ? 11 : 0,
+                  borderBottomRightRadius: i === COUNT_PRESETS.length - 1 ? 11 : 0,
+                }]}
+                activeOpacity={0.65}
+              >
+                <Text style={[ss.segText, { color: sel ? '#1A1208' : theme.textMuted, fontFamily: theme.uiFontFamily, fontWeight: sel ? '700' : '500' }]}>
+                  {val}
                 </Text>
               </TouchableOpacity>
-            </View>
-          )}
+            </React.Fragment>
+          );
+        })}
+      </View>
+    );
+  }
 
-          {/* Master toggle */}
-          <View style={[styles.pill, styles.rowPill, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-            <MaterialCommunityIcons name="bell-outline" size={20} color={theme.gold} style={styles.pillIcon} />
-            <Text style={[styles.rowLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
+  // ── Schedule timeline (D) ──────────────────────────────────────────────
+  function ScheduleTimeline() {
+    const items = buildScheduleItems();
+    if (items.length === 0) return null;
+
+    // Collapse consecutive "Daily Quote" runs to max 3 visible
+    let display = items;
+    const quoteItems = items.filter(it => it.label === 'Daily Quote');
+    if (quoteItems.length > 3) {
+      const others = items.filter(it => it.label !== 'Daily Quote');
+      const collapsed = [
+        quoteItems[0],
+        { hhmm: quoteItems[Math.floor(quoteItems.length / 2)].hhmm, label: `+${quoteItems.length - 2} more`, icon: 'dots-horizontal-circle-outline' },
+        quoteItems[quoteItems.length - 1],
+      ];
+      display = [...others, ...collapsed].sort((a, b) => a.hhmm.localeCompare(b.hhmm));
+    }
+
+    return (
+      <Animated.View style={[animStyle(anim3), ss.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        <View style={[ss.cardHeader, { borderBottomColor: theme.border }]}>
+          <Text style={[ss.cardTitle, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>Today's Schedule</Text>
+          <View style={[ss.schedBadge, { backgroundColor: 'rgba(184,151,90,0.10)' }]}>
+            <Text style={[ss.schedBadgeText, { color: theme.gold, fontFamily: theme.uiFontFamily }]}>
+              {items.length} {items.length === 1 ? 'reminder' : 'reminders'}
+            </Text>
+          </View>
+        </View>
+
+        <View style={ss.timelineWrap}>
+          {display.map((item, i) => {
+            const isLast = i === display.length - 1;
+            const isMuted = item.label.startsWith('+');
+            return (
+              <View key={i} style={ss.timelineRow}>
+                {/* Dot + vertical line */}
+                <View style={ss.timelineLeft}>
+                  <View style={[ss.timelineDot, {
+                    backgroundColor: isMuted ? theme.border : theme.gold,
+                    shadowColor: isMuted ? 'transparent' : theme.gold,
+                    shadowOpacity: isMuted ? 0 : 0.5,
+                    shadowRadius: 4,
+                    shadowOffset: { width: 0, height: 0 },
+                    elevation: isMuted ? 0 : 3,
+                  }]} />
+                  {!isLast && <View style={[ss.timelineLine, { backgroundColor: theme.border }]} />}
+                </View>
+                {/* Content */}
+                {isMuted ? (
+                  <View style={ss.timelineMutedRow}>
+                    <MaterialCommunityIcons name={item.icon as any} size={12} color={theme.border} />
+                    <Text style={[ss.timelineLabel, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+                      {item.label}
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={ss.timelineContent}>
+                    <Text style={[ss.timelineTime, { color: theme.gold, fontFamily: theme.uiFontFamily }]}>
+                      {formatHHMMto12h(item.hhmm)}
+                    </Text>
+                    <View style={ss.timelineLabelRow}>
+                      <MaterialCommunityIcons name={item.icon as any} size={12} color={theme.gold} style={{ marginTop: 1 }} />
+                      <Text style={[ss.timelineLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
+                        {item.label}
+                      </Text>
+                    </View>
+                  </View>
+                )}
+              </View>
+            );
+          })}
+        </View>
+      </Animated.View>
+    );
+  }
+
+  function pickerLabel() {
+    if (pickerTarget === 'startTime') return 'Start at';
+    if (pickerTarget === 'endTime') return 'End at';
+    if (pickerTarget === 'qodTime') return 'Quote of the Day';
+    if (pickerTarget === 'reflectTime') return 'Reflection Reminder';
+    if (pickerTarget === 'streakTime') return 'Streak Reminder';
+    return 'Select time';
+  }
+
+  const pickerNode = pickerTarget !== null && (
+    Platform.OS === 'ios' ? (
+      <Modal visible transparent animationType="slide" onRequestClose={() => setPickerTarget(null)}>
+        <TouchableOpacity style={ss.pickerBackdrop} activeOpacity={1} onPress={() => setPickerTarget(null)} />
+        <View style={[ss.pickerSheet, { backgroundColor: theme.surface }]}>
+          <View style={[ss.pickerHandle, { backgroundColor: theme.border }]} />
+          <View style={ss.pickerHeader}>
+            <TouchableOpacity onPress={() => setPickerTarget(null)} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+              <Text style={[ss.pickerCancelText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>Cancel</Text>
+            </TouchableOpacity>
+            <Text style={[ss.pickerTitle, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>{pickerLabel()}</Text>
+            <TouchableOpacity onPress={() => { commitPicker(pickerTempDate); setPickerTarget(null); }} style={[ss.pickerDoneBtn, { backgroundColor: theme.gold }]}>
+              <Text style={[ss.pickerDoneText, { fontFamily: theme.uiFontFamily }]}>Done</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={[ss.pickerAccent, { backgroundColor: theme.gold }]} />
+          <Text style={[ss.pickerBigTime, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
+            {formatHHMMto12h(dateToHHMM(pickerTempDate))}
+          </Text>
+          <DateTimePicker mode="time" display="spinner" value={pickerTempDate}
+            onChange={(_, date) => { if (date) setPickerTempDate(date); }}
+            textColor={theme.text} style={{ width: '100%' }} />
+        </View>
+      </Modal>
+    ) : (
+      <DateTimePicker mode="time" display="default" value={pickerTempDate}
+        onChange={(e, date) => { setPickerTarget(null); if (e.type === 'set' && date) commitPicker(date); }} />
+    )
+  );
+
+  // ── Render ────────────────────────────────────────────────────────────
+  return (
+    <View style={{ flex: 1, backgroundColor: theme.background }}>
+      <SafeAreaView style={{ flex: 1 }} edges={['bottom']}>
+
+        {/* Minimal back button */}
+        <View style={ss.topBar}>
+          <TouchableOpacity onPress={back} style={[ss.backBtn, { backgroundColor: theme.surface }]}>
+            <MaterialCommunityIcons name="chevron-left" size={22} color={theme.textMuted} />
+          </TouchableOpacity>
+          <Animated.Text style={[ss.savedBadge, { color: theme.gold, fontFamily: theme.uiFontFamily, opacity: savedOpacity }]}>
+            ✓ Saved
+          </Animated.Text>
+        </View>
+
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={ss.scroll} showsVerticalScrollIndicator={false}>
+
+          {/* ── A: Immersive hero ─────────────────────────────────────── */}
+          <View style={ss.heroWrap}>
+
+            <View style={[ss.heroIconWrap, {
+              backgroundColor: enabled ? 'rgba(184,151,90,0.12)' : theme.surface,
+              borderColor: enabled ? 'rgba(184,151,90,0.30)' : theme.border,
+            }]}>
+              <MaterialCommunityIcons
+                name={enabled ? 'bell-ring-outline' : 'bell-outline'}
+                size={34}
+                color={enabled ? theme.gold : theme.textMuted}
+              />
+            </View>
+
+            <Text style={[ss.heroTitle, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
               Notifications
             </Text>
-            <Switch
-              value={enabled}
-              onValueChange={handleToggleEnabled}
-              trackColor={{ false: theme.border, true: theme.gold }}
-              thumbColor={theme.surface}
-            />
+            <Text style={[ss.heroSub, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+              {enabled ? 'Delivering your daily inspiration' : 'Receive quotes on your schedule'}
+            </Text>
+
+            {/* Toggle pill (replaces hero Switch) */}
+            <TouchableOpacity
+              onPress={() => handleToggleEnabled(!enabled)}
+              style={[ss.heroBtn, {
+                backgroundColor: enabled ? theme.gold : theme.surface,
+                borderColor: enabled ? theme.gold : theme.border,
+                shadowColor: enabled ? theme.gold : 'transparent',
+                shadowOpacity: 0.35,
+                shadowRadius: 12,
+                shadowOffset: { width: 0, height: 4 },
+                elevation: enabled ? 6 : 0,
+              }]}
+              activeOpacity={0.8}
+            >
+              <MaterialCommunityIcons
+                name={enabled ? 'check-circle-outline' : 'bell-plus-outline'}
+                size={18}
+                color={enabled ? '#1A1208' : theme.textMuted}
+              />
+              <Text style={[ss.heroBtnText, { color: enabled ? '#1A1208' : theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+                {enabled ? 'Reminders on' : 'Enable reminders'}
+              </Text>
+            </TouchableOpacity>
           </View>
 
-          {enabled && (
+          {/* Permission banner */}
+          {permissionGranted === false && (
+            <TouchableOpacity
+              onPress={() => Linking.openSettings()}
+              style={[ss.permBanner, { backgroundColor: theme.surface, borderColor: theme.border }]}
+              activeOpacity={0.8}
+            >
+              <View style={ss.permIcon}>
+                <MaterialCommunityIcons name="bell-off-outline" size={18} color={theme.gold} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[ss.permTitle, { color: theme.text, fontFamily: theme.uiFontFamily }]}>Notifications are off</Text>
+                <Text style={[ss.permBody, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>Tap to open Settings and allow them.</Text>
+              </View>
+              <MaterialCommunityIcons name="chevron-right" size={16} color={theme.textMuted} />
+            </TouchableOpacity>
+          )}
+
+          {enabled ? (
             <>
-              {/* ACTIVE DAYS */}
-              {renderSectionLabel('ACTIVE DAYS')}
-              <View style={[styles.pill, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                <View style={styles.dayChipsRow}>
+              {/* ── Active Days card (F: Playfair header, no SectionLabel) ── */}
+              <SectionCard title="Active Days" anim={anim0}>
+                <View style={ss.daysRow}>
                   {ALL_DAYS.map(d => {
-                    const selected = days.length === 0 || days.includes(d);
+                    const sel = days.includes(d);
                     return (
                       <TouchableOpacity
                         key={d}
                         onPress={() => handleToggleDay(d)}
-                        style={[
-                          styles.dayChip,
-                          {
-                            backgroundColor: selected ? theme.gold : theme.background,
-                            borderColor: selected ? theme.gold : theme.border,
-                          },
-                        ]}
+                        style={[ss.dayChip, {
+                          backgroundColor: sel ? theme.gold : 'transparent',
+                          borderColor: sel ? theme.gold : theme.border,
+                          shadowColor: sel ? theme.gold : 'transparent',
+                          shadowOffset: { width: 0, height: 2 },
+                          shadowOpacity: sel ? 0.4 : 0,
+                          shadowRadius: 6,
+                          elevation: sel ? 3 : 0,
+                        }]}
                         activeOpacity={0.7}
                       >
-                        <Text style={[
-                          styles.dayChipText,
-                          { color: selected ? '#1A1208' : theme.textMuted, fontFamily: theme.uiFontFamily },
-                        ]}>
+                        <Text style={[ss.dayText, { color: sel ? '#1A1208' : theme.textMuted, fontFamily: theme.uiFontFamily }]}>
                           {DAY_LABELS[d]}
                         </Text>
                       </TouchableOpacity>
                     );
                   })}
                 </View>
-              </View>
+              </SectionCard>
 
-              {/* DAILY QUOTES */}
-              {renderSectionLabel('DAILY QUOTES')}
-              {renderSectionRow('format-quote-close', 'Daily Quotes', quotesEnabled, v => {
-                setQuotesEnabled(v);
-                debouncedApply(buildSettings({ quotesEnabled: v }));
-              })}
-              {quotesEnabled && (
-                <>
-                  <View style={[styles.pill, styles.rowPill, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                    <Text style={[styles.rowLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
-                      How many
-                    </Text>
-                    <View style={styles.stepper}>
-                      {renderStep(() => handleCountStep(-1), '−', count <= 1)}
-                      <Text style={[styles.countLabel, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
-                        {count}
-                      </Text>
-                      {renderStep(() => handleCountStep(1), '+', count >= 10)}
+              {/* ── Daily Quotes card ───────────────────────────────────── */}
+              <SectionCard title="Daily Quotes" anim={anim1}>
+                <Row icon="format-quote-close" label="Send daily quotes" sub="Random quotes throughout your day">
+                  <Switch
+                    value={quotesEnabled}
+                    onValueChange={v => { setQuotesEnabled(v); debouncedApply(buildSettings({ quotesEnabled: v })); }}
+                    trackColor={{ false: theme.border, true: theme.gold }} thumbColor={theme.surface}
+                  />
+                </Row>
+                {quotesEnabled && (
+                  <>
+                    <View style={ss.countSection}>
+                      <View style={ss.countHeader}>
+                        <Text style={[ss.countLabel, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>How many per day</Text>
+                        <Text style={[ss.countValue, { color: theme.gold, fontFamily: theme.uiFontFamily }]}>
+                          {count} {count === 1 ? 'quote' : 'quotes'}
+                        </Text>
+                      </View>
+                      <CountSegments />
                     </View>
-                  </View>
-                  <View style={[styles.pill, styles.rowPill, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                    <Text style={[styles.rowLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
-                      Show author
-                    </Text>
-                    <Switch
-                      value={showAuthor}
-                      onValueChange={v => {
-                        setShowAuthor(v);
-                        debouncedApply(buildSettings({ showAuthor: v }));
-                      }}
-                      trackColor={{ false: theme.border, true: theme.gold }}
-                      thumbColor={theme.surface}
-                    />
-                  </View>
-                  {renderTimeRow(
-                    'Start at', startTime,
-                    () => handleTimeStep(setStartTime, startTime, -STEP, 'startTime'),
-                    () => handleTimeStep(setStartTime, startTime, STEP, 'startTime'),
-                  )}
-                  {renderTimeRow(
-                    'End at', endTime,
-                    () => handleTimeStep(setEndTime, endTime, -STEP, 'endTime'),
-                    () => handleTimeStep(setEndTime, endTime, STEP, 'endTime'),
-                  )}
-                </>
-              )}
+                    <Row label="Start at" muted>
+                      <TimePill target="startTime" value={startTime} />
+                    </Row>
+                    <Row label="End at" muted>
+                      <TimePill target="endTime" value={endTime} />
+                    </Row>
+                    <Row label="Show author" muted>
+                      <Switch
+                        value={showAuthor}
+                        onValueChange={v => { setShowAuthor(v); debouncedApply(buildSettings({ showAuthor: v })); }}
+                        trackColor={{ false: theme.border, true: theme.gold }} thumbColor={theme.surface}
+                      />
+                    </Row>
+                  </>
+                )}
+              </SectionCard>
 
-              {/* REMINDERS */}
-              {renderSectionLabel('REMINDERS')}
-              {renderSectionRow('white-balance-sunny', 'Quote of the Day', qodEnabled, v => {
-                setQodEnabled(v);
-                debouncedApply(buildSettings({ qodEnabled: v }));
-              })}
-              {qodEnabled && renderTimeRow(
-                'Send at', qodTime,
-                () => handleTimeStep(setQodTime, qodTime, -STEP, 'qodTime'),
-                () => handleTimeStep(setQodTime, qodTime, STEP, 'qodTime'),
-              )}
+              {/* ── Reminders card ──────────────────────────────────────── */}
+              <SectionCard title="Reminders" anim={anim2}>
+                <Row icon="white-balance-sunny" label="Quote of the Day" sub="One curated quote each morning">
+                  <Switch
+                    value={qodEnabled}
+                    onValueChange={v => { setQodEnabled(v); debouncedApply(buildSettings({ qodEnabled: v })); }}
+                    trackColor={{ false: theme.border, true: theme.gold }} thumbColor={theme.surface}
+                  />
+                </Row>
+                {qodEnabled && <Row label="Send at" muted><TimePill target="qodTime" value={qodTime} /></Row>}
 
-              {renderSectionRow('book-open-variant', 'Reflection Reminder', reflectEnabled, v => {
-                setReflectEnabled(v);
-                debouncedApply(buildSettings({ reflectEnabled: v }));
-              })}
-              {reflectEnabled && renderTimeRow(
-                'Send at', reflectTime,
-                () => handleTimeStep(setReflectTime, reflectTime, -STEP, 'reflectTime'),
-                () => handleTimeStep(setReflectTime, reflectTime, STEP, 'reflectTime'),
-              )}
+                <Row icon="book-open-variant" label="Reflection Reminder" sub="Prompt to write in your journal">
+                  <Switch
+                    value={reflectEnabled}
+                    onValueChange={v => { setReflectEnabled(v); debouncedApply(buildSettings({ reflectEnabled: v })); }}
+                    trackColor={{ false: theme.border, true: theme.gold }} thumbColor={theme.surface}
+                  />
+                </Row>
+                {reflectEnabled && <Row label="Send at" muted><TimePill target="reflectTime" value={reflectTime} /></Row>}
 
-              {renderSectionRow('fire', 'Streak Reminder', streakEnabled, v => {
-                setStreakEnabled(v);
-                debouncedApply(buildSettings({ streakEnabled: v }));
-              })}
-              {streakEnabled && renderTimeRow(
-                'Send at', streakTime,
-                () => handleTimeStep(setStreakTime, streakTime, -STEP, 'streakTime'),
-                () => handleTimeStep(setStreakTime, streakTime, STEP, 'streakTime'),
-              )}
+                <Row icon="fire" label="Streak Reminder" sub="Don't let your streak slip">
+                  <Switch
+                    value={streakEnabled}
+                    onValueChange={v => { setStreakEnabled(v); debouncedApply(buildSettings({ streakEnabled: v })); }}
+                    trackColor={{ false: theme.border, true: theme.gold }} thumbColor={theme.surface}
+                  />
+                </Row>
+                {streakEnabled && <Row label="Send at" muted><TimePill target="streakTime" value={streakTime} /></Row>}
+              </SectionCard>
 
-              {/* Summary */}
-              <Text style={[styles.summary, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-                {buildSummary()}
-              </Text>
+              {/* ── D: Visual schedule timeline ─────────────────────────── */}
+              <ScheduleTimeline />
             </>
+          ) : (
+            <View style={ss.empty}>
+              <MaterialCommunityIcons name="bell-sleep-outline" size={44} color={theme.border} />
+              <Text style={[ss.emptyTitle, { color: theme.textMuted, fontFamily: theme.quoteFontFamily }]}>No reminders set</Text>
+              <Text style={[ss.emptyBody, { color: theme.border, fontFamily: theme.uiFontFamily }]}>
+                Tap the button above to start receiving daily inspiration.
+              </Text>
+            </View>
           )}
         </ScrollView>
 
-        {/* Save pill */}
-        <TouchableOpacity
-          onPress={handleSave}
-          activeOpacity={0.82}
-          style={[styles.savePill, { backgroundColor: theme.gold }]}
-        >
-          <Text style={[styles.savePillText, { color: '#1A1208', fontFamily: theme.uiFontFamily }]}>
-            {saved ? '✓ Saved' : 'Save'}
-          </Text>
-        </TouchableOpacity>
+        {onContinue && (
+          <View style={[ss.continueWrapper, { backgroundColor: theme.background }]}>
+            <TouchableOpacity
+              style={[ss.continueBtn, { backgroundColor: theme.gold }]}
+              onPress={onContinue}
+              activeOpacity={0.82}
+            >
+              <Text style={[ss.continueBtnText, { fontFamily: theme.uiFontFamily }]}>Continue</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </SafeAreaView>
+
+      {pickerNode}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 4,
-    paddingBottom: 8,
-  },
+// ── Styles ─────────────────────────────────────────────────────────────────
+const ss = StyleSheet.create({
+  scroll: { paddingHorizontal: 16, paddingBottom: 56 },
+
+  topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 4, paddingBottom: 8 },
   backBtn: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
-  title: { fontSize: 20, fontWeight: '700' },
-  scroll: { flex: 1 },
-  scrollContent: { paddingHorizontal: 16, paddingBottom: 40 },
-  // Permission banner
-  banner: {
-    borderRadius: 14,
-    borderWidth: 1,
-    padding: 16,
-    gap: 10,
-    marginBottom: 16,
-    alignItems: 'flex-start',
-  },
-  bannerText: { fontSize: 13, lineHeight: 19 },
-  bannerLink: { fontSize: 13, fontWeight: '600' },
-  // Shared pill
-  pill: { borderRadius: 14, borderWidth: 1, marginBottom: 8, padding: 16 },
-  rowPill: { flexDirection: 'row', alignItems: 'center' },
-  pillIcon: { marginRight: 12 },
-  rowLabel: { flex: 1, fontSize: 15 },
-  sectionLabel: {
-    fontSize: 11,
-    letterSpacing: 1.5,
-    marginBottom: 8,
-    marginTop: 8,
-    marginLeft: 4,
-  },
-  // Day chips
-  dayChipsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  dayChip: {
-    flex: 1,
-    marginHorizontal: 3,
-    height: 38,
-    borderRadius: 8,
-    borderWidth: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  dayChipText: { fontSize: 11, fontWeight: '600' },
-  // Stepper
-  stepper: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  stepBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    borderWidth: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  stepBtnText: { fontSize: 20, lineHeight: 22, fontWeight: '300' },
-  countLabel: { fontSize: 18, minWidth: 40, textAlign: 'center' },
-  timeLabel: { fontSize: 14, fontWeight: '500', minWidth: 76, textAlign: 'center' },
-  // Summary
-  summary: {
-    fontSize: 13,
-    lineHeight: 19,
-    textAlign: 'center',
-    marginTop: 16,
-    marginHorizontal: 8,
-  },
-  // Save pill
-  savePill: {
-    marginHorizontal: 16,
-    marginTop: 8,
-    marginBottom: 12,
-    borderRadius: 28,
-    paddingVertical: 17,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  savePillText: {
-    fontSize: 16,
-    fontWeight: '700',
-    letterSpacing: 0.2,
-  },
+  savedBadge: { fontSize: 11, fontWeight: '600', letterSpacing: 0.5 },
+
+  // ── A: Hero ────────────────────────────────────────────────────────────
+  heroWrap: { alignItems: 'center', paddingVertical: 36, paddingHorizontal: 20 },
+  heroIconWrap: { width: 76, height: 76, borderRadius: 24, borderWidth: 1, justifyContent: 'center', alignItems: 'center', marginBottom: 22 },
+  heroTitle: { fontSize: 30, fontWeight: '700', marginBottom: 8, letterSpacing: -0.5 },
+  heroSub: { fontSize: 14, lineHeight: 20, textAlign: 'center', marginBottom: 26, paddingHorizontal: 16 },
+  heroBtn: { flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 26, paddingVertical: 14, borderRadius: 32, borderWidth: 1 },
+  heroBtnText: { fontSize: 15, fontWeight: '600' },
+
+  // ── Permission banner ──────────────────────────────────────────────────
+  permBanner: { borderRadius: 16, borderWidth: 1, padding: 13, flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
+  permIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(184,151,90,0.12)', justifyContent: 'center', alignItems: 'center' },
+  permTitle: { fontSize: 13, fontWeight: '600', marginBottom: 1 },
+  permBody: { fontSize: 12, lineHeight: 16 },
+
+  // ── F: Cards with Playfair headers ─────────────────────────────────────
+  card: { borderRadius: 18, borderWidth: 1, overflow: 'hidden', marginBottom: 14 },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth },
+  cardTitle: { fontSize: 18, fontWeight: '700', letterSpacing: -0.3 },
+  divider: { height: StyleSheet.hairlineWidth, marginLeft: 16 },
+
+  // ── Rows ───────────────────────────────────────────────────────────────
+  row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, gap: 12 },
+  rowIcon: { width: 30, height: 30, borderRadius: 9, backgroundColor: 'rgba(184,151,90,0.10)', justifyContent: 'center', alignItems: 'center' },
+  rowLabel: { fontSize: 14, fontWeight: '500' },
+  rowSub: { fontSize: 11, lineHeight: 16, marginTop: 2, opacity: 0.8 },
+
+  // ── Days ───────────────────────────────────────────────────────────────
+  daysRow: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 14, paddingTop: 14, paddingBottom: 14, gap: 6 },
+  dayChip: { width: 40, height: 40, borderRadius: 20, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
+  dayText: { fontSize: 11, fontWeight: '700' },
+
+  // ── Segmented count ────────────────────────────────────────────────────
+  countSection: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 14 },
+  countHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  countLabel: { fontSize: 13 },
+  countValue: { fontSize: 12, fontWeight: '600' },
+  segBar: { flexDirection: 'row', borderRadius: 12, borderWidth: 1, overflow: 'hidden' },
+  seg: { flex: 1, height: 40, justifyContent: 'center', alignItems: 'center' },
+  segDivider: { width: StyleSheet.hairlineWidth, height: 40 },
+  segText: { fontSize: 12 },
+
+  // ── Time pill ──────────────────────────────────────────────────────────
+  timePill: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 10, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 7 },
+  timePillText: { fontSize: 13, fontWeight: '600' },
+
+  // ── D: Schedule timeline ───────────────────────────────────────────────
+  schedBadge: { borderRadius: 10, paddingHorizontal: 9, paddingVertical: 3 },
+  schedBadgeText: { fontSize: 11, fontWeight: '600' },
+  timelineWrap: { paddingHorizontal: 16, paddingTop: 6, paddingBottom: 16 },
+  timelineRow: { flexDirection: 'row', gap: 14, minHeight: 44 },
+  timelineLeft: { alignItems: 'center', width: 10 },
+  timelineDot: { width: 9, height: 9, borderRadius: 5, marginTop: 5 },
+  timelineLine: { flex: 1, width: 1.5, marginTop: 3, marginBottom: -2 },
+  timelineContent: { flex: 1, paddingBottom: 10 },
+  timelineMutedRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 5, paddingBottom: 10, paddingTop: 3 },
+  timelineTime: { fontSize: 13, fontWeight: '700', letterSpacing: 0.2 },
+  timelineLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 },
+  timelineLabel: { fontSize: 12, lineHeight: 17 },
+
+  // ── Empty state ────────────────────────────────────────────────────────
+  empty: { alignItems: 'center', paddingTop: 48, paddingHorizontal: 32, gap: 12 },
+  emptyTitle: { fontSize: 22, fontWeight: '700', marginTop: 8, letterSpacing: -0.3 },
+  emptyBody: { fontSize: 13, lineHeight: 20, textAlign: 'center' },
+
+  // ── Continue button ────────────────────────────────────────────────────
+  continueWrapper: { paddingHorizontal: 24, paddingBottom: 12, paddingTop: 8 },
+  continueBtn: { borderRadius: 18, paddingVertical: 16, alignItems: 'center', justifyContent: 'center' },
+  continueBtnText: { fontSize: 16, fontWeight: '700', color: '#1A1208' },
+
+  // ── iOS picker sheet ───────────────────────────────────────────────────
+  pickerBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)' },
+  pickerSheet: { borderTopLeftRadius: 26, borderTopRightRadius: 26, paddingBottom: 40, shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.22, shadowRadius: 18, elevation: 24 },
+  pickerHandle: { width: 40, height: 4, borderRadius: 2, alignSelf: 'center', marginTop: 12, marginBottom: 2 },
+  pickerHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 14, paddingBottom: 14 },
+  pickerCancelText: { fontSize: 15 },
+  pickerTitle: { fontSize: 16, fontWeight: '700' },
+  pickerAccent: { height: 1, opacity: 0.25, marginHorizontal: 20, borderRadius: 1 },
+  pickerBigTime: { fontSize: 42, fontWeight: '700', textAlign: 'center', marginTop: 8, marginBottom: -8, letterSpacing: -1 },
+  pickerDoneBtn: { paddingHorizontal: 18, paddingVertical: 8, borderRadius: 22 },
+  pickerDoneText: { fontSize: 14, fontWeight: '700', color: '#1A1208' },
 });

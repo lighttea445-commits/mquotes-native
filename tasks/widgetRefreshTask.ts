@@ -2,7 +2,7 @@
  * Widget background-refresh task (Android only).
  *
  * Iterates all active widget instances. Each instance has its own config
- * (quoteType, updateInterval, customQuoteId) stored in useWidgetStore.
+ * (quoteType, updateInterval) stored in useWidgetStore via AsyncStorage.
  * Quotes are fetched per-instance and pushed individually via WidgetBridge.updateWidget().
  */
 
@@ -17,12 +17,14 @@ try {
   // Running in Expo Go without these packages installed — silently skip.
 }
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fetchMultipleRandomQuotes, fetchQuotesByCategory } from '../lib/quotesApi';
 import {
   useWidgetStore,
   WidgetRefreshFrequency,
   REFRESH_FREQUENCY_MINUTES,
   defaultInstanceConfig,
+  type WidgetInstanceConfig,
 } from '../store/useWidgetStore';
 import { useFavoritesStore } from '../store/useFavoritesStore';
 import { useUserQuotesStore } from '../store/useUserQuotesStore';
@@ -30,12 +32,22 @@ import { WidgetBridge } from '../modules/widget-bridge';
 
 export const WIDGET_TASK_NAME = 'com.eriksen.quotable.widget-refresh';
 
+const WIDGET_STORE_KEY = 'widget-store-v2';
+
 // ── Task definition ───────────────────────────────────────────────────────────
 //
 // IMPORTANT: TaskManager.defineTask must run at module-load time, not deferred
 // inside a function called from a useEffect. When Android wakes the app in the
 // background to execute this task the JS bundle is evaluated, so any handler
 // that is only registered during component mount will never exist in time.
+
+/** Wait for a Zustand persist store to finish hydrating from AsyncStorage. */
+function waitForHydration(store: { persist: { hasHydrated: () => boolean; onFinishHydration: (cb: () => void) => () => void } }): Promise<void> {
+  return new Promise((resolve) => {
+    if (store.persist.hasHydrated()) { resolve(); return; }
+    const unsub = store.persist.onFinishHydration(() => { unsub(); resolve(); });
+  });
+}
 
 if (TaskManager) {
   TaskManager.defineTask(WIDGET_TASK_NAME, async () => {
@@ -45,18 +57,25 @@ if (TaskManager) {
         return BackgroundFetch.BackgroundFetchResult.NoData;
       }
 
+      // Wait for all stores to hydrate from AsyncStorage before reading them.
+      // On background wakes the JS bundle runs fresh and Zustand hasn't loaded
+      // its persisted state yet — without this, widgetConfigs/favorites/userQuotes
+      // appear empty and every widget falls back to general quotes.
+      await Promise.all([
+        waitForHydration(useWidgetStore),
+        waitForHydration(useFavoritesStore),
+        waitForHydration(useUserQuotesStore),
+      ]);
+
       const widgetStore  = useWidgetStore.getState();
       const favorites    = useFavoritesStore.getState().favorites;
       const userQuotes   = useUserQuotesStore.getState().userQuotes;
 
       let hadNewData = false;
 
-      for (const { widgetId, type } of activeWidgets) {
+      for (const { widgetId } of activeWidgets) {
         const idStr = widgetId.toString();
-        const config = widgetStore.widgetConfigs[idStr] ?? defaultInstanceConfig(type);
-
-        // Skip auto-refresh for widgets set to "Never"
-        if (config.updateInterval === 'off') continue;
+        const config = widgetStore.widgetConfigs[idStr] ?? defaultInstanceConfig('basic');
 
         // Honour each widget's own refresh frequency. The background task runs
         // at the shortest interval (hourly), so daily/twice-daily widgets must
@@ -67,61 +86,48 @@ if (TaskManager) {
           if (ageMs < intervalMs) continue; // not due yet
         }
 
-        let quoteText   = '';
-        let quoteAuthor = '';
+        let quote: { id?: string; text: string; author: string } | null = null;
 
-        if (type === 'custom') {
-          const q = config.customQuoteId
-            ? userQuotes.find((uq) => uq.id === config.customQuoteId)
-            : null;
-          if (q) {
-            quoteText   = q.text;
-            quoteAuthor = q.author;
-          } else if (config.cachedQuote) {
-            quoteText   = config.cachedQuote.text;
-            quoteAuthor = config.cachedQuote.author;
-          }
-        } else if (config.quoteType === 'favorites') {
+        if (config.quoteType === 'favorites') {
           if (favorites.length > 0) {
-            const pick = favorites[Math.floor(Math.random() * favorites.length)];
-            quoteText   = pick.text;
-            quoteAuthor = pick.author;
+            const f = favorites[Math.floor(Math.random() * favorites.length)];
+            quote = { id: f.id, text: f.text, author: f.author };
+          }
+        } else if (config.quoteType === 'my-quotes') {
+          if (userQuotes.length > 0) {
+            const q = userQuotes[Math.floor(Math.random() * userQuotes.length)];
+            quote = { id: q.id, text: q.text, author: q.author };
           }
         } else if (config.quoteType === 'general') {
           const quotes = await fetchMultipleRandomQuotes(1);
-          if (quotes.length > 0) {
-            quoteText   = quotes[0].content;
-            quoteAuthor = quotes[0].author;
-          }
+          if (quotes[0]) quote = { id: quotes[0]._id, text: quotes[0].content, author: quotes[0].author };
         } else {
           const quotes = await fetchQuotesByCategory(config.quoteType);
-          if (quotes.length > 0) {
-            quoteText   = quotes[0].content;
-            quoteAuthor = quotes[0].author;
+          if (quotes.length) {
+            const q = quotes[Math.floor(Math.random() * quotes.length)];
+            quote = { id: q._id, text: q.content, author: q.author };
           }
         }
 
-        if (!quoteText) continue;
+        if (!quote) continue;
 
-        widgetStore.setWidgetConfig(idStr, {
-          cachedQuote:   { text: quoteText, author: quoteAuthor },
-          lastRefreshed: new Date().toISOString(),
-        });
+        // Persist updated cached quote and lastRefreshed to AsyncStorage so
+        // widget taps and the task handler can read the current quote.
+        await persistCachedQuote(widgetId, config, quote);
 
+        // Re-render the widget with the new quote.
         await WidgetBridge.updateWidget({
           widgetId,
-          widgetType:    type,
-          quoteText,
-          transparentBg: config.transparentBg,
-          intervalMs:    REFRESH_FREQUENCY_MINUTES[config.updateInterval] * 60_000,
-          quoteType:     config.quoteType,
-          textSize:      config.textSize,
+          quote,
+          config: {
+            showAuthor:    config.showAuthor,
+            transparentBg: config.transparentBg,
+            textSize:      config.textSize,
+          },
         });
 
         hadNewData = true;
       }
-
-      await WidgetBridge.reloadTimelines();
 
       return hadNewData
         ? BackgroundFetch.BackgroundFetchResult.NewData
@@ -131,6 +137,36 @@ if (TaskManager) {
       return BackgroundFetch.BackgroundFetchResult.Failed;
     }
   });
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+async function persistCachedQuote(
+  widgetId: number,
+  config: WidgetInstanceConfig,
+  quote: { id?: string; text: string; author: string },
+) {
+  try {
+    const raw = await AsyncStorage.getItem(WIDGET_STORE_KEY);
+    const parsed = raw
+      ? (JSON.parse(raw) as { state: { widgetConfigs: Record<string, WidgetInstanceConfig> }; version?: number })
+      : { state: { widgetConfigs: {} } };
+
+    parsed.state.widgetConfigs[widgetId.toString()] = {
+      ...config,
+      cachedQuote: { text: quote.text, author: quote.author, quoteId: quote.id },
+      lastRefreshed: new Date().toISOString(),
+    };
+    await AsyncStorage.setItem(WIDGET_STORE_KEY, JSON.stringify(parsed));
+
+    // Also update the in-memory Zustand store so the UI stays consistent.
+    useWidgetStore.getState().setWidgetConfig(widgetId.toString(), {
+      cachedQuote:   { text: quote.text, author: quote.author, quoteId: quote.id },
+      lastRefreshed: new Date().toISOString(),
+    });
+  } catch {
+    // Non-critical — the widget still refreshes even if we can't persist.
+  }
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────

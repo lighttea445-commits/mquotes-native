@@ -25,16 +25,17 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Prebuild (generate android/ with all native modules)
-        run: npx expo prebuild --platform android --no-install
+      - name: Install EAS CLI
+        run: npm install -g eas-cli
 
-      - name: Build debug APK
-        working-directory: android
-        run: ./gradlew assembleDebug --no-daemon
+      - name: Build preview APK via EAS (local)
+        run: eas build --profile preview --platform android --non-interactive --local --output ./app-preview.apk
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: app-preview
+          path: ./app-preview.apk
           retention-days: 7

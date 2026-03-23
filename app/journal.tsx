@@ -3,10 +3,10 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import RevenueCatUI, { PAYWALL_RESULT } from 'react-native-purchases-ui';
 import { useTheme } from '../hooks/useTheme';
 import { useRevenueCat } from '../hooks/useRevenueCat';
 import { useReflectStore, Reflection, MOODS } from '../store/useReflectStore';
+import { useModal } from '../contexts/ModalContext';
 import { ConfirmSheet } from '../components/ui/ConfirmSheet';
 
 function getMoodIcon(moodLabel: string): string {
@@ -40,7 +40,7 @@ function ReflectItem({ item, theme }: { item: Reflection; theme: ReturnType<type
         "{item.quoteText}"
       </Text>
       <Text style={[styles.authorText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-        — {item.quoteAuthor}
+        {item.quoteAuthor}
       </Text>
 
       {/* Divider */}
@@ -59,18 +59,15 @@ export default function JournalScreen({ onClose, onBack }: { onClose?: () => voi
   const router = useRouter();
   const close = onClose ?? (() => router.back());
   const back = onBack ?? close;
-  const { isPro, isLoading, refresh, offerings } = useRevenueCat();
+  const { isPro, isLoading } = useRevenueCat();
   const { reflections, clearReflections } = useReflectStore();
+  const modal = useModal();
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   const handleClear = () => setShowClearConfirm(true);
 
-  const handleUnlock = async () => {
-    const offering = offerings?.all['sale'] ?? offerings?.current ?? undefined;
-    const result = await RevenueCatUI.presentPaywall({ offering });
-    if (result === PAYWALL_RESULT.PURCHASED || result === PAYWALL_RESULT.RESTORED) {
-      await refresh();
-    }
+  const handleUnlock = () => {
+    modal ? modal.openSheet('features') : router.push('/subscriptions');
   };
 
   // Pro gate

@@ -22,7 +22,7 @@ function FavoriteItem({
         "{quote.text}"
       </Text>
       <Text style={[styles.authorText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-        — {quote.author}
+        {quote.author}
       </Text>
       <TouchableOpacity
         onPress={() => onRemove(quote.id)}

@@ -3,10 +3,10 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import RevenueCatUI, { PAYWALL_RESULT } from 'react-native-purchases-ui';
 import { useTheme } from '../hooks/useTheme';
 import { useRevenueCat } from '../hooks/useRevenueCat';
 import { useHistoryStore, HistoryQuote } from '../store/useHistoryStore';
+import { useModal } from '../contexts/ModalContext';
 
 function HistoryItem({ item, theme }: { item: HistoryQuote; theme: ReturnType<typeof useTheme> }) {
   const date = new Date(item.viewedAt);
@@ -19,7 +19,7 @@ function HistoryItem({ item, theme }: { item: HistoryQuote; theme: ReturnType<ty
       </Text>
       <View style={styles.cardFooter}>
         <Text style={[styles.authorText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-          — {item.author}
+          {item.author}
         </Text>
         <Text style={[styles.dateText, { color: theme.textMuted }]}>{timeStr}</Text>
       </View>
@@ -32,15 +32,12 @@ export default function HistoryScreen({ onClose, onBack }: { onClose?: () => voi
   const router = useRouter();
   const close = onClose ?? (() => router.back());
   const back = onBack ?? close;
-  const { isPro, isLoading, refresh, offerings } = useRevenueCat();
+  const { isPro, isLoading } = useRevenueCat();
   const { history, clearHistory } = useHistoryStore();
+  const modal = useModal();
 
-  const handleUnlock = async () => {
-    const offering = offerings?.all['sale'] ?? offerings?.current ?? undefined;
-    const result = await RevenueCatUI.presentPaywall({ offering });
-    if (result === PAYWALL_RESULT.PURCHASED || result === PAYWALL_RESULT.RESTORED) {
-      await refresh();
-    }
+  const handleUnlock = () => {
+    modal ? modal.openSheet('features') : router.push('/subscriptions');
   };
 
   // Show gate screen for free users (skip during loading to avoid flash)

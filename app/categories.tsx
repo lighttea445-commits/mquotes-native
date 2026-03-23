@@ -142,7 +142,7 @@ export default function CategoriesScreen({ onClose }: { onClose?: () => void }) 
   );
 
   const close = onClose ?? (() => router.back());
-  const openPaywall = () => modal ? modal.openPaywall() : router.push('/subscriptions');
+  const openPaywall = () => modal ? modal.openSheet('features') : router.push('/subscriptions');
 
   const openMyQuotes = () => {
     if (!isPro) { openPaywall(); return; }
