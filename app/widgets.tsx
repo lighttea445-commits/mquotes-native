@@ -32,6 +32,8 @@ import { WidgetBridge, ActiveWidget } from '../modules/widget-bridge';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFavoritesStore } from '../store/useFavoritesStore';
 import { useUserQuotesStore } from '../store/useUserQuotesStore';
+import { useRevenueCat } from '../hooks/useRevenueCat';
+import { useModal } from '../contexts/ModalContext';
 
 const WIDGET_STORE_KEY = 'widget-store-v2';
 
@@ -399,6 +401,8 @@ export default function WidgetsScreen({ onClose, onBack, onContinue }: { onClose
   const close = onClose ?? (() => router.back());
   const back = onBack ?? close;
   const { widgetConfigs, setWidgetConfig, removeWidgetConfig } = useWidgetStore();
+  const { isPro, isLoading: rcLoading } = useRevenueCat();
+  const modal = useModal();
 
   // Route params: set when launched from WidgetConfigActivity (standalone route mode)
   const params = useLocalSearchParams<{ widgetId?: string; type?: string }>();
@@ -564,6 +568,50 @@ export default function WidgetsScreen({ onClose, onBack, onContinue }: { onClose
   const textSizeOptions = (
     Object.entries(TEXT_SIZE_LABELS) as [WidgetTextSize, string][]
   ).map(([value, label]) => ({ value, label }));
+
+  // ── Render: pro gate ───────────────────────────────────────────────────────
+
+  if (!rcLoading && !isPro) {
+    const handleUnlock = () =>
+      modal ? modal.openSheet('features') : router.push('/subscriptions');
+
+    return (
+      <View style={{ flex: 1, backgroundColor: theme.background }}>
+        <SafeAreaView style={styles.safe} edges={['bottom']}>
+          <View style={styles.header}>
+            <TouchableOpacity onPress={back} style={[styles.backBtn, { backgroundColor: theme.surface }]} activeOpacity={0.7}>
+              <MaterialCommunityIcons name="arrow-left" size={22} color={theme.textMuted} />
+            </TouchableOpacity>
+            <Text style={[styles.headerTitle, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
+              Widgets
+            </Text>
+            <View style={{ width: 36 }} />
+          </View>
+          <View style={gateStyles.container}>
+            <View style={[gateStyles.iconBg, { backgroundColor: 'rgba(184,151,90,0.12)' }]}>
+              <MaterialCommunityIcons name="crown" size={32} color="#B8975A" />
+            </View>
+            <Text style={[gateStyles.title, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
+              Widget Editor is Pro
+            </Text>
+            <Text style={[gateStyles.body, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+              Upgrade to Quotable Pro to customize your widgets — choose quote categories, refresh intervals, text size, and more.
+            </Text>
+            <TouchableOpacity
+              style={[gateStyles.unlockBtn, { backgroundColor: '#B8975A' }]}
+              onPress={handleUnlock}
+              activeOpacity={0.85}
+            >
+              <MaterialCommunityIcons name="crown" size={16} color="#1A1208" />
+              <Text style={[gateStyles.unlockBtnText, { fontFamily: theme.uiFontFamily }]}>
+                Unlock Pro
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </View>
+    );
+  }
 
   // ── Render: editor ─────────────────────────────────────────────────────────
 
@@ -861,5 +909,48 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+});
+
+const gateStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 36,
+    gap: 16,
+  },
+  iconBg: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  body: {
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: 'center',
+    opacity: 0.75,
+  },
+  unlockBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 28,
+    paddingVertical: 14,
+    borderRadius: 28,
+    marginTop: 8,
+  },
+  unlockBtnText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1A1208',
   },
 });

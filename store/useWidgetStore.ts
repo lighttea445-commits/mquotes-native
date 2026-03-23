@@ -76,7 +76,7 @@ export function defaultInstanceConfig(type: WidgetType): WidgetInstanceConfig {
     showAuthor: false,
     updateInterval: 'hourly',
     quoteType: 'general',
-    textSize: 'medium',
+    textSize: 'large',
     cachedQuote: null,
     lastRefreshed: null,
   };
