@@ -62,78 +62,8 @@ function RootLayoutInner() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navReady]);
-  // ── Widget tap deep-link handler ─────────────────────────────────────────
-  //
-  // When the user taps a widget, react-native-android-widget fires OPEN_URI:
-  //   quotable://?src=widget&widgetId=<id>&text=<encoded>&author=<encoded>&id=<quoteId>
-  //
-  // The quote text/author are embedded directly in the URI so we never need
-  // to read AsyncStorage (which may have been overwritten by a concurrent
-  // background refresh, causing the wrong quote to appear).
-  //
-  // We use getInitialURL + addEventListener instead of useURL() because
-  // useURL() stores the URL in React state — if the same URL arrives twice
-  // (tapping the widget while the app is already open), the state value
-  // doesn't change and useEffect never re-fires, making the widget untappable.
-
-  useEffect(() => {
-    async function handleWidgetUrl(rawUrl: string) {
-      if (!rawUrl.includes('src=widget')) return;
-      try {
-        const queryString = rawUrl.includes('?') ? rawUrl.split('?')[1] : '';
-        const params: Record<string, string> = {};
-        for (const part of queryString.split('&')) {
-          const eq = part.indexOf('=');
-          if (eq === -1) continue;
-          params[part.slice(0, eq)] = decodeURIComponent(part.slice(eq + 1));
-        }
-
-        const text = params['text'];
-        const author = params['author'] ?? '';
-        const id = params['id'] ?? '';
-
-        if (text) {
-          // Fast path: quote content embedded in the URI — no AsyncStorage needed.
-          useDeepLinkStore.getState().setPendingQuote({ id, text, author });
-          return;
-        }
-
-        // Fallback for old widget renders that didn't embed text in the URI:
-        // read cachedQuote from AsyncStorage directly (bypasses Zustand hydration race).
-        const widgetId = params['widgetId'];
-        if (!widgetId) return;
-        const raw = await AsyncStorage.getItem('widget-store-v2');
-        if (!raw) return;
-        const parsed = JSON.parse(raw) as {
-          state?: { widgetConfigs?: Record<string, WidgetInstanceConfig> };
-        };
-        const cached = parsed?.state?.widgetConfigs?.[widgetId]?.cachedQuote;
-        if (cached) {
-          useDeepLinkStore.getState().setPendingQuote({
-            id:     cached.quoteId ?? '',
-            text:   cached.text,
-            author: cached.author,
-          });
-        }
-      } catch {
-        // Malformed URL or parse error — ignore
-      }
-    }
-
-    // Cold start: the URL that launched the app
-    Linking.getInitialURL().then((initialUrl) => {
-      if (initialUrl) handleWidgetUrl(initialUrl);
-    });
-
-    // Warm start: fires for every subsequent deep link while app is running,
-    // including repeated taps on the same widget (same URL string each time).
-    const subscription = Linking.addEventListener('url', ({ url: eventUrl }) => {
-      handleWidgetUrl(eventUrl);
-    });
-
-    return () => subscription.remove();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Widget deep links are handled via useLocalSearchParams in index.tsx
+  // (Expo Router v6 primary path) and via Linking in RootLayout (fallback).
 
   // ── Notification deep-link handler ─────────────────────────────────────
   //
@@ -261,6 +191,77 @@ export default function RootLayout() {
     Inter_700Bold,
     Allkin_400Regular,
   });
+
+  // ── Widget tap deep-link handler (Linking fallback) ───────────────────────
+  //
+  // Placed in RootLayout (the outermost component) so it mounts immediately —
+  // before fonts load and before RootLayoutInner exists. This ensures:
+  //   • Cold start: getInitialURL() is called while the OS still holds the
+  //     launch intent, before Expo Router's navigation layer has a chance to
+  //     "consume" it internally.
+  //   • Warm start: the addEventListener subscription is live as soon as
+  //     possible so no widget-tap URL events are missed.
+  //
+  // The primary path for cold/warm starts is useLocalSearchParams in index.tsx
+  // (Expo Router v6 injects URL params into the screen automatically). This
+  // Linking handler is the fallback for cases where the same URL fires twice
+  // (same widget tapped twice — params don't change so the router effect
+  // won't re-run) and for any timing edge cases.
+  useEffect(() => {
+    async function handleWidgetUrl(rawUrl: string) {
+      if (!rawUrl.includes('src=widget')) return;
+      try {
+        const queryString = rawUrl.includes('?') ? rawUrl.split('?')[1] : '';
+        const params: Record<string, string> = {};
+        for (const part of queryString.split('&')) {
+          const eq = part.indexOf('=');
+          if (eq === -1) continue;
+          params[part.slice(0, eq)] = decodeURIComponent(part.slice(eq + 1));
+        }
+
+        const text = params['text'];
+        const author = params['author'] ?? '';
+        const id = params['id'] ?? '';
+
+        if (text) {
+          // Quote content embedded in URI — no AsyncStorage read needed.
+          useDeepLinkStore.getState().setPendingQuote({ id, text, author });
+          return;
+        }
+
+        // Fallback: widget rendered before the text-embedding update.
+        // Read cachedQuote from AsyncStorage (bypasses Zustand hydration race).
+        const widgetId = params['widgetId'];
+        if (!widgetId) return;
+        const raw = await AsyncStorage.getItem('widget-store-v2');
+        if (!raw) return;
+        const parsed = JSON.parse(raw) as {
+          state?: { widgetConfigs?: Record<string, WidgetInstanceConfig> };
+        };
+        const cached = parsed?.state?.widgetConfigs?.[widgetId]?.cachedQuote;
+        if (cached) {
+          useDeepLinkStore.getState().setPendingQuote({
+            id:     cached.quoteId ?? '',
+            text:   cached.text,
+            author: cached.author,
+          });
+        }
+      } catch {
+        // Malformed URL or parse error — ignore
+      }
+    }
+
+    Linking.getInitialURL().then((initialUrl) => {
+      if (initialUrl) handleWidgetUrl(initialUrl);
+    });
+
+    const subscription = Linking.addEventListener('url', ({ url: eventUrl }) => {
+      handleWidgetUrl(eventUrl);
+    });
+
+    return () => subscription.remove();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (!fontsLoaded) {
     return (
