@@ -40,12 +40,13 @@ export function QuoteWidget({ quote, config, widgetInfo }: Props) {
   // Show fewer lines of quote text in short widgets so nothing overflows
   const maxLines   = widgetInfo.height < 80 ? 3 : widgetInfo.height < 140 ? 5 : 8;
 
-  // Use "quotable://widget-open?..." with an explicit named route so expo-router
-  // v6 maps it deterministically to app/widget-open.tsx. An empty-authority
-  // root URL ("quotable://?...") is mis-parsed by Android on some devices.
-  // The quote text/author are embedded so the trampoline screen needs no
-  // AsyncStorage read and is immune to background-refresh race conditions.
-  const tapUri = `quotable://widget-open?widgetId=${widgetInfo.widgetId}&id=${encodeURIComponent(quote.id ?? '')}&text=${encodeURIComponent(quote.text)}&author=${encodeURIComponent(quote.author)}`;
+  // Constant URI — only the widgetId, no quote text. Embedding text caused
+  // Android 12+ FLAG_IMMUTABLE PendingIntents to become stale after re-renders
+  // (the OS refuses to update an immutable PendingIntent's URI). With a constant
+  // URI the PendingIntent is created once and stays valid forever. The displayed
+  // quote is stored in AsyncStorage under `widget-shown-{widgetId}` (written
+  // after every renderWidget call) and read by app/widget-open.tsx.
+  const tapUri = `quotable://widget-open?widgetId=${widgetInfo.widgetId}`;
 
   return (
     <FlexWidget

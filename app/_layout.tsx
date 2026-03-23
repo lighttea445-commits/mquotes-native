@@ -211,13 +211,11 @@ export default function RootLayout() {
   // won't re-run) and for any timing edge cases.
   useEffect(() => {
     async function handleWidgetUrl(rawUrl: string) {
-      // Handle both old format (quotable://?src=widget&...) and
-      // new format (quotable://widget-open?...) — the route-based handler
-      // (widget-open.tsx) is primary; this is the fallback for repeated taps
-      // and timing edge cases.
-      const isOldFormat = rawUrl.includes('src=widget');
-      const isNewFormat = rawUrl.includes('widget-open');
-      if (!isOldFormat && !isNewFormat) return;
+      // Handles widget-open deep links. Primary handler is app/widget-open.tsx
+      // (expo-router route); this Linking fallback fires for repeated taps
+      // (same URL — router params don't change so the screen effect won't
+      // re-run) and other edge cases.
+      if (!rawUrl.includes('widget-open') && !rawUrl.includes('src=widget')) return;
       try {
         const queryString = rawUrl.includes('?') ? rawUrl.split('?')[1] : '';
         const params: Record<string, string> = {};
@@ -227,26 +225,30 @@ export default function RootLayout() {
           params[part.slice(0, eq)] = decodeURIComponent(part.slice(eq + 1));
         }
 
-        const text = params['text'];
-        const author = params['author'] ?? '';
-        const id = params['id'] ?? '';
-
-        if (text) {
-          // Quote content embedded in URI — no AsyncStorage read needed.
-          useDeepLinkStore.getState().setPendingQuote({ id, text, author });
-          return;
-        }
-
-        // Fallback: widget rendered before the text-embedding update.
-        // Read cachedQuote from AsyncStorage (bypasses Zustand hydration race).
         const widgetId = params['widgetId'];
         if (!widgetId) return;
+
+        // Primary: widget-shown key written after each render (most accurate).
+        const shown = await AsyncStorage.getItem(`widget-shown-${widgetId}`);
+        if (shown) {
+          const parsed = JSON.parse(shown) as { text?: string; author?: string; id?: string };
+          if (parsed.text) {
+            useDeepLinkStore.getState().setPendingQuote({
+              id:     parsed.id ?? '',
+              text:   parsed.text,
+              author: parsed.author ?? '',
+            });
+            return;
+          }
+        }
+
+        // Fallback: cachedQuote in widget-store-v2.
         const raw = await AsyncStorage.getItem('widget-store-v2');
         if (!raw) return;
-        const parsed = JSON.parse(raw) as {
+        const store = JSON.parse(raw) as {
           state?: { widgetConfigs?: Record<string, WidgetInstanceConfig> };
         };
-        const cached = parsed?.state?.widgetConfigs?.[widgetId]?.cachedQuote;
+        const cached = store?.state?.widgetConfigs?.[widgetId]?.cachedQuote;
         if (cached) {
           useDeepLinkStore.getState().setPendingQuote({
             id:     cached.quoteId ?? '',
@@ -255,7 +257,7 @@ export default function RootLayout() {
           });
         }
       } catch {
-        // Malformed URL or parse error — ignore
+        // Malformed URL or parse error — ignore.
       }
     }
 

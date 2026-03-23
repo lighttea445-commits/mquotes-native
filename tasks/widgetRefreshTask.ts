@@ -111,11 +111,7 @@ if (TaskManager) {
 
         if (!quote) continue;
 
-        // Persist updated cached quote and lastRefreshed to AsyncStorage so
-        // widget taps and the task handler can read the current quote.
-        await persistCachedQuote(widgetId, config, quote);
-
-        // Re-render the widget with the new quote.
+        // Re-render the widget first (also writes widget-shown-{widgetId}).
         await WidgetBridge.updateWidget({
           widgetId,
           quote,
@@ -125,6 +121,10 @@ if (TaskManager) {
             textSize:      config.textSize,
           },
         });
+
+        // Persist cachedQuote/lastRefreshed AFTER the widget has re-rendered so
+        // a tap between fetch and render still reads the previous (correct) quote.
+        await persistCachedQuote(widgetId, config, quote);
 
         hadNewData = true;
       }

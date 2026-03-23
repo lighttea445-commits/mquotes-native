@@ -2,16 +2,19 @@
  * Widget-open trampoline screen.
  *
  * When the user taps a home-screen widget, the OPEN_URI click action fires:
- *   quotable://widget-open?text=<encoded>&author=<encoded>&id=<quoteId>&widgetId=<id>
+ *   quotable://widget-open?widgetId=<id>
  *
- * Using an explicit route ("widget-open") instead of the root URL
- * ("quotable://?...") is more reliable across Android versions and expo-router
- * v6 — the router matches named paths deterministically, whereas the empty-
- * authority root URL can be mis-parsed in some environments.
+ * The URI is intentionally short (widgetId only) to avoid Android 12+
+ * FLAG_IMMUTABLE PendingIntent limitations — embedding quote text caused the
+ * URI to change on every re-render, but immutable PendingIntents can't be
+ * updated, making taps fire stale URIs or become unresponsive.
+ *
+ * The displayed quote is stored in AsyncStorage under `widget-shown-{widgetId}`
+ * immediately after every renderWidget / requestWidgetUpdateById call.
  *
  * This screen:
- *   1. Reads the quote data from the URL params (injected by expo-router).
- *   2. Stores the quote in useDeepLinkStore so QuoteCard shows it.
+ *   1. Reads the quote from `widget-shown-{widgetId}` (falls back to cachedQuote).
+ *   2. Stores it in useDeepLinkStore so QuoteCard shows it.
  *   3. Immediately navigates back to the main screen — the user never sees this.
  */
 import React, { useEffect } from 'react';
@@ -23,50 +26,49 @@ import type { WidgetInstanceConfig } from '../store/useWidgetStore';
 
 export default function WidgetOpenScreen() {
   const router = useRouter();
-  const { text, author, id, widgetId } = useLocalSearchParams<{
-    text?: string;
-    author?: string;
-    id?: string;
-    widgetId?: string;
-  }>();
+  const { widgetId } = useLocalSearchParams<{ widgetId?: string }>();
 
   useEffect(() => {
     async function handleAndNavigate() {
-      const resolvedText = text ? String(text) : null;
-      const resolvedAuthor = String(author ?? '');
-      const resolvedId = String(id ?? '');
+      const wid = String(widgetId ?? '');
 
-      if (resolvedText) {
-        // Quote content is embedded in the URI — no network or AsyncStorage needed.
-        useDeepLinkStore.getState().setPendingQuote({
-          id:     resolvedId,
-          text:   resolvedText,
-          author: resolvedAuthor,
-        });
-      } else if (widgetId) {
-        // Fallback: widget rendered before the text-embedding update.
+      if (wid) {
         try {
-          const raw = await AsyncStorage.getItem('widget-store-v2');
-          if (raw) {
-            const parsed = JSON.parse(raw) as {
-              state?: { widgetConfigs?: Record<string, WidgetInstanceConfig> };
-            };
-            const cached = parsed?.state?.widgetConfigs?.[String(widgetId)]?.cachedQuote;
-            if (cached) {
+          // Primary: read the quote that was last rendered onto the widget face.
+          const shown = await AsyncStorage.getItem(`widget-shown-${wid}`);
+          if (shown) {
+            const parsed = JSON.parse(shown) as { text?: string; author?: string; id?: string };
+            if (parsed.text) {
               useDeepLinkStore.getState().setPendingQuote({
-                id:     cached.quoteId ?? '',
-                text:   cached.text,
-                author: cached.author,
+                id:     parsed.id ?? '',
+                text:   parsed.text,
+                author: parsed.author ?? '',
               });
             }
+          } else {
+            // Fallback: widget rendered before the widget-shown key was introduced.
+            const raw = await AsyncStorage.getItem('widget-store-v2');
+            if (raw) {
+              const store = JSON.parse(raw) as {
+                state?: { widgetConfigs?: Record<string, WidgetInstanceConfig> };
+              };
+              const cached = store?.state?.widgetConfigs?.[wid]?.cachedQuote;
+              if (cached) {
+                useDeepLinkStore.getState().setPendingQuote({
+                  id:     cached.quoteId ?? '',
+                  text:   cached.text,
+                  author: cached.author,
+                });
+              }
+            }
           }
-        } catch {}
+        } catch {
+          // Non-critical — navigate to main screen regardless.
+        }
       }
 
-      // Return to the main screen. canGoBack() is true when the app was already
-      // running (warm start) — the stack is [index → widget-open] and we go
-      // back. On a cold start expo-router may have placed index below us
-      // already; if not, replace navigates there directly.
+      // Return to the main screen. canGoBack() is true on warm start
+      // (stack: [index → widget-open]). On cold start replace navigates directly.
       if (router.canGoBack()) {
         router.back();
       } else {

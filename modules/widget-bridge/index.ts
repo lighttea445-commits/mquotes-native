@@ -76,6 +76,7 @@ class WidgetBridgeClass {
     try {
       const React = (await import('react')).default;
       const { QuoteWidget } = await import('../../widget/QuoteWidget');
+      const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
 
       await requestWidgetUpdateById({
         widgetName: WIDGET_NAME,
@@ -87,6 +88,12 @@ class WidgetBridgeClass {
             widgetInfo: info,
           }),
       });
+
+      // Track what is now displayed so widget-open.tsx reads the right quote.
+      await AsyncStorage.setItem(
+        `widget-shown-${payload.widgetId}`,
+        JSON.stringify({ text: payload.quote.text, author: payload.quote.author, id: payload.quote.id ?? '' }),
+      );
     } catch (err) {
       console.warn('[WidgetBridge] updateWidget error:', err);
     }
@@ -107,6 +114,10 @@ class WidgetBridgeClass {
         ? (JSON.parse(raw) as { state: { widgetConfigs: Record<string, WidgetInstanceConfig> } }).state.widgetConfigs
         : {};
 
+      // Track which quote each widget instance rendered so we can persist
+      // widget-shown-{widgetId} for accurate widget-tap deep-link resolution.
+      const rendered: Array<{ widgetId: number; quote: QuoteData }> = [];
+
       await requestWidgetUpdate({
         widgetName: WIDGET_NAME,
         renderWidget: (info) => {
@@ -115,9 +126,20 @@ class WidgetBridgeClass {
           const quote: QuoteData = cached
             ? { id: cached.quoteId, text: cached.text, author: cached.author }
             : { id: '', text: 'The only way to do great work is to love what you do.', author: 'Steve Jobs' };
+          rendered.push({ widgetId: info.widgetId, quote });
           return React.createElement(QuoteWidget, { quote, config, widgetInfo: info });
         },
       });
+
+      // Write widget-shown for every rendered instance.
+      await Promise.all(
+        rendered.map(({ widgetId, quote }) =>
+          AsyncStorage.setItem(
+            `widget-shown-${widgetId}`,
+            JSON.stringify({ text: quote.text, author: quote.author, id: quote.id ?? '' }),
+          ),
+        ),
+      );
     } catch (err) {
       console.warn('[WidgetBridge] reloadTimelines error:', err);
     }

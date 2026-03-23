@@ -163,6 +163,13 @@ async function widgetTaskHandler(props: WidgetTaskHandlerProps) {
     }
 
     renderWidget(React.createElement(QuoteWidget, { quote, config, widgetInfo }));
+
+    // Persist what is now rendered on screen so widget-open.tsx reads the
+    // correct quote regardless of background-refresh race conditions.
+    await AsyncStorage.setItem(
+      `widget-shown-${widgetInfo.widgetId}`,
+      JSON.stringify({ text: quote.text, author: quote.author, id: quote.id ?? '' }),
+    );
   }
 }
 
