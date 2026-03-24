@@ -421,12 +421,14 @@ export function QuoteCard() {
   }, [converted, isSharingMedia]);
 
   const handleToggleWatermark = useCallback(() => {
+    if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (!isPro) {
-      if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      modal ? modal.openSheet('features') : setShowPremiumModal(true);
+      setShowShareSheet(false);
+      setTimeout(() => {
+        modal ? modal.openSheet('features') : setShowPremiumModal(true);
+      }, 350);
       return;
     }
-    if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setWatermarkRemoved(prev => !prev);
   }, [isPro, modal]);
 
