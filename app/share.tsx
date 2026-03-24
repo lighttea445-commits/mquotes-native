@@ -7,7 +7,6 @@ import {
   ScrollView,
   useWindowDimensions,
   Share,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -28,13 +27,6 @@ const captureRef: ((ref: React.RefObject<any>, opts: object) => Promise<string>)
 
 const Clipboard: { setStringAsync: (t: string) => Promise<void> } | null = (() => {
   try { return require('expo-clipboard'); } catch { return null; }
-})();
-
-const MediaLibrary: {
-  requestPermissionsAsync: () => Promise<{ status: string }>;
-  saveToLibraryAsync: (uri: string) => Promise<void>;
-} | null = (() => {
-  try { return require('expo-media-library'); } catch { return null; }
 })();
 
 export default function ShareScreen({ onClose }: { onClose?: () => void }) {
@@ -58,32 +50,6 @@ export default function ShareScreen({ onClose }: { onClose?: () => void }) {
     setTimeout(() => setCopiedFeedback(false), 1500);
     analytics.track('quote_copied', { author });
   }, [quote, author]);
-
-  const handleSaveImage = useCallback(async () => {
-    if (isBusy) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setIsBusy(true);
-    try {
-      if (!captureRef || !MediaLibrary) {
-        Alert.alert('Dev build required', 'Saving images requires a development build.');
-        return;
-      }
-      const uri = await captureRef(cardRef, { format: 'png', quality: 1.0, result: 'tmpfile' });
-      const { status } = await MediaLibrary.requestPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission required', 'Please allow photo library access in Settings, then try again.');
-        return;
-      }
-      await MediaLibrary.saveToLibraryAsync(uri);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert('Saved!', 'Quote image saved to your photo library.');
-    } catch (e) {
-      errorReporting.captureException(e as Error, { context: 'ShareScreen:save' });
-      Alert.alert('Could not save image', 'Please try again.');
-    } finally {
-      setIsBusy(false);
-    }
-  }, [isBusy]);
 
   const handleShare = useCallback(async () => {
     if (isBusy) return;
@@ -152,15 +118,6 @@ export default function ShareScreen({ onClose }: { onClose?: () => void }) {
 
           {/* Action buttons */}
           <View style={styles.actions}>
-            <TouchableOpacity onPress={handleSaveImage} style={styles.actionItem}>
-              <View style={[styles.actionCircle, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                <MaterialCommunityIcons name="tray-arrow-down" size={22} color={theme.text} />
-              </View>
-              <Text style={[styles.actionLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
-                {'Save\nimage'}
-              </Text>
-            </TouchableOpacity>
-
             <TouchableOpacity onPress={handleCopyText} style={styles.actionItem}>
               <View style={[styles.actionCircle, { backgroundColor: theme.surface, borderColor: copiedFeedback ? theme.gold : theme.border }]}>
                 <MaterialCommunityIcons
