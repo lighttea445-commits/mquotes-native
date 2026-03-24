@@ -41,7 +41,12 @@ export const ShareCard = forwardRef<View, Props>(({ quote, author, theme, size, 
         style={{
           flex: 1,
           paddingHorizontal: padding,
-          paddingBottom: padding,
+          // When watermark is shown, push text up so it never overlaps the brand bar.
+          // brandBoxHeight + bottom offset + a small gap = padding * 0.75 + brandBoxHeight + padding * 0.4
+          paddingBottom: showWatermark
+            ? Math.round(padding * 0.75 + brandBoxHeight + padding * 0.4)
+            : padding,
+          paddingTop: padding,
           justifyContent: 'center',
           alignItems: 'center',
         }}
