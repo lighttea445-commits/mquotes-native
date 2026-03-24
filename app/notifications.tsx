@@ -624,7 +624,7 @@ const ss = StyleSheet.create({
   timeBtnText: { fontSize: 16, fontWeight: '700' },
 
   // ── Day chips ──────────────────────────────────────────────────────────
-  dayChipsWrap: { flexDirection: 'row', gap: 8 },
+  dayChipsWrap: { flexDirection: 'row', justifyContent: 'space-between' },
   dayChip: {
     width: 40, height: 40, borderRadius: 20,
     borderWidth: 1,
