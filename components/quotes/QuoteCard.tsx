@@ -98,6 +98,7 @@ export function QuoteCard() {
   const [copiedFeedback, setCopiedFeedback] = useState(false);
   const [showShareSheet, setShowShareSheet] = useState(false);
   const shareCardRef = useRef<View>(null);
+  const sharePreviewRef = useRef<View>(null);
   const isFetching = useRef(false);
   // Incremented by the deep-link effect to cancel any in-flight loadQuotes fetch.
   const loadGenRef = useRef(0);
@@ -364,7 +365,9 @@ export function QuoteCard() {
     try {
       if (captureRef) {
         try {
-          const uri = await captureRef(shareCardRef, { format: 'png', quality: 1.0, result: 'tmpfile' });
+          // Prefer the visible preview card in the share sheet; fall back to hidden capture card
+          const ref = sharePreviewRef.current ? sharePreviewRef : shareCardRef;
+          const uri = await captureRef(ref, { format: 'png', quality: 1.0, result: 'tmpfile' });
           const canShare = await ExpoSharing.isAvailableAsync();
           if (canShare) {
             await ExpoSharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Share Quote' });
@@ -707,13 +710,15 @@ export function QuoteCard() {
 
           {/* Card preview */}
           <View style={styles.sheetCardWrapper}>
-            <ShareCard
-              quote={converted?.text ?? ''}
-              author={converted?.author ?? ''}
-              theme={theme}
-              size={Math.round(SCREEN_WIDTH * 0.72)}
-              showWatermark={!(isPro && watermarkRemoved)}
-            />
+            <View ref={sharePreviewRef} collapsable={false} renderToHardwareTextureAndroid>
+              <ShareCard
+                quote={converted?.text ?? ''}
+                author={converted?.author ?? ''}
+                theme={theme}
+                size={Math.round(SCREEN_WIDTH * 0.72)}
+                showWatermark={!(isPro && watermarkRemoved)}
+              />
+            </View>
           </View>
 
           {/* Action buttons */}
