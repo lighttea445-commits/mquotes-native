@@ -16,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
+import { THEMES } from '../constants/themes';
 import {
   useWidgetStore,
   WidgetType,
@@ -136,6 +137,74 @@ const pickerStyles = StyleSheet.create({
   },
   rowLabel: { fontSize: 15 },
 });
+
+// ── Theme picker modal ─────────────────────────────────────────────────────────
+
+const WIDGET_THEME_OPTIONS = [
+  { id: 'default', name: 'Default (Dark)', background: '#080808', text: '#FFFFFF' },
+  ...THEMES.map((t) => ({ id: t.id, name: t.name, background: t.background, text: t.text })),
+];
+
+function ThemePickerModal({
+  visible,
+  selected,
+  onSelect,
+  onClose,
+  theme,
+}: {
+  visible: boolean;
+  selected: string;
+  onSelect: (id: string) => void;
+  onClose: () => void;
+  theme: ReturnType<typeof useTheme>;
+}) {
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <TouchableOpacity style={pickerStyles.backdrop} activeOpacity={1} onPress={onClose} />
+      <View style={[pickerStyles.sheet, { backgroundColor: theme.navBackground }]}>
+        <View style={[pickerStyles.handle, { backgroundColor: theme.border }]} />
+        <Text style={[pickerStyles.title, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
+          Background Theme
+        </Text>
+        <FlatList
+          data={WIDGET_THEME_OPTIONS}
+          keyExtractor={(o) => o.id}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={[
+                pickerStyles.row,
+                {
+                  backgroundColor: item.id === selected ? theme.surface : 'transparent',
+                  borderColor: theme.border,
+                },
+              ]}
+              onPress={() => { onSelect(item.id); onClose(); }}
+            >
+              {/* Color swatch */}
+              <View
+                style={{
+                  width: 22,
+                  height: 22,
+                  borderRadius: 11,
+                  backgroundColor: item.background,
+                  borderWidth: 1,
+                  borderColor: theme.border,
+                  marginRight: 4,
+                }}
+              />
+              <Text style={[pickerStyles.rowLabel, { color: theme.text, fontFamily: theme.uiFontFamily, flex: 1 }]}>
+                {item.name}
+              </Text>
+              {item.id === selected && (
+                <MaterialCommunityIcons name="check" size={18} color={theme.gold} />
+              )}
+            </TouchableOpacity>
+          )}
+        />
+      </View>
+    </Modal>
+  );
+}
 
 // ── Settings row ──────────────────────────────────────────────────────────────
 
@@ -393,7 +462,7 @@ const emptyStyles = StyleSheet.create({
 
 // ── Main screen ───────────────────────────────────────────────────────────────
 
-type ActivePicker = 'interval' | 'quoteType' | 'textSize' | null;
+type ActivePicker = 'interval' | 'quoteType' | 'textSize' | 'theme' | null;
 
 export default function WidgetsScreen({ onClose, onBack, onContinue }: { onClose?: () => void; onBack?: () => void; onContinue?: () => void }) {
   const theme = useTheme();
@@ -551,6 +620,7 @@ export default function WidgetsScreen({ onClose, onBack, onContinue }: { onClose
         showAuthor:    editorConfig.showAuthor,
         transparentBg: editorConfig.transparentBg,
         textSize:      editorConfig.textSize,
+        themeId:       editorConfig.themeId ?? 'default',
       },
     });
 
@@ -672,6 +742,15 @@ export default function WidgetsScreen({ onClose, onBack, onContinue }: { onClose
                 value={TEXT_SIZE_LABELS[editorConfig.textSize]}
                 onPress={gated(() => setActivePicker('textSize'))}
                 theme={theme}
+              />
+
+              <View style={[rowStyles.separator, { backgroundColor: theme.border }]} />
+              <SettingsRow
+                icon="palette-outline"
+                label="Background theme"
+                value={WIDGET_THEME_OPTIONS.find((t) => t.id === editorConfig.themeId)?.name ?? 'Default (Dark)'}
+                onPress={gated(() => setActivePicker('theme'))}
+                theme={theme}
                 isLast
               />
             </View>
@@ -714,6 +793,13 @@ export default function WidgetsScreen({ onClose, onBack, onContinue }: { onClose
           options={textSizeOptions}
           selected={editorConfig.textSize}
           onSelect={(v) => updateConfig({ textSize: v })}
+          onClose={() => setActivePicker(null)}
+          theme={theme}
+        />
+        <ThemePickerModal
+          visible={activePicker === 'theme'}
+          selected={editorConfig.themeId ?? 'default'}
+          onSelect={(id) => updateConfig({ themeId: id })}
           onClose={() => setActivePicker(null)}
           theme={theme}
         />

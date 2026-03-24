@@ -2,6 +2,7 @@ import React from 'react';
 import { FlexWidget, TextWidget } from 'react-native-android-widget';
 import type { WidgetInfo } from 'react-native-android-widget';
 import type { WidgetInstanceConfig } from '../store/useWidgetStore';
+import { getTheme } from '../constants/themes';
 
 export interface QuoteData {
   id?: string;
@@ -27,7 +28,7 @@ function adaptiveFontSize(
 
 interface Props {
   quote: QuoteData;
-  config: Pick<WidgetInstanceConfig, 'showAuthor' | 'transparentBg' | 'textSize'>;
+  config: Pick<WidgetInstanceConfig, 'showAuthor' | 'transparentBg' | 'textSize' | 'themeId'>;
   widgetInfo: WidgetInfo;
 }
 
@@ -48,6 +49,16 @@ export function QuoteWidget({ quote, config, widgetInfo }: Props) {
   // after every renderWidget call) and read by app/widget-open.tsx.
   const tapUri = `quotable://widget-open?widgetId=${widgetInfo.widgetId}`;
 
+  // Resolve theme colors. 'default' keeps the original dark look.
+  // Only the solid background color is used — widget primitives don't support
+  // background images, so we deliberately ignore theme.backgroundImage here.
+  const appTheme  = config.themeId !== 'default' ? getTheme(config.themeId) : null;
+  const bgColor   = config.transparentBg
+    ? ('#00000000' as `#${string}`)
+    : ((appTheme?.background ?? '#080808') as `#${string}`);
+  const textColor = (appTheme?.text      ?? '#FFFFFF') as `#${string}`;
+  const mutedColor = appTheme?.textMuted ?? 'rgba(255, 255, 255, 0.65)';
+
   return (
     <FlexWidget
       style={{
@@ -57,7 +68,7 @@ export function QuoteWidget({ quote, config, widgetInfo }: Props) {
         alignItems: 'center',
         padding,
         borderRadius: 16,
-        backgroundColor: (config.transparentBg ? '#00000000' : '#080808') as `#${string}`,
+        backgroundColor: bgColor,
       }}
       clickAction="OPEN_URI"
       clickActionData={{ uri: tapUri }}
@@ -65,7 +76,7 @@ export function QuoteWidget({ quote, config, widgetInfo }: Props) {
       <TextWidget
         text={quote.text}
         style={{
-          color: '#FFFFFF',
+          color: textColor,
           fontSize,
           fontFamily: 'serif',
           textAlign: 'center',
@@ -78,7 +89,7 @@ export function QuoteWidget({ quote, config, widgetInfo }: Props) {
         <TextWidget
           text={`\u2014 ${quote.author}`}
           style={{
-            color: 'rgba(255, 255, 255, 0.65)' as const,
+            color: mutedColor as `#${string}`,
             fontSize: authorSize,
             fontFamily: 'sans-serif',
             textAlign: 'right',
