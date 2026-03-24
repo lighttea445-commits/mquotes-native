@@ -8,6 +8,7 @@ import {
   useWindowDimensions,
   Share,
   Modal,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
@@ -39,25 +40,13 @@ import { useModal } from '../../contexts/ModalContext';
 import { DailyReflectPill } from './DailyReflectPill';
 import { PremiumModal } from '../subscriptions/PremiumModal';
 import * as ExpoSharing from 'expo-sharing';
-let ExpoClipboard: { setStringAsync: (text: string) => Promise<void> } | null = null;
-try {
-  ExpoClipboard = require('expo-clipboard');
-} catch {}
+import * as ExpoClipboard from 'expo-clipboard';
+import * as MediaLibrary from 'expo-media-library';
+import { captureRef } from 'react-native-view-shot';
 
 import { ShareCard } from './ShareCard';
 import { errorReporting } from '../../lib/errorReporting';
 import { analytics } from '../../lib/analytics';
-
-let saveToLibrary: ((uri: string) => Promise<void>) | null = null;
-let requestMediaPermissions: (() => Promise<{ status: string }>) | null = null;
-try {
-  const MediaLibrary = require('expo-media-library');
-  saveToLibrary = MediaLibrary.saveToLibraryAsync;
-  requestMediaPermissions = MediaLibrary.requestPermissionsAsync;
-} catch {}
-
-let captureRef: ((ref: React.RefObject<any>, opts: object) => Promise<string>) | null = null;
-try { captureRef = require('react-native-view-shot').captureRef; } catch {}
 
 // Maximum quotes to keep prefetched ahead. Prevents unbounded buffer growth.
 const MAX_BUFFER_AHEAD = 20;
@@ -363,24 +352,16 @@ export function QuoteCard() {
     analytics.track('quote_shared', { author: converted.author, category: converted.category });
     setIsSharingMedia(true);
     try {
-      if (captureRef) {
-        try {
-          // Prefer the visible preview card in the share sheet; fall back to hidden capture card
-          const ref = sharePreviewRef.current ? sharePreviewRef : shareCardRef;
-          const uri = await captureRef(ref, { format: 'png', quality: 1.0, result: 'tmpfile' });
-          const canShare = await ExpoSharing.isAvailableAsync();
-          if (canShare) {
-            await ExpoSharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Share Quote' });
-            return;
-          }
-        } catch (captureErr) {
-          errorReporting.captureException(captureErr as Error, { context: 'handleShare:capture' });
-          // fall through to text share
-        }
+      const uri = await captureRef(shareCardRef, { format: 'png', quality: 1.0, result: 'tmpfile' });
+      const canShare = await ExpoSharing.isAvailableAsync();
+      if (canShare) {
+        await ExpoSharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Share Quote' });
+      } else {
+        await Share.share({ message: `"${converted.text}"\n\n— ${converted.author}` });
       }
-      await Share.share({ message: `"${converted.text}"\n\n— ${converted.author}` });
     } catch (e) {
       errorReporting.captureException(e as Error, { context: 'handleShare' });
+      Alert.alert('Could not share', 'Please try again.');
     } finally {
       setIsSharingMedia(false);
     }
@@ -389,7 +370,7 @@ export function QuoteCard() {
   const handleCopyText = useCallback(async () => {
     if (!converted) return;
     if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    await ExpoClipboard?.setStringAsync(converted.text);
+    await ExpoClipboard.setStringAsync(converted.text);
     setCopiedFeedback(true);
     setTimeout(() => setCopiedFeedback(false), 1500);
     analytics.track('quote_copied', { author: converted.author, category: converted.category });
@@ -401,17 +382,13 @@ export function QuoteCard() {
     analytics.track('quote_saved', { author: converted.author, category: converted.category });
     setIsSharingMedia(true);
     try {
-      if (captureRef) {
-        const ref = sharePreviewRef.current ? sharePreviewRef : shareCardRef;
-        const uri = await captureRef(ref, { format: 'png', quality: 1.0, result: 'tmpfile' });
-        if (saveToLibrary && requestMediaPermissions) {
-          const { status } = await requestMediaPermissions();
-          if (status === 'granted') {
-            await saveToLibrary(uri);
-            return;
-          }
-        }
-        // Fallback: share if no media library access
+      const uri = await captureRef(shareCardRef, { format: 'png', quality: 1.0, result: 'tmpfile' });
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status === 'granted') {
+        await MediaLibrary.saveToLibraryAsync(uri);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } else {
+        // Fallback: share sheet
         const canShare = await ExpoSharing.isAvailableAsync();
         if (canShare) {
           await ExpoSharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Save Quote Image' });
@@ -419,6 +396,7 @@ export function QuoteCard() {
       }
     } catch (e) {
       errorReporting.captureException(e as Error, { context: 'handleSaveImage' });
+      Alert.alert('Could not save image', 'Please try again.');
     } finally {
       setIsSharingMedia(false);
     }
@@ -776,8 +754,8 @@ export function QuoteCard() {
         </View>
       </Modal>
 
-      {/* Hidden card for image capture — opacity:0 keeps it in viewport so Fabric allocates a real native view */}
-      <View style={{ position: 'absolute', top: 0, left: 0, opacity: 0 }} pointerEvents="none" collapsable={false}>
+      {/* Hidden card for image capture — translated off-screen so Android fully renders it (opacity:0 breaks captureRef on Android) */}
+      <View style={{ position: 'absolute', top: 0, left: -5000 }} pointerEvents="none" collapsable={false}>
         <View ref={shareCardRef} collapsable={false} renderToHardwareTextureAndroid style={{ borderRadius: 0, overflow: 'hidden' }}>
           <ShareCard
             quote={converted?.text ?? ''}
