@@ -8,20 +8,11 @@ import { useAppStore } from '../store/useAppStore';
 import { useStreak } from '../hooks/useStreak';
 import { useFavoritesStore } from '../store/useFavoritesStore';
 import { useHistoryStore } from '../store/useHistoryStore';
-import { useMixStore } from '../store/useMixStore';
-import { useUserQuotesStore } from '../store/useUserQuotesStore';
 import { useReflectStore } from '../store/useReflectStore';
-import { useWidgetStore } from '../store/useWidgetStore';
 import { StreakCard } from '../components/ui/StreakCard';
+import { StreakShareSheet } from '../components/streak/StreakShareSheet';
 import { useRevenueCat, setForcePro, getForcePro } from '../hooks/useRevenueCat';
 import { useModal } from '../contexts/ModalContext';
-import { ConfirmSheet } from '../components/ui/ConfirmSheet';
-
-const STAT_ICONS: Record<string, string> = {
-  Favorites: 'heart',
-  'Quotes Read': 'book-open-variant',
-  Reflections: 'pencil',
-};
 
 function StatCard({ label, value, theme }: { label: string; value: string | number; theme: ReturnType<typeof useTheme> }) {
   return (
@@ -35,22 +26,17 @@ function StatCard({ label, value, theme }: { label: string; value: string | numb
 export default function ProfileScreen({ onClose }: { onClose?: () => void }) {
   const theme = useTheme();
   const router = useRouter();
-  const { preferences, setPreferences, resetApp } = useAppStore();
+  const { preferences } = useAppStore();
   const { streakCount, weekData } = useStreak();
   const favorites = useFavoritesStore((s) => s.favorites);
   const totalQuotesRead = useHistoryStore((s) => s.totalQuotesRead);
   const { isPro } = useRevenueCat();
-  const clearFavorites = useFavoritesStore((s) => s.clearFavorites);
-  const clearHistory = useHistoryStore((s) => s.clearHistory);
-  const clearMix = useMixStore((s) => s.clearMix);
-  const clearUserQuotes = useUserQuotesStore((s) => s.clearUserQuotes);
-  const clearReflections = useReflectStore((s) => s.clearReflections);
-  const clearWidgetConfigs = useWidgetStore((s) => s.clearWidgetConfigs);
   const reflectionsCount = useReflectStore((s) => s.reflections.length);
   const modal = useModal();
   const close = onClose ?? (() => router.back());
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const openThemes = () => modal ? modal.openSheet('themes') : router.push('/themes');
+  const [showStreakShare, setShowStreakShare] = useState(false);
+
+  const openSettings = () => modal ? modal.openSheet('settings') : router.push('/settings');
 
   const handleHistory = () => {
     if (isPro) {
@@ -60,30 +46,8 @@ export default function ProfileScreen({ onClose }: { onClose?: () => void }) {
     }
   };
 
-  const handleJournal = () => {
-    if (isPro) {
-      modal ? modal.openSheet('journal') : router.push('/journal');
-    } else {
-      modal ? modal.openSheet('features') : router.push('/journal');
-    }
-  };
-
-  const handleDeleteAccount = () => setShowDeleteConfirm(true);
-
-  const confirmDeleteAccount = () => {
-    clearFavorites();
-    clearHistory();
-    clearMix();
-    clearUserQuotes();
-    clearReflections();
-    clearWidgetConfigs();
-    resetApp();
-    router.replace('/onboarding');
-  };
-
   return (
     <View style={[styles.root, { backgroundColor: theme.background }]}>
-      {/* Drag handle hidden when used inline (BottomSheet has its own) */}
       {!onClose && (
         <View style={styles.dragHandle}>
           <View style={[styles.dragPill, { backgroundColor: theme.border }]} />
@@ -99,20 +63,32 @@ export default function ProfileScreen({ onClose }: { onClose?: () => void }) {
           <Text style={[styles.headerTitle, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
             Profile
           </Text>
-          <View style={{ width: 36 }} />
+          <TouchableOpacity onPress={openSettings} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Text style={[styles.settingsLink, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>Settings</Text>
+          </TouchableOpacity>
         </View>
 
         <ScrollView showsVerticalScrollIndicator={false}>
-          {/* Name section */}
+          {/* Name */}
           <View style={styles.nameSection}>
             <Text style={[styles.name, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
               Hey {preferences.name || 'Reader'}
             </Text>
           </View>
 
-          {/* Streak card — gold sun + 7-day tracker */}
+          {/* Streak card */}
           <View style={styles.streakWrapper}>
             <StreakCard streakCount={streakCount} weekData={weekData} />
+            <TouchableOpacity
+              style={[styles.shareStreakBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}
+              onPress={() => setShowStreakShare(true)}
+              activeOpacity={0.75}
+            >
+              <MaterialCommunityIcons name="share-variant-outline" size={16} color={theme.textMuted} />
+              <Text style={[styles.shareStreakText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+                Share streak
+              </Text>
+            </TouchableOpacity>
           </View>
 
           {/* Stats row */}
@@ -122,11 +98,11 @@ export default function ProfileScreen({ onClose }: { onClose?: () => void }) {
             <StatCard label="Reflections" value={reflectionsCount} theme={theme} />
           </View>
 
-          {/* Settings */}
+          {/* Feature rows */}
           <View style={styles.section}>
             <TouchableOpacity
               style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border }]}
-              onPress={openThemes}
+              onPress={() => modal ? modal.openSheet('themes') : router.push('/themes')}
             >
               <MaterialCommunityIcons name="palette-outline" size={20} color={theme.gold} />
               <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>Theme</Text>
@@ -139,15 +115,6 @@ export default function ProfileScreen({ onClose }: { onClose?: () => void }) {
             >
               <MaterialCommunityIcons name="history" size={20} color={theme.gold} />
               <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>History</Text>
-              <MaterialCommunityIcons name="chevron-right" size={18} color={theme.textMuted} />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border }]}
-              onPress={handleJournal}
-            >
-              <MaterialCommunityIcons name="pencil-outline" size={20} color={theme.gold} />
-              <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>Reflections</Text>
               <MaterialCommunityIcons name="chevron-right" size={18} color={theme.textMuted} />
             </TouchableOpacity>
 
@@ -166,14 +133,14 @@ export default function ProfileScreen({ onClose }: { onClose?: () => void }) {
             >
               <MaterialCommunityIcons name="bell-outline" size={20} color={theme.gold} />
               <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>Notifications</Text>
-              <Text style={[styles.menuValue, { color: theme.textMuted }]}>
-                {preferences.notificationsEnabled ? 'On' : 'Off'}
-              </Text>
               <MaterialCommunityIcons name="chevron-right" size={18} color={theme.textMuted} />
             </TouchableOpacity>
-            {__DEV__ && (
+          </View>
+
+          {__DEV__ && (
+            <View style={{ paddingHorizontal: 16, marginBottom: 24 }}>
               <TouchableOpacity
-                style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: '#B8975A', borderStyle: 'dashed' }]}
+                style={[styles.devItem, { backgroundColor: theme.surface, borderColor: '#B8975A' }]}
                 onPress={() => {
                   const current = getForcePro();
                   if (current === null) setForcePro(true);
@@ -182,35 +149,22 @@ export default function ProfileScreen({ onClose }: { onClose?: () => void }) {
                 }}
               >
                 <MaterialCommunityIcons name="test-tube" size={20} color="#B8975A" />
-                <Text style={[styles.menuText, { color: '#B8975A', fontFamily: theme.uiFontFamily }]}>
-                  Force Pro (dev)
-                </Text>
-                <Text style={{ color: '#B8975A', fontFamily: theme.uiFontFamily, fontSize: 12 }}>
+                <Text style={[styles.devText, { fontFamily: theme.uiFontFamily }]}>Force Pro (dev)</Text>
+                <Text style={[styles.devValue, { fontFamily: theme.uiFontFamily }]}>
                   {getForcePro() === null ? 'real' : getForcePro() ? 'ON' : 'OFF'}
                 </Text>
               </TouchableOpacity>
-            )}
+            </View>
+          )}
 
-            <TouchableOpacity
-              style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border }]}
-              onPress={handleDeleteAccount}
-            >
-              <MaterialCommunityIcons name="delete-outline" size={20} color="#EF4444" />
-              <Text style={[styles.menuText, { color: '#EF4444', fontFamily: theme.uiFontFamily }]}>Delete Account</Text>
-            </TouchableOpacity>
-          </View>
+          <View style={{ height: 40 }} />
         </ScrollView>
       </SafeAreaView>
 
-      <ConfirmSheet
-        visible={showDeleteConfirm}
-        onClose={() => setShowDeleteConfirm(false)}
-        title="Delete Account"
-        message="This will permanently erase all your data: favorites, history, quotes, and preferences. This cannot be undone."
-        confirmLabel="Delete"
-        destructive
-        cancelLabel="Cancel"
-        onConfirm={confirmDeleteAccount}
+      <StreakShareSheet
+        visible={showStreakShare}
+        streakCount={streakCount}
+        onClose={() => setShowStreakShare(false)}
       />
     </View>
   );
@@ -253,12 +207,6 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 20,
   },
-  greeting: {
-    fontSize: 13,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-    marginBottom: 4,
-  },
   name: {
     fontSize: 32,
     fontWeight: '700',
@@ -266,6 +214,19 @@ const styles = StyleSheet.create({
   streakWrapper: {
     marginHorizontal: 16,
     marginBottom: 16,
+    gap: 10,
+  },
+  shareStreakBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingVertical: 10,
+  },
+  shareStreakText: {
+    fontSize: 13,
   },
   statsRow: {
     flexDirection: 'row',
@@ -279,10 +240,8 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 8,
     borderWidth: 1,
-    flexDirection: 'column',
     alignItems: 'center',
     gap: 4,
-    overflow: 'hidden',
   },
   statValue: {
     fontSize: 20,
@@ -295,15 +254,13 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     textAlign: 'center',
   },
+  settingsLink: {
+    fontSize: 14,
+  },
   section: {
     paddingHorizontal: 16,
-    marginBottom: 40,
-  },
-  sectionTitle: {
-    fontSize: 11,
-    letterSpacing: 1.5,
-    marginBottom: 8,
-    marginLeft: 4,
+    marginBottom: 24,
+    gap: 8,
   },
   menuItem: {
     flexDirection: 'row',
@@ -311,15 +268,28 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 16,
     borderWidth: 1,
-    marginBottom: 8,
     gap: 12,
   },
   menuText: {
     flex: 1,
     fontSize: 15,
   },
-  menuValue: {
-    fontSize: 13,
-    textTransform: 'capitalize',
+  devItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    gap: 12,
+  },
+  devText: {
+    flex: 1,
+    fontSize: 15,
+    color: '#B8975A',
+  },
+  devValue: {
+    fontSize: 12,
+    color: '#B8975A',
   },
 });
