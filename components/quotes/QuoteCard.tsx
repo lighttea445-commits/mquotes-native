@@ -6,8 +6,6 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   useWindowDimensions,
-  Share,
-  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
@@ -36,26 +34,10 @@ import { useDeepLinkStore } from '../../store/useDeepLinkStore';
 import { useMix } from '../../hooks/useMix';
 import { CATEGORIES } from '../../constants/categories';
 import { useModal } from '../../contexts/ModalContext';
+import { useShareStore } from '../../store/useShareStore';
 import { DailyReflectPill } from './DailyReflectPill';
 import { PremiumModal } from '../subscriptions/PremiumModal';
-import * as ExpoSharing from 'expo-sharing';
 
-const captureRef: ((ref: React.RefObject<any>, opts: object) => Promise<string>) | null = (() => {
-  try { return require('react-native-view-shot').captureRef; } catch { return null; }
-})();
-
-const Clipboard: { setStringAsync: (t: string) => Promise<void> } | null = (() => {
-  try { return require('expo-clipboard'); } catch { return null; }
-})();
-
-const MediaLibrary: {
-  requestPermissionsAsync: () => Promise<{ status: string }>;
-  saveToLibraryAsync: (uri: string) => Promise<void>;
-} | null = (() => {
-  try { return require('expo-media-library'); } catch { return null; }
-})();
-
-import { ShareCard } from './ShareCard';
 import { errorReporting } from '../../lib/errorReporting';
 import { analytics } from '../../lib/analytics';
 
@@ -78,6 +60,7 @@ export function QuoteCard() {
   const theme = useTheme();
   const router = useRouter();
   const modal = useModal();
+  const setShareQuote = useShareStore((s) => s.setQuote);
   const hapticsEnabled = useAppStore((s) => s.preferences.hapticsEnabled);
   const showAuthor = useAppStore((s) => s.preferences.showAuthor);
   const { isPro } = useRevenueCat();
@@ -93,13 +76,6 @@ export function QuoteCard() {
   const [isEmpty, setIsEmpty] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [showPremiumModal, setShowPremiumModal] = useState(false);
-  const [isSharingMedia, setIsSharingMedia] = useState(false);
-  const [watermarkRemoved, setWatermarkRemoved] = useState(false);
-  const [copiedFeedback, setCopiedFeedback] = useState(false);
-  const [showShareSheet, setShowShareSheet] = useState(false);
-  const shareSheetY = useSharedValue(1000);
-  const shareCardRef = useRef<View>(null);
-  const sharePreviewRef = useRef<View>(null);
   const isFetching = useRef(false);
   // Incremented by the deep-link effect to cancel any in-flight loadQuotes fetch.
   const loadGenRef = useRef(0);
@@ -108,20 +84,6 @@ export function QuoteCard() {
   const opacity = useSharedValue(1);
   const scale = useSharedValue(1);
 
-  const shareSheetAnimStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: shareSheetY.value }],
-  }));
-
-  const openShareSheet = useCallback(() => {
-    setShowShareSheet(true);
-    shareSheetY.value = withSpring(0, { damping: 20, stiffness: 200 });
-  }, []);
-
-  const closeShareSheet = useCallback(() => {
-    shareSheetY.value = withTiming(1000, { duration: 280 }, (finished) => {
-      if (finished) runOnJS(setShowShareSheet)(false);
-    });
-  }, []);
   const bigHeartScale = useSharedValue(0);
   const bigHeartOpacity = useSharedValue(0);
 
@@ -373,80 +335,6 @@ export function QuoteCard() {
     }
   }, [converted, favorited, toggleFavorite]);
 
-  const handleShare = useCallback(async () => {
-    if (!converted || isSharingMedia) return;
-    if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    analytics.track('quote_shared', { author: converted.author, category: converted.category });
-    setIsSharingMedia(true);
-    try {
-      if (captureRef) {
-        const uri = await captureRef(shareCardRef, { format: 'png', quality: 1.0, result: 'tmpfile' });
-        const canShare = await ExpoSharing.isAvailableAsync();
-        if (canShare) {
-          await ExpoSharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Share Quote' });
-          return;
-        }
-      }
-      // Fallback to text if capture unavailable
-      await Share.share({ message: `"${converted.text}"\n\n— ${converted.author}` });
-    } catch (e) {
-      errorReporting.captureException(e as Error, { context: 'handleShare' });
-      await Share.share({ message: `"${converted.text}"\n\n— ${converted.author}` });
-    } finally {
-      setIsSharingMedia(false);
-    }
-  }, [converted, isSharingMedia]);
-
-  const handleCopyText = useCallback(async () => {
-    if (!converted) return;
-    if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    await Clipboard?.setStringAsync(converted.text);
-    setCopiedFeedback(true);
-    setTimeout(() => setCopiedFeedback(false), 1500);
-    analytics.track('quote_copied', { author: converted.author, category: converted.category });
-  }, [converted]);
-
-  const handleSaveImage = useCallback(async () => {
-    if (!converted || isSharingMedia) return;
-    if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    analytics.track('quote_saved', { author: converted.author, category: converted.category });
-    setIsSharingMedia(true);
-    try {
-      if (!captureRef) throw new Error('captureRef unavailable');
-      const uri = await captureRef(shareCardRef, { format: 'png', quality: 1.0, result: 'tmpfile' });
-      if (MediaLibrary) {
-        const { status } = await MediaLibrary.requestPermissionsAsync();
-        if (status === 'granted') {
-          await MediaLibrary.saveToLibraryAsync(uri);
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          return;
-        }
-      }
-      // Fallback: share sheet
-      const canShare = await ExpoSharing.isAvailableAsync();
-      if (canShare) {
-        await ExpoSharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Save Quote Image' });
-      }
-    } catch (e) {
-      errorReporting.captureException(e as Error, { context: 'handleSaveImage' });
-      Alert.alert('Could not save image', 'Please try again.');
-    } finally {
-      setIsSharingMedia(false);
-    }
-  }, [converted, isSharingMedia]);
-
-  const handleToggleWatermark = useCallback(() => {
-    if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    if (!isPro) {
-      closeShareSheet();
-      setTimeout(() => {
-        modal ? modal.openSheet('features') : setShowPremiumModal(true);
-      }, 320);
-      return;
-    }
-    setWatermarkRemoved(prev => !prev);
-  }, [isPro, modal, closeShareSheet]);
-
   // Pan gesture — require 15px vertical movement before activating so taps
   // on the share/heart buttons pass through cleanly to TouchableOpacity.
   const startY = useSharedValue(0);
@@ -643,7 +531,7 @@ export function QuoteCard() {
               </Animated.View>
             </View>
             <View style={styles.actionRow}>
-              <TouchableOpacity onPress={() => { if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openShareSheet(); }} hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}>
+              <TouchableOpacity onPress={() => { if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShareQuote(converted?.text ?? '', converted?.author ?? ''); modal ? modal.openSheet('share') : router.push('/share'); }} hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}>
                 <MaterialCommunityIcons name="redo" size={32} color={theme.textMuted} />
               </TouchableOpacity>
               <TouchableOpacity onPress={handleFavorite} hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}>
@@ -694,107 +582,6 @@ export function QuoteCard() {
         {containerContent}
       </GestureDetector>
       <PremiumModal visible={showPremiumModal} onClose={() => setShowPremiumModal(false)} />
-
-      {/* ── SHARE SHEET OVERLAY (inline, same hierarchy as app so modal.openSheet works) ── */}
-      {showShareSheet && (
-      <Animated.View style={[styles.sheetScreen, { paddingTop: insets.top, paddingBottom: insets.bottom + 16 }, shareSheetAnimStyle]}>
-          {/* Drag handle */}
-          <View style={styles.sheetDragHandle}>
-            <View style={styles.sheetDragPill} />
-          </View>
-
-          {/* Header */}
-          <View style={styles.sheetHeader}>
-            <TouchableOpacity
-              onPress={closeShareSheet}
-              style={styles.sheetCloseBtn}
-              accessibilityLabel="Close share sheet"
-            >
-              <MaterialCommunityIcons name="close" size={20} color="#fff" />
-            </TouchableOpacity>
-            <Text style={[styles.sheetTitle, { fontFamily: theme.quoteFontFamily }]}>Share</Text>
-            <View style={{ width: 40 }} />
-          </View>
-
-          {/* Card preview */}
-          <View style={styles.sheetCardWrapper}>
-            <View ref={sharePreviewRef} collapsable={false} renderToHardwareTextureAndroid>
-              <ShareCard
-                quote={converted?.text ?? ''}
-                author={converted?.author ?? ''}
-                theme={theme}
-                size={Math.round(SCREEN_WIDTH * 0.72)}
-                showWatermark={!(isPro && watermarkRemoved)}
-              />
-            </View>
-          </View>
-
-          {/* Action buttons */}
-          <View style={styles.sheetActions}>
-            {/* Save image */}
-            <TouchableOpacity onPress={handleSaveImage} style={styles.sheetActionItem}>
-              <View style={styles.sheetActionCircle}>
-                <MaterialCommunityIcons name="tray-arrow-down" size={24} color="#fff" />
-              </View>
-              <Text style={[styles.sheetActionLabel, { fontFamily: theme.uiFontFamily }]}>
-                Save{'\n'}image
-              </Text>
-            </TouchableOpacity>
-
-            {/* Copy text */}
-            <TouchableOpacity onPress={handleCopyText} style={styles.sheetActionItem}>
-              <View style={[styles.sheetActionCircle, copiedFeedback && styles.sheetActionCircleActive]}>
-                <MaterialCommunityIcons
-                  name={copiedFeedback ? 'check' : 'content-copy'}
-                  size={24}
-                  color={copiedFeedback ? theme.gold : '#fff'}
-                />
-              </View>
-              <Text style={[styles.sheetActionLabel, { fontFamily: theme.uiFontFamily, color: copiedFeedback ? theme.gold : '#fff' }]}>
-                {copiedFeedback ? 'Copied!' : 'Copy\ntext'}
-              </Text>
-            </TouchableOpacity>
-
-            {/* Hide watermark */}
-            <TouchableOpacity onPress={handleToggleWatermark} style={styles.sheetActionItem}>
-              <View style={[styles.sheetActionCircle, (isPro && watermarkRemoved) && styles.sheetActionCircleActive]}>
-                <MaterialCommunityIcons
-                  name={(isPro && watermarkRemoved) ? 'image-off-outline' : 'image-minus-outline'}
-                  size={24}
-                  color={(isPro && watermarkRemoved) ? theme.gold : '#fff'}
-                />
-              </View>
-              <Text style={[styles.sheetActionLabel, { fontFamily: theme.uiFontFamily, color: (isPro && watermarkRemoved) ? theme.gold : '#fff' }]}>
-                {(isPro && watermarkRemoved) ? 'Show\nwatermark' : 'Hide\nwatermark'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Share button */}
-          <TouchableOpacity
-            onPress={handleShare}
-            style={[styles.sheetShareBtn, { borderColor: 'rgba(255,255,255,0.15)' }]}
-          >
-            <MaterialCommunityIcons name="export-variant" size={20} color="#fff" />
-            <Text style={[styles.sheetShareBtnText, { fontFamily: theme.uiFontFamily }]}>
-              Share
-            </Text>
-          </TouchableOpacity>
-        </Animated.View>
-      )}
-
-      {/* Hidden card for image capture — translated off-screen so Android fully renders it (opacity:0 breaks captureRef on Android) */}
-      <View style={{ position: 'absolute', top: 0, left: -5000 }} pointerEvents="none" collapsable={false}>
-        <View ref={shareCardRef} collapsable={false} renderToHardwareTextureAndroid style={{ borderRadius: 0, overflow: 'hidden' }}>
-          <ShareCard
-            quote={converted?.text ?? ''}
-            author={converted?.author ?? ''}
-            theme={theme}
-            size={400}
-            showWatermark={!(isPro && watermarkRemoved)}
-          />
-        </View>
-      </View>
     </>
   );
 }
@@ -919,107 +706,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 32,
     marginTop: 28,
-  },
-
-  // Share sheet screen
-  sheetScreen: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: '#000',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    zIndex: 100,
-  },
-  sheetDragHandle: {
-    width: '100%',
-    alignItems: 'center',
-    paddingTop: 8,
-    paddingBottom: 4,
-  },
-  sheetDragPill: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-  },
-  sheetHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    width: '100%',
-    paddingVertical: 8,
-    marginBottom: 24,
-  },
-  sheetCloseBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  sheetTitle: {
-    flex: 1,
-    fontSize: 22,
-    fontWeight: '600',
-    color: '#fff',
-    textAlign: 'center',
-  },
-  sheetCardWrapper: {
-    borderRadius: 20,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.6,
-    shadowRadius: 24,
-    elevation: 14,
-    marginBottom: 36,
-  },
-  sheetActions: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 32,
-    marginBottom: 36,
-  },
-  sheetActionItem: {
-    alignItems: 'center',
-    gap: 10,
-    minWidth: 72,
-  },
-  sheetActionCircle: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  sheetActionCircleActive: {
-    backgroundColor: 'rgba(184,151,90,0.15)',
-  },
-  sheetActionLabel: {
-    fontSize: 12,
-    textAlign: 'center',
-    lineHeight: 17,
-    color: '#fff',
-  },
-  sheetShareBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    width: '100%',
-    paddingVertical: 16,
-    borderRadius: 16,
-    borderWidth: 1,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-  },
-  sheetShareBtnText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#fff',
   },
 
   // Collection pill (mix / category / general)
