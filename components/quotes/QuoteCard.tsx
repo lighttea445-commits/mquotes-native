@@ -681,19 +681,29 @@ export function QuoteCard() {
       {/* ── SHARE SHEET MODAL ── */}
       <Modal
         visible={showShareSheet}
-        transparent
         animationType="slide"
         onRequestClose={() => setShowShareSheet(false)}
       >
-        <View style={[styles.sheetOverlay, { paddingBottom: insets.bottom + 24 }]}>
-          {/* Close button */}
-          <TouchableOpacity
-            onPress={() => setShowShareSheet(false)}
-            style={[styles.sheetCloseBtn, { backgroundColor: theme.surface }]}
-            accessibilityLabel="Close share sheet"
-          >
-            <MaterialCommunityIcons name="close" size={20} color={theme.text} />
-          </TouchableOpacity>
+        <View style={[styles.sheetScreen, { paddingTop: insets.top, paddingBottom: insets.bottom + 16 }]}>
+          {/* Drag handle */}
+          <View style={styles.sheetDragHandle}>
+            <View style={styles.sheetDragPill} />
+          </View>
+
+          {/* Header */}
+          <View style={styles.sheetHeader}>
+            <TouchableOpacity
+              onPress={() => setShowShareSheet(false)}
+              style={styles.sheetCloseBtn}
+              accessibilityLabel="Close share sheet"
+            >
+              <MaterialCommunityIcons name="close" size={20} color="#fff" />
+            </TouchableOpacity>
+            <View style={{ flex: 1 }} />
+          </View>
+
+          {/* Screen title */}
+          <Text style={[styles.sheetTitle, { fontFamily: theme.quoteFontFamily }]}>Share</Text>
 
           {/* Card preview */}
           <View style={styles.sheetCardWrapper}>
@@ -710,38 +720,38 @@ export function QuoteCard() {
           <View style={styles.sheetActions}>
             {/* Save image */}
             <TouchableOpacity onPress={handleSaveImage} style={styles.sheetActionItem}>
-              <View style={[styles.sheetActionCircle, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                <MaterialCommunityIcons name="tray-arrow-down" size={24} color={theme.text} />
+              <View style={styles.sheetActionCircle}>
+                <MaterialCommunityIcons name="tray-arrow-down" size={24} color="#fff" />
               </View>
-              <Text style={[styles.sheetActionLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
+              <Text style={[styles.sheetActionLabel, { fontFamily: theme.uiFontFamily }]}>
                 Save{'\n'}image
               </Text>
             </TouchableOpacity>
 
             {/* Copy text */}
             <TouchableOpacity onPress={handleCopyText} style={styles.sheetActionItem}>
-              <View style={[styles.sheetActionCircle, { backgroundColor: theme.surface, borderColor: copiedFeedback ? theme.gold : theme.border }]}>
+              <View style={[styles.sheetActionCircle, copiedFeedback && styles.sheetActionCircleActive]}>
                 <MaterialCommunityIcons
                   name={copiedFeedback ? 'check' : 'content-copy'}
                   size={24}
-                  color={copiedFeedback ? theme.gold : theme.text}
+                  color={copiedFeedback ? theme.gold : '#fff'}
                 />
               </View>
-              <Text style={[styles.sheetActionLabel, { color: copiedFeedback ? theme.gold : theme.text, fontFamily: theme.uiFontFamily }]}>
+              <Text style={[styles.sheetActionLabel, { fontFamily: theme.uiFontFamily, color: copiedFeedback ? theme.gold : '#fff' }]}>
                 {copiedFeedback ? 'Copied!' : 'Copy\ntext'}
               </Text>
             </TouchableOpacity>
 
             {/* Hide watermark */}
             <TouchableOpacity onPress={handleToggleWatermark} style={styles.sheetActionItem}>
-              <View style={[styles.sheetActionCircle, { backgroundColor: theme.surface, borderColor: (isPro && watermarkRemoved) ? theme.gold : theme.border }]}>
+              <View style={[styles.sheetActionCircle, (isPro && watermarkRemoved) && styles.sheetActionCircleActive]}>
                 <MaterialCommunityIcons
                   name={(isPro && watermarkRemoved) ? 'image-off-outline' : 'image-minus-outline'}
                   size={24}
-                  color={(isPro && watermarkRemoved) ? theme.gold : theme.text}
+                  color={(isPro && watermarkRemoved) ? theme.gold : '#fff'}
                 />
               </View>
-              <Text style={[styles.sheetActionLabel, { color: (isPro && watermarkRemoved) ? theme.gold : theme.text, fontFamily: theme.uiFontFamily }]}>
+              <Text style={[styles.sheetActionLabel, { fontFamily: theme.uiFontFamily, color: (isPro && watermarkRemoved) ? theme.gold : '#fff' }]}>
                 {(isPro && watermarkRemoved) ? 'Show\nwatermark' : 'Hide\nwatermark'}
               </Text>
             </TouchableOpacity>
@@ -750,10 +760,10 @@ export function QuoteCard() {
           {/* Share button */}
           <TouchableOpacity
             onPress={handleShare}
-            style={[styles.sheetShareBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}
+            style={[styles.sheetShareBtn, { borderColor: 'rgba(255,255,255,0.15)' }]}
           >
-            <MaterialCommunityIcons name="export-variant" size={20} color={theme.text} />
-            <Text style={[styles.sheetShareBtnText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
+            <MaterialCommunityIcons name="export-variant" size={20} color="#fff" />
+            <Text style={[styles.sheetShareBtnText, { fontFamily: theme.uiFontFamily }]}>
               Share
             </Text>
           </TouchableOpacity>
@@ -898,56 +908,83 @@ const styles = StyleSheet.create({
     marginTop: 28,
   },
 
-  // Share sheet modal
-  sheetOverlay: {
+  // Share sheet screen
+  sheetScreen: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.85)',
+    backgroundColor: '#000',
     alignItems: 'center',
-    justifyContent: 'flex-end',
     paddingHorizontal: 24,
-    gap: 28,
+  },
+  sheetDragHandle: {
+    width: '100%',
+    alignItems: 'center',
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+  sheetDragPill: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  sheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    paddingVertical: 8,
   },
   sheetCloseBtn: {
-    position: 'absolute',
-    top: 56,
-    left: 24,
     width: 40,
     height: 40,
     borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.1)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  sheetTitle: {
+    fontSize: 28,
+    fontWeight: '600',
+    color: '#fff',
+    alignSelf: 'flex-start',
+    marginBottom: 28,
   },
   sheetCardWrapper: {
     borderRadius: 20,
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.5,
-    shadowRadius: 20,
-    elevation: 12,
+    shadowOpacity: 0.6,
+    shadowRadius: 24,
+    elevation: 14,
+    marginBottom: 36,
   },
   sheetActions: {
     flexDirection: 'row',
     justifyContent: 'center',
     gap: 32,
+    marginBottom: 36,
   },
   sheetActionItem: {
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
     minWidth: 72,
   },
   sheetActionCircle: {
     width: 60,
     height: 60,
     borderRadius: 30,
-    borderWidth: 1,
+    backgroundColor: 'rgba(255,255,255,0.1)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  sheetActionCircleActive: {
+    backgroundColor: 'rgba(184,151,90,0.15)',
   },
   sheetActionLabel: {
     fontSize: 12,
     textAlign: 'center',
     lineHeight: 17,
+    color: '#fff',
   },
   sheetShareBtn: {
     flexDirection: 'row',
@@ -958,10 +995,12 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 16,
     borderWidth: 1,
+    backgroundColor: 'rgba(255,255,255,0.08)',
   },
   sheetShareBtnText: {
     fontSize: 16,
     fontWeight: '600',
+    color: '#fff',
   },
 
   // Collection pill (mix / category / general)
