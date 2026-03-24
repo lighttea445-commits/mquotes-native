@@ -78,7 +78,15 @@
           "allowsSchedulingExactAlarms": true
         }
       ],
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow Quotable to save quote images to your photo library.",
+          "savePhotosPermission": "Allow Quotable to save quote images to your photo library.",
+          "isAccessMediaLocationEnabled": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

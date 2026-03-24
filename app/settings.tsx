@@ -23,6 +23,7 @@ import { useReflectStore } from '../store/useReflectStore';
 import { useWidgetStore } from '../store/useWidgetStore';
 import { useModal } from '../contexts/ModalContext';
 import { ConfirmSheet } from '../components/ui/ConfirmSheet';
+import { getForcePro, setForcePro } from '../hooks/useRevenueCat';
 
 export default function SettingsScreen({ onClose, onBack }: { onClose?: () => void; onBack?: () => void }) {
   const theme = useTheme();
@@ -31,6 +32,7 @@ export default function SettingsScreen({ onClose, onBack }: { onClose?: () => vo
   const { preferences, setName, setPreferences, resetApp } = useAppStore();
   const [nameValue, setNameValue] = useState(preferences.name || '');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [forceProValue, setForceProValue] = useState(() => getForcePro() === true);
 
   const clearFavorites = useFavoritesStore((s) => s.clearFavorites);
   const clearHistory = useHistoryStore((s) => s.clearHistory);
@@ -136,6 +138,17 @@ export default function SettingsScreen({ onClose, onBack }: { onClose?: () => vo
               <Switch
                 value={preferences.showAuthor}
                 onValueChange={(v) => setPreferences({ showAuthor: v })}
+                trackColor={{ false: theme.border, true: theme.gold }}
+                thumbColor="#fff"
+              />
+            </View>
+
+            <View style={[styles.toggleItem, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+              <MaterialCommunityIcons name="crown" size={20} color={theme.gold} />
+              <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>Force Pro (dev)</Text>
+              <Switch
+                value={forceProValue}
+                onValueChange={(v) => { setForceProValue(v); setForcePro(v ? true : null); }}
                 trackColor={{ false: theme.border, true: theme.gold }}
                 thumbColor="#fff"
               />
