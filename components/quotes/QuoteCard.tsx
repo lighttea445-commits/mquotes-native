@@ -699,11 +699,9 @@ export function QuoteCard() {
             >
               <MaterialCommunityIcons name="close" size={20} color="#fff" />
             </TouchableOpacity>
-            <View style={{ flex: 1 }} />
+            <Text style={[styles.sheetTitle, { fontFamily: theme.quoteFontFamily }]}>Share</Text>
+            <View style={{ width: 40 }} />
           </View>
-
-          {/* Screen title */}
-          <Text style={[styles.sheetTitle, { fontFamily: theme.quoteFontFamily }]}>Share</Text>
 
           {/* Card preview */}
           <View style={styles.sheetCardWrapper}>
@@ -934,6 +932,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     width: '100%',
     paddingVertical: 8,
+    marginBottom: 24,
   },
   sheetCloseBtn: {
     width: 40,
@@ -944,11 +943,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   sheetTitle: {
-    fontSize: 28,
+    flex: 1,
+    fontSize: 22,
     fontWeight: '600',
     color: '#fff',
-    alignSelf: 'flex-start',
-    marginBottom: 28,
+    textAlign: 'center',
   },
   sheetCardWrapper: {
     borderRadius: 20,
