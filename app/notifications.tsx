@@ -53,6 +53,7 @@ function buildNotifTimes(
 
 // ── Types ──────────────────────────────────────────────────────────────────
 type PickerTarget = 'startTime' | 'endTime' | 'qodTime' | 'reflectTime' | 'streakTime';
+type ActiveCard = null | 'days' | 'quotes' | 'qod' | 'reflect' | 'streak';
 interface Settings {
   enabled: boolean; days: number[];
   quotesEnabled: boolean; showAuthor: boolean;
@@ -91,16 +92,17 @@ export default function NotificationsScreen({ onClose, onBack, onContinue }: { o
   const [permissionGranted, setPermissionGranted] = useState<boolean | null>(null);
   const [pickerTarget, setPickerTarget] = useState<PickerTarget | null>(null);
   const [pickerTempDate, setPickerTempDate] = useState<Date>(new Date());
+  const [activeCard, setActiveCard] = useState<ActiveCard>(null);
 
-  // ── Stagger animation refs (E) ─────────────────────────────────────────
-  const anim0 = useRef(new Animated.Value(enabled ? 1 : 0)).current; // days card
-  const anim1 = useRef(new Animated.Value(enabled ? 1 : 0)).current; // quotes card
-  const anim2 = useRef(new Animated.Value(enabled ? 1 : 0)).current; // reminders card
-  const anim3 = useRef(new Animated.Value(enabled ? 1 : 0)).current; // schedule card
+  // ── Stagger animation refs ─────────────────────────────────────────────
+  const anim0 = useRef(new Animated.Value(enabled ? 1 : 0)).current;
+  const anim1 = useRef(new Animated.Value(enabled ? 1 : 0)).current;
+  const anim2 = useRef(new Animated.Value(enabled ? 1 : 0)).current;
+  const anim3 = useRef(new Animated.Value(enabled ? 1 : 0)).current;
   const savedOpacity = useRef(new Animated.Value(0)).current;
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevPermissionRef = useRef<boolean | null>(null);
-  const didInitRef = useRef(true); // skip animation on very first render
+  const didInitRef = useRef(true);
 
   useEffect(() => {
     requestPermissions().then(g => setPermissionGranted(g));
@@ -126,10 +128,11 @@ export default function NotificationsScreen({ onClose, onBack, onContinue }: { o
     if (didInitRef.current) { didInitRef.current = false; return; }
     if (enabled) {
       [anim0, anim1, anim2, anim3].forEach(a => a.setValue(0));
-      Animated.stagger(90, [anim0, anim1, anim2, anim3].map(a =>
+      Animated.stagger(70, [anim0, anim1, anim2, anim3].map(a =>
         Animated.spring(a, { toValue: 1, useNativeDriver: true, tension: 65, friction: 11 }),
       )).start();
     } else {
+      setActiveCard(null);
       Animated.parallel([anim0, anim1, anim2, anim3].map(a =>
         Animated.timing(a, { toValue: 0, duration: 180, useNativeDriver: true }),
       )).start();
@@ -207,46 +210,12 @@ export default function NotificationsScreen({ onClose, onBack, onContinue }: { o
     setDays(next); debouncedApply(buildSettings({ days: next }));
   }
 
-  // ── Schedule timeline data (D) ─────────────────────────────────────────
-  function buildScheduleItems() {
-    const items: { hhmm: string; label: string; icon: string }[] = [];
-    if (qodEnabled) items.push({ hhmm: qodTime, label: 'Quote of the Day', icon: 'white-balance-sunny' });
-    if (quotesEnabled && count > 0) {
-      const times = buildNotifTimes(count, startTime, endTime);
-      times.forEach(t => {
-        const hhmm = `${String(t.hour).padStart(2, '0')}:${String(t.minute).padStart(2, '0')}`;
-        items.push({ hhmm, label: 'Daily Quote', icon: 'format-quote-close' });
-      });
-    }
-    if (reflectEnabled) items.push({ hhmm: reflectTime, label: 'Reflection', icon: 'book-open-variant' });
-    if (streakEnabled) items.push({ hhmm: streakTime, label: 'Streak Reminder', icon: 'fire' });
-    return items.sort((a, b) => a.hhmm.localeCompare(b.hhmm));
-  }
-
-  // ── Sub-components ────────────────────────────────────────────────────
+  // ── Sub-components ─────────────────────────────────────────────────────
   function animStyle(anim: Animated.Value) {
     return {
       opacity: anim,
       transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [18, 0] }) }],
     };
-  }
-
-  // Card with Playfair header (F — no more SectionLabel)
-  function SectionCard({ title, anim, children }: { title: string; anim: Animated.Value; children: React.ReactNode }) {
-    const items = React.Children.toArray(children).filter(Boolean);
-    return (
-      <Animated.View style={[animStyle(anim), ss.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-        <View style={[ss.cardHeader, { borderBottomColor: theme.border }]}>
-          <Text style={[ss.cardTitle, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>{title}</Text>
-        </View>
-        {items.map((child, i) => (
-          <React.Fragment key={i}>
-            {i > 0 && <View style={[ss.divider, { backgroundColor: theme.border }]} />}
-            {child}
-          </React.Fragment>
-        ))}
-      </Animated.View>
-    );
   }
 
   function Row({ icon, label, sub, muted, children }: { icon?: string; label: string; sub?: string; muted?: boolean; children?: React.ReactNode }) {
@@ -312,82 +281,203 @@ export default function NotificationsScreen({ onClose, onBack, onContinue }: { o
     );
   }
 
-  // ── Schedule timeline (D) ──────────────────────────────────────────────
-  function ScheduleTimeline() {
-    const items = buildScheduleItems();
-    if (items.length === 0) return null;
-
-    // Collapse consecutive "Daily Quote" runs to max 3 visible
-    let display = items;
-    const quoteItems = items.filter(it => it.label === 'Daily Quote');
-    if (quoteItems.length > 3) {
-      const others = items.filter(it => it.label !== 'Daily Quote');
-      const collapsed = [
-        quoteItems[0],
-        { hhmm: quoteItems[Math.floor(quoteItems.length / 2)].hhmm, label: `+${quoteItems.length - 2} more`, icon: 'dots-horizontal-circle-outline' },
-        quoteItems[quoteItems.length - 1],
-      ];
-      display = [...others, ...collapsed].sort((a, b) => a.hhmm.localeCompare(b.hhmm));
-    }
-
+  // ── Large type card (main list) ─────────────────────────────────────────
+  function TypeCard({
+    anim, icon, title, description, isEnabled, statusText, onPress,
+  }: {
+    anim: Animated.Value;
+    icon: string;
+    title: string;
+    description: string;
+    isEnabled: boolean;
+    statusText: string;
+    onPress: () => void;
+  }) {
     return (
-      <Animated.View style={[animStyle(anim3), ss.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-        <View style={[ss.cardHeader, { borderBottomColor: theme.border }]}>
-          <Text style={[ss.cardTitle, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>Today's Schedule</Text>
-          <View style={[ss.schedBadge, { backgroundColor: 'rgba(184,151,90,0.10)' }]}>
-            <Text style={[ss.schedBadgeText, { color: theme.gold, fontFamily: theme.uiFontFamily }]}>
-              {items.length} {items.length === 1 ? 'reminder' : 'reminders'}
-            </Text>
+      <Animated.View style={animStyle(anim)}>
+        <TouchableOpacity
+          onPress={onPress}
+          activeOpacity={0.75}
+          style={[ss.typeCard, { backgroundColor: theme.surface, borderColor: isEnabled ? 'rgba(184,151,90,0.30)' : theme.border }]}
+        >
+          {/* Icon */}
+          <View style={[ss.typeCardIcon, {
+            backgroundColor: isEnabled ? 'rgba(184,151,90,0.12)' : `${theme.border}44`,
+          }]}>
+            <MaterialCommunityIcons name={icon as any} size={26} color={isEnabled ? theme.gold : theme.textMuted} />
           </View>
-        </View>
 
-        <View style={ss.timelineWrap}>
-          {display.map((item, i) => {
-            const isLast = i === display.length - 1;
-            const isMuted = item.label.startsWith('+');
-            return (
-              <View key={i} style={ss.timelineRow}>
-                {/* Dot + vertical line */}
-                <View style={ss.timelineLeft}>
-                  <View style={[ss.timelineDot, {
-                    backgroundColor: isMuted ? theme.border : theme.gold,
-                    shadowColor: isMuted ? 'transparent' : theme.gold,
-                    shadowOpacity: isMuted ? 0 : 0.5,
-                    shadowRadius: 4,
-                    shadowOffset: { width: 0, height: 0 },
-                    elevation: isMuted ? 0 : 3,
-                  }]} />
-                  {!isLast && <View style={[ss.timelineLine, { backgroundColor: theme.border }]} />}
-                </View>
-                {/* Content */}
-                {isMuted ? (
-                  <View style={ss.timelineMutedRow}>
-                    <MaterialCommunityIcons name={item.icon as any} size={12} color={theme.border} />
-                    <Text style={[ss.timelineLabel, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-                      {item.label}
-                    </Text>
-                  </View>
-                ) : (
-                  <View style={ss.timelineContent}>
-                    <Text style={[ss.timelineTime, { color: theme.gold, fontFamily: theme.uiFontFamily }]}>
-                      {formatHHMMto12h(item.hhmm)}
-                    </Text>
-                    <View style={ss.timelineLabelRow}>
-                      <MaterialCommunityIcons name={item.icon as any} size={12} color={theme.gold} style={{ marginTop: 1 }} />
-                      <Text style={[ss.timelineLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
-                        {item.label}
-                      </Text>
-                    </View>
-                  </View>
-                )}
-              </View>
-            );
-          })}
-        </View>
+          {/* Text */}
+          <View style={{ flex: 1 }}>
+            <Text style={[ss.typeCardTitle, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>{title}</Text>
+            <Text style={[ss.typeCardDesc, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>{description}</Text>
+            {/* Status badge */}
+            <View style={[ss.typeCardBadge, { backgroundColor: isEnabled ? 'rgba(184,151,90,0.10)' : `${theme.border}55` }]}>
+              <View style={[ss.typeCardDot, { backgroundColor: isEnabled ? theme.gold : theme.border }]} />
+              <Text style={[ss.typeCardBadgeText, { color: isEnabled ? theme.gold : theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+                {statusText}
+              </Text>
+            </View>
+          </View>
+
+          {/* Chevron */}
+          <MaterialCommunityIcons name="chevron-right" size={20} color={theme.border} style={{ marginLeft: 4 }} />
+        </TouchableOpacity>
       </Animated.View>
     );
   }
 
+  // ── Detail view card wrapper ────────────────────────────────────────────
+  function DetailCard({ children }: { children: React.ReactNode }) {
+    const items = React.Children.toArray(children).filter(Boolean);
+    return (
+      <View style={[ss.detailCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        {items.map((child, i) => (
+          <React.Fragment key={i}>
+            {i > 0 && <View style={[ss.divider, { backgroundColor: theme.border }]} />}
+            {child}
+          </React.Fragment>
+        ))}
+      </View>
+    );
+  }
+
+  // ── Detail views per card type ──────────────────────────────────────────
+  function DaysDetail() {
+    return (
+      <DetailCard>
+        <View style={ss.daysRow}>
+          {ALL_DAYS.map(d => {
+            const sel = days.includes(d);
+            return (
+              <TouchableOpacity
+                key={d}
+                onPress={() => handleToggleDay(d)}
+                style={[ss.dayChip, {
+                  backgroundColor: sel ? theme.gold : 'transparent',
+                  borderColor: sel ? theme.gold : theme.border,
+                  shadowColor: sel ? theme.gold : 'transparent',
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: sel ? 0.4 : 0,
+                  shadowRadius: 6,
+                  elevation: sel ? 3 : 0,
+                }]}
+                activeOpacity={0.7}
+              >
+                <Text style={[ss.dayText, { color: sel ? '#1A1208' : theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+                  {DAY_LABELS[d]}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+        <Row muted label="These days apply to all notification types." />
+      </DetailCard>
+    );
+  }
+
+  function QuotesDetail() {
+    return (
+      <DetailCard>
+        <Row icon="format-quote-close" label="Send daily quotes" sub="Random quotes throughout your day">
+          <Switch
+            value={quotesEnabled}
+            onValueChange={v => { setQuotesEnabled(v); debouncedApply(buildSettings({ quotesEnabled: v })); }}
+            trackColor={{ false: theme.border, true: theme.gold }} thumbColor={theme.surface}
+          />
+        </Row>
+        {quotesEnabled && (
+          <>
+            <View style={ss.countSection}>
+              <View style={ss.countHeader}>
+                <Text style={[ss.countLabel, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>How many per day</Text>
+                <Text style={[ss.countValue, { color: theme.gold, fontFamily: theme.uiFontFamily }]}>
+                  {count} {count === 1 ? 'quote' : 'quotes'}
+                </Text>
+              </View>
+              <CountSegments />
+            </View>
+            <Row label="Start at" muted>
+              <TimePill target="startTime" value={startTime} />
+            </Row>
+            <Row label="End at" muted>
+              <TimePill target="endTime" value={endTime} />
+            </Row>
+            <Row label="Show author" muted>
+              <Switch
+                value={showAuthor}
+                onValueChange={v => { setShowAuthor(v); debouncedApply(buildSettings({ showAuthor: v })); }}
+                trackColor={{ false: theme.border, true: theme.gold }} thumbColor={theme.surface}
+              />
+            </Row>
+          </>
+        )}
+      </DetailCard>
+    );
+  }
+
+  function QodDetail() {
+    return (
+      <DetailCard>
+        <Row icon="white-balance-sunny" label="Quote of the Day" sub="One curated quote each morning">
+          <Switch
+            value={qodEnabled}
+            onValueChange={v => { setQodEnabled(v); debouncedApply(buildSettings({ qodEnabled: v })); }}
+            trackColor={{ false: theme.border, true: theme.gold }} thumbColor={theme.surface}
+          />
+        </Row>
+        {qodEnabled && <Row label="Send at" muted><TimePill target="qodTime" value={qodTime} /></Row>}
+      </DetailCard>
+    );
+  }
+
+  function ReflectDetail() {
+    return (
+      <DetailCard>
+        <Row icon="book-open-variant" label="Reflection Reminder" sub="Prompt to write in your journal">
+          <Switch
+            value={reflectEnabled}
+            onValueChange={v => { setReflectEnabled(v); debouncedApply(buildSettings({ reflectEnabled: v })); }}
+            trackColor={{ false: theme.border, true: theme.gold }} thumbColor={theme.surface}
+          />
+        </Row>
+        {reflectEnabled && <Row label="Send at" muted><TimePill target="reflectTime" value={reflectTime} /></Row>}
+      </DetailCard>
+    );
+  }
+
+  function StreakDetail() {
+    return (
+      <DetailCard>
+        <Row icon="fire" label="Streak Reminder" sub="Don't let your streak slip">
+          <Switch
+            value={streakEnabled}
+            onValueChange={v => { setStreakEnabled(v); debouncedApply(buildSettings({ streakEnabled: v })); }}
+            trackColor={{ false: theme.border, true: theme.gold }} thumbColor={theme.surface}
+          />
+        </Row>
+        {streakEnabled && <Row label="Send at" muted><TimePill target="streakTime" value={streakTime} /></Row>}
+      </DetailCard>
+    );
+  }
+
+  // ── Detail header ───────────────────────────────────────────────────────
+  const CARD_META: Record<NonNullable<ActiveCard>, { icon: string; title: string; color: string }> = {
+    days:    { icon: 'calendar-week',         title: 'Active Days',          color: theme.gold },
+    quotes:  { icon: 'format-quote-close',    title: 'Daily Quotes',         color: theme.gold },
+    qod:     { icon: 'white-balance-sunny',   title: 'Quote of the Day',     color: theme.gold },
+    reflect: { icon: 'book-open-variant',     title: 'Reflection Reminder',  color: theme.gold },
+    streak:  { icon: 'fire',                  title: 'Streak Reminder',      color: theme.gold },
+  };
+
+  // ── Status helpers ─────────────────────────────────────────────────────
+  function daysStatus(): string {
+    if (days.length === 7) return 'Every day';
+    if (days.length === 0) return 'No days';
+    return days.map(d => DAY_LABELS[d]).join(', ');
+  }
+
+  // ── Picker node ────────────────────────────────────────────────────────
   function pickerLabel() {
     if (pickerTarget === 'startTime') return 'Start at';
     if (pickerTarget === 'endTime') return 'End at';
@@ -427,14 +517,17 @@ export default function NotificationsScreen({ onClose, onBack, onContinue }: { o
     )
   );
 
-  // ── Render ────────────────────────────────────────────────────────────
+  // ── Top-bar back action ─────────────────────────────────────────────────
+  const topBarBack = activeCard !== null ? () => setActiveCard(null) : back;
+
+  // ── Render ─────────────────────────────────────────────────────────────
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
       <SafeAreaView style={{ flex: 1 }} edges={['bottom']}>
 
-        {/* Minimal back button */}
+        {/* Top bar */}
         <View style={ss.topBar}>
-          <TouchableOpacity onPress={back} style={[ss.backBtn, { backgroundColor: theme.surface }]}>
+          <TouchableOpacity onPress={topBarBack} style={[ss.backBtn, { backgroundColor: theme.surface }]}>
             <MaterialCommunityIcons name="chevron-left" size={22} color={theme.textMuted} />
           </TouchableOpacity>
           <Animated.Text style={[ss.savedBadge, { color: theme.gold, fontFamily: theme.uiFontFamily, opacity: savedOpacity }]}>
@@ -442,183 +535,175 @@ export default function NotificationsScreen({ onClose, onBack, onContinue }: { o
           </Animated.Text>
         </View>
 
-        <ScrollView style={{ flex: 1 }} contentContainerStyle={ss.scroll} showsVerticalScrollIndicator={false}>
-
-          {/* ── A: Immersive hero ─────────────────────────────────────── */}
-          <View style={ss.heroWrap}>
-
-            <View style={[ss.heroIconWrap, {
-              backgroundColor: enabled ? 'rgba(184,151,90,0.12)' : theme.surface,
-              borderColor: enabled ? 'rgba(184,151,90,0.30)' : theme.border,
-            }]}>
-              <MaterialCommunityIcons
-                name={enabled ? 'bell-ring-outline' : 'bell-outline'}
-                size={34}
-                color={enabled ? theme.gold : theme.textMuted}
-              />
+        {/* ── Detail view ────────────────────────────────────────────── */}
+        {activeCard !== null ? (
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={ss.scroll} showsVerticalScrollIndicator={false}>
+            {/* Detail header */}
+            <View style={ss.detailHero}>
+              <View style={[ss.detailHeroIcon, { backgroundColor: 'rgba(184,151,90,0.12)', borderColor: 'rgba(184,151,90,0.25)' }]}>
+                <MaterialCommunityIcons name={CARD_META[activeCard].icon as any} size={30} color={theme.gold} />
+              </View>
+              <Text style={[ss.detailHeroTitle, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
+                {CARD_META[activeCard].title}
+              </Text>
             </View>
 
-            <Text style={[ss.heroTitle, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
-              Notifications
-            </Text>
-            <Text style={[ss.heroSub, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-              {enabled ? 'Delivering your daily inspiration' : 'Receive quotes on your schedule'}
-            </Text>
+            {activeCard === 'days'    && <DaysDetail />}
+            {activeCard === 'quotes'  && <QuotesDetail />}
+            {activeCard === 'qod'     && <QodDetail />}
+            {activeCard === 'reflect' && <ReflectDetail />}
+            {activeCard === 'streak'  && <StreakDetail />}
+          </ScrollView>
 
-            {/* Toggle pill (replaces hero Switch) */}
-            <TouchableOpacity
-              onPress={() => handleToggleEnabled(!enabled)}
-              style={[ss.heroBtn, {
-                backgroundColor: enabled ? theme.gold : theme.surface,
-                borderColor: enabled ? theme.gold : theme.border,
-                shadowColor: enabled ? theme.gold : 'transparent',
-                shadowOpacity: 0.35,
-                shadowRadius: 12,
-                shadowOffset: { width: 0, height: 4 },
-                elevation: enabled ? 6 : 0,
-              }]}
-              activeOpacity={0.8}
-            >
-              <MaterialCommunityIcons
-                name={enabled ? 'check-circle-outline' : 'bell-plus-outline'}
-                size={18}
-                color={enabled ? '#1A1208' : theme.textMuted}
-              />
-              <Text style={[ss.heroBtnText, { color: enabled ? '#1A1208' : theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-                {enabled ? 'Reminders on' : 'Enable reminders'}
+        ) : (
+          /* ── Main view ─────────────────────────────────────────────── */
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={ss.scroll} showsVerticalScrollIndicator={false}>
+
+            {/* Hero */}
+            <View style={ss.heroWrap}>
+              <View style={[ss.heroIconWrap, {
+                backgroundColor: enabled ? 'rgba(184,151,90,0.12)' : theme.surface,
+                borderColor: enabled ? 'rgba(184,151,90,0.30)' : theme.border,
+              }]}>
+                <MaterialCommunityIcons
+                  name={enabled ? 'bell-ring-outline' : 'bell-outline'}
+                  size={34}
+                  color={enabled ? theme.gold : theme.textMuted}
+                />
+              </View>
+
+              <Text style={[ss.heroTitle, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
+                Notifications
               </Text>
-            </TouchableOpacity>
-          </View>
+              <Text style={[ss.heroSub, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+                {enabled ? 'Delivering your daily inspiration' : 'Receive quotes on your schedule'}
+              </Text>
 
-          {/* Permission banner */}
-          {permissionGranted === false && (
-            <TouchableOpacity
-              onPress={() => Linking.openSettings()}
-              style={[ss.permBanner, { backgroundColor: theme.surface, borderColor: theme.border }]}
-              activeOpacity={0.8}
-            >
-              <View style={ss.permIcon}>
-                <MaterialCommunityIcons name="bell-off-outline" size={18} color={theme.gold} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[ss.permTitle, { color: theme.text, fontFamily: theme.uiFontFamily }]}>Notifications are off</Text>
-                <Text style={[ss.permBody, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>Tap to open Settings and allow them.</Text>
-              </View>
-              <MaterialCommunityIcons name="chevron-right" size={16} color={theme.textMuted} />
-            </TouchableOpacity>
-          )}
+              <TouchableOpacity
+                onPress={() => handleToggleEnabled(!enabled)}
+                style={[ss.heroBtn, {
+                  backgroundColor: enabled ? theme.gold : theme.surface,
+                  borderColor: enabled ? theme.gold : theme.border,
+                  shadowColor: enabled ? theme.gold : 'transparent',
+                  shadowOpacity: 0.35,
+                  shadowRadius: 12,
+                  shadowOffset: { width: 0, height: 4 },
+                  elevation: enabled ? 6 : 0,
+                }]}
+                activeOpacity={0.8}
+              >
+                <MaterialCommunityIcons
+                  name={enabled ? 'check-circle-outline' : 'bell-plus-outline'}
+                  size={18}
+                  color={enabled ? '#1A1208' : theme.textMuted}
+                />
+                <Text style={[ss.heroBtnText, { color: enabled ? '#1A1208' : theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+                  {enabled ? 'Reminders on' : 'Enable reminders'}
+                </Text>
+              </TouchableOpacity>
+            </View>
 
-          {enabled ? (
-            <>
-              {/* ── Active Days card (F: Playfair header, no SectionLabel) ── */}
-              <SectionCard title="Active Days" anim={anim0}>
-                <View style={ss.daysRow}>
-                  {ALL_DAYS.map(d => {
-                    const sel = days.includes(d);
-                    return (
-                      <TouchableOpacity
-                        key={d}
-                        onPress={() => handleToggleDay(d)}
-                        style={[ss.dayChip, {
-                          backgroundColor: sel ? theme.gold : 'transparent',
-                          borderColor: sel ? theme.gold : theme.border,
-                          shadowColor: sel ? theme.gold : 'transparent',
-                          shadowOffset: { width: 0, height: 2 },
-                          shadowOpacity: sel ? 0.4 : 0,
-                          shadowRadius: 6,
-                          elevation: sel ? 3 : 0,
-                        }]}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={[ss.dayText, { color: sel ? '#1A1208' : theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-                          {DAY_LABELS[d]}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
+            {/* Permission banner */}
+            {permissionGranted === false && (
+              <TouchableOpacity
+                onPress={() => Linking.openSettings()}
+                style={[ss.permBanner, { backgroundColor: theme.surface, borderColor: theme.border }]}
+                activeOpacity={0.8}
+              >
+                <View style={ss.permIcon}>
+                  <MaterialCommunityIcons name="bell-off-outline" size={18} color={theme.gold} />
                 </View>
-              </SectionCard>
+                <View style={{ flex: 1 }}>
+                  <Text style={[ss.permTitle, { color: theme.text, fontFamily: theme.uiFontFamily }]}>Notifications are off</Text>
+                  <Text style={[ss.permBody, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>Tap to open Settings and allow them.</Text>
+                </View>
+                <MaterialCommunityIcons name="chevron-right" size={16} color={theme.textMuted} />
+              </TouchableOpacity>
+            )}
 
-              {/* ── Daily Quotes card ───────────────────────────────────── */}
-              <SectionCard title="Daily Quotes" anim={anim1}>
-                <Row icon="format-quote-close" label="Send daily quotes" sub="Random quotes throughout your day">
-                  <Switch
-                    value={quotesEnabled}
-                    onValueChange={v => { setQuotesEnabled(v); debouncedApply(buildSettings({ quotesEnabled: v })); }}
-                    trackColor={{ false: theme.border, true: theme.gold }} thumbColor={theme.surface}
-                  />
-                </Row>
-                {quotesEnabled && (
-                  <>
-                    <View style={ss.countSection}>
-                      <View style={ss.countHeader}>
-                        <Text style={[ss.countLabel, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>How many per day</Text>
-                        <Text style={[ss.countValue, { color: theme.gold, fontFamily: theme.uiFontFamily }]}>
-                          {count} {count === 1 ? 'quote' : 'quotes'}
+            {enabled ? (
+              <>
+                {/* Active Days */}
+                <TypeCard
+                  anim={anim0}
+                  icon="calendar-week"
+                  title="Active Days"
+                  description="Which days you receive notifications"
+                  isEnabled
+                  statusText={daysStatus()}
+                  onPress={() => setActiveCard('days')}
+                />
+
+                {/* Daily Quotes */}
+                <TypeCard
+                  anim={anim1}
+                  icon="format-quote-close"
+                  title="Daily Quotes"
+                  description="Random quotes throughout your day"
+                  isEnabled={quotesEnabled}
+                  statusText={quotesEnabled ? `${count} quote${count === 1 ? '' : 's'} · ${formatHHMMto12h(startTime)}–${formatHHMMto12h(endTime)}` : 'Off'}
+                  onPress={() => setActiveCard('quotes')}
+                />
+
+                {/* Quote of the Day */}
+                <TypeCard
+                  anim={anim2}
+                  icon="white-balance-sunny"
+                  title="Quote of the Day"
+                  description="One curated quote each morning"
+                  isEnabled={qodEnabled}
+                  statusText={qodEnabled ? `Daily at ${formatHHMMto12h(qodTime)}` : 'Off'}
+                  onPress={() => setActiveCard('qod')}
+                />
+
+                {/* Reflection Reminder */}
+                <TypeCard
+                  anim={anim3}
+                  icon="book-open-variant"
+                  title="Reflection Reminder"
+                  description="Prompt to write in your journal"
+                  isEnabled={reflectEnabled}
+                  statusText={reflectEnabled ? `Daily at ${formatHHMMto12h(reflectTime)}` : 'Off'}
+                  onPress={() => setActiveCard('reflect')}
+                />
+
+                {/* Streak Reminder — uses anim0 (already at 1 by this point) */}
+                <Animated.View style={animStyle(anim0)}>
+                  <TouchableOpacity
+                    onPress={() => setActiveCard('streak')}
+                    activeOpacity={0.75}
+                    style={[ss.typeCard, { backgroundColor: theme.surface, borderColor: streakEnabled ? 'rgba(184,151,90,0.30)' : theme.border }]}
+                  >
+                    <View style={[ss.typeCardIcon, {
+                      backgroundColor: streakEnabled ? 'rgba(184,151,90,0.12)' : `${theme.border}44`,
+                    }]}>
+                      <MaterialCommunityIcons name="fire" size={26} color={streakEnabled ? theme.gold : theme.textMuted} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[ss.typeCardTitle, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>Streak Reminder</Text>
+                      <Text style={[ss.typeCardDesc, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>Don't let your streak slip</Text>
+                      <View style={[ss.typeCardBadge, { backgroundColor: streakEnabled ? 'rgba(184,151,90,0.10)' : `${theme.border}55` }]}>
+                        <View style={[ss.typeCardDot, { backgroundColor: streakEnabled ? theme.gold : theme.border }]} />
+                        <Text style={[ss.typeCardBadgeText, { color: streakEnabled ? theme.gold : theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+                          {streakEnabled ? `Daily at ${formatHHMMto12h(streakTime)}` : 'Off'}
                         </Text>
                       </View>
-                      <CountSegments />
                     </View>
-                    <Row label="Start at" muted>
-                      <TimePill target="startTime" value={startTime} />
-                    </Row>
-                    <Row label="End at" muted>
-                      <TimePill target="endTime" value={endTime} />
-                    </Row>
-                    <Row label="Show author" muted>
-                      <Switch
-                        value={showAuthor}
-                        onValueChange={v => { setShowAuthor(v); debouncedApply(buildSettings({ showAuthor: v })); }}
-                        trackColor={{ false: theme.border, true: theme.gold }} thumbColor={theme.surface}
-                      />
-                    </Row>
-                  </>
-                )}
-              </SectionCard>
-
-              {/* ── Reminders card ──────────────────────────────────────── */}
-              <SectionCard title="Reminders" anim={anim2}>
-                <Row icon="white-balance-sunny" label="Quote of the Day" sub="One curated quote each morning">
-                  <Switch
-                    value={qodEnabled}
-                    onValueChange={v => { setQodEnabled(v); debouncedApply(buildSettings({ qodEnabled: v })); }}
-                    trackColor={{ false: theme.border, true: theme.gold }} thumbColor={theme.surface}
-                  />
-                </Row>
-                {qodEnabled && <Row label="Send at" muted><TimePill target="qodTime" value={qodTime} /></Row>}
-
-                <Row icon="book-open-variant" label="Reflection Reminder" sub="Prompt to write in your journal">
-                  <Switch
-                    value={reflectEnabled}
-                    onValueChange={v => { setReflectEnabled(v); debouncedApply(buildSettings({ reflectEnabled: v })); }}
-                    trackColor={{ false: theme.border, true: theme.gold }} thumbColor={theme.surface}
-                  />
-                </Row>
-                {reflectEnabled && <Row label="Send at" muted><TimePill target="reflectTime" value={reflectTime} /></Row>}
-
-                <Row icon="fire" label="Streak Reminder" sub="Don't let your streak slip">
-                  <Switch
-                    value={streakEnabled}
-                    onValueChange={v => { setStreakEnabled(v); debouncedApply(buildSettings({ streakEnabled: v })); }}
-                    trackColor={{ false: theme.border, true: theme.gold }} thumbColor={theme.surface}
-                  />
-                </Row>
-                {streakEnabled && <Row label="Send at" muted><TimePill target="streakTime" value={streakTime} /></Row>}
-              </SectionCard>
-
-              {/* ── D: Visual schedule timeline ─────────────────────────── */}
-              <ScheduleTimeline />
-            </>
-          ) : (
-            <View style={ss.empty}>
-              <MaterialCommunityIcons name="bell-sleep-outline" size={44} color={theme.border} />
-              <Text style={[ss.emptyTitle, { color: theme.textMuted, fontFamily: theme.quoteFontFamily }]}>No reminders set</Text>
-              <Text style={[ss.emptyBody, { color: theme.border, fontFamily: theme.uiFontFamily }]}>
-                Tap the button above to start receiving daily inspiration.
-              </Text>
-            </View>
-          )}
-        </ScrollView>
+                    <MaterialCommunityIcons name="chevron-right" size={20} color={theme.border} style={{ marginLeft: 4 }} />
+                  </TouchableOpacity>
+                </Animated.View>
+              </>
+            ) : (
+              <View style={ss.empty}>
+                <MaterialCommunityIcons name="bell-sleep-outline" size={44} color={theme.border} />
+                <Text style={[ss.emptyTitle, { color: theme.textMuted, fontFamily: theme.quoteFontFamily }]}>No reminders set</Text>
+                <Text style={[ss.emptyBody, { color: theme.border, fontFamily: theme.uiFontFamily }]}>
+                  Tap the button above to start receiving daily inspiration.
+                </Text>
+              </View>
+            )}
+          </ScrollView>
+        )}
 
         {onContinue && (
           <View style={[ss.continueWrapper, { backgroundColor: theme.background }]}>
@@ -646,7 +731,7 @@ const ss = StyleSheet.create({
   backBtn: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
   savedBadge: { fontSize: 11, fontWeight: '600', letterSpacing: 0.5 },
 
-  // ── A: Hero ────────────────────────────────────────────────────────────
+  // ── Hero ───────────────────────────────────────────────────────────────
   heroWrap: { alignItems: 'center', paddingVertical: 36, paddingHorizontal: 20 },
   heroIconWrap: { width: 76, height: 76, borderRadius: 24, borderWidth: 1, justifyContent: 'center', alignItems: 'center', marginBottom: 22 },
   heroTitle: { fontSize: 30, fontWeight: '700', marginBottom: 8, letterSpacing: -0.5 },
@@ -660,10 +745,34 @@ const ss = StyleSheet.create({
   permTitle: { fontSize: 13, fontWeight: '600', marginBottom: 1 },
   permBody: { fontSize: 12, lineHeight: 16 },
 
-  // ── F: Cards with Playfair headers ─────────────────────────────────────
-  card: { borderRadius: 18, borderWidth: 1, overflow: 'hidden', marginBottom: 14 },
-  cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth },
-  cardTitle: { fontSize: 18, fontWeight: '700', letterSpacing: -0.3 },
+  // ── Large type cards ───────────────────────────────────────────────────
+  typeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 18,
+    marginBottom: 12,
+    gap: 16,
+  },
+  typeCardIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  typeCardTitle: { fontSize: 17, fontWeight: '700', letterSpacing: -0.3, marginBottom: 3 },
+  typeCardDesc: { fontSize: 12, lineHeight: 17, marginBottom: 8 },
+  typeCardBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
+  typeCardDot: { width: 5, height: 5, borderRadius: 3 },
+  typeCardBadgeText: { fontSize: 11, fontWeight: '600' },
+
+  // ── Detail view ────────────────────────────────────────────────────────
+  detailHero: { alignItems: 'center', paddingVertical: 28, paddingHorizontal: 20 },
+  detailHeroIcon: { width: 68, height: 68, borderRadius: 20, borderWidth: 1, justifyContent: 'center', alignItems: 'center', marginBottom: 14 },
+  detailHeroTitle: { fontSize: 26, fontWeight: '700', letterSpacing: -0.4 },
+  detailCard: { borderRadius: 18, borderWidth: 1, overflow: 'hidden', marginBottom: 14 },
   divider: { height: StyleSheet.hairlineWidth, marginLeft: 16 },
 
   // ── Rows ───────────────────────────────────────────────────────────────
@@ -690,20 +799,6 @@ const ss = StyleSheet.create({
   // ── Time pill ──────────────────────────────────────────────────────────
   timePill: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 10, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 7 },
   timePillText: { fontSize: 13, fontWeight: '600' },
-
-  // ── D: Schedule timeline ───────────────────────────────────────────────
-  schedBadge: { borderRadius: 10, paddingHorizontal: 9, paddingVertical: 3 },
-  schedBadgeText: { fontSize: 11, fontWeight: '600' },
-  timelineWrap: { paddingHorizontal: 16, paddingTop: 6, paddingBottom: 16 },
-  timelineRow: { flexDirection: 'row', gap: 14, minHeight: 44 },
-  timelineLeft: { alignItems: 'center', width: 10 },
-  timelineDot: { width: 9, height: 9, borderRadius: 5, marginTop: 5 },
-  timelineLine: { flex: 1, width: 1.5, marginTop: 3, marginBottom: -2 },
-  timelineContent: { flex: 1, paddingBottom: 10 },
-  timelineMutedRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 5, paddingBottom: 10, paddingTop: 3 },
-  timelineTime: { fontSize: 13, fontWeight: '700', letterSpacing: 0.2 },
-  timelineLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 },
-  timelineLabel: { fontSize: 12, lineHeight: 17 },
 
   // ── Empty state ────────────────────────────────────────────────────────
   empty: { alignItems: 'center', paddingTop: 48, paddingHorizontal: 32, gap: 12 },
