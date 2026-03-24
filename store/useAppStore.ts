@@ -25,6 +25,13 @@ export interface UserPreferences {
   streakTime: string;          // HH:mm, default "21:00"
   lastNotifScheduledAt?: string; // ISO timestamp of most recent rescheduleAll call
   goals?: string[]; // onboarding goals (e.g. "Build a daily motivation habit")
+  phoneUsage?: string; // daily phone usage range e.g. "2-3 hours"
+  age?: string; // age range e.g. "25-34"
+  gender?: string; // e.g. "Male", "Female", "Other", "Prefer not to say"
+  joyCategories?: string[]; // quote categories the user said bring them joy
+  hapticsEnabled: boolean;
+  lightMode: boolean;
+  showAuthor: boolean;
 }
 
 export interface StreakData {
@@ -69,6 +76,9 @@ const defaultPreferences: UserPreferences = {
   reflectTime: '20:00',
   streakEnabled: true,
   streakTime: '21:00',
+  hapticsEnabled: true,
+  lightMode: false,
+  showAuthor: false,
 };
 
 const defaultStreak: StreakData = {

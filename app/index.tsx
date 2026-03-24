@@ -26,6 +26,7 @@ import FavoritesScreen from './favorites';
 import JournalScreen from './journal';
 import FeaturesScreen from '../components/subscriptions/FeaturesScreen';
 import TrialScreen from '../components/subscriptions/TrialScreen';
+import SettingsScreen from './settings';
 
 function HomeScreenInner() {
   const theme = useTheme();
@@ -182,6 +183,12 @@ function HomeScreenInner() {
       <BottomSheet visible={activeSheet === 'journal'} onClose={closeSheet} backgroundColor={theme.background}
         instantClose={previousSheet === 'journal'} instantOpen={isSwitching}>
         <JournalScreen onClose={closeSheet} onBack={goBack} />
+      </BottomSheet>
+
+      {/* Settings sheet */}
+      <BottomSheet visible={activeSheet === 'settings'} onClose={closeSheet} backgroundColor={theme.background}
+        instantClose={previousSheet === 'settings'} instantOpen={isSwitching}>
+        <SettingsScreen onClose={closeSheet} onBack={goBack} />
       </BottomSheet>
 
       {/* Features (What you'll get) sheet */}

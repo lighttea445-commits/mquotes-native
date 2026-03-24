@@ -1756,6 +1756,10 @@ export default function OnboardingScreen() {
     setPreferences({
       categories: [],
       goals: data.goals,
+      phoneUsage: data.phoneUsage,
+      age: data.age,
+      gender: data.gender,
+      joyCategories: data.joyCategories,
     });
 
     completeOnboarding();

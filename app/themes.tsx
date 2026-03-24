@@ -12,7 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useTheme } from '../hooks/useTheme';
+import { useBaseTheme } from '../hooks/useTheme';
 import { useRevenueCat } from '../hooks/useRevenueCat';
 import { useAppStore } from '../store/useAppStore';
 import { THEMES } from '../constants/themes';
@@ -26,7 +26,7 @@ export default function ThemesScreen({ onClose }: { onClose?: () => void }) {
   const { width } = useWindowDimensions();
   const CARD_WIDTH = (width - SIDE_PADDING * 2 - GAP * 2) / 3;
   const CARD_HEIGHT = CARD_WIDTH * 1.5; // 2:3 portrait ratio
-  const theme = useTheme();
+  const theme = useBaseTheme();
   const router = useRouter();
   const modal = useModal();
   const { isPro } = useRevenueCat();
