@@ -63,7 +63,7 @@ export function QuoteWidget({ quote, config, widgetInfo }: Props) {
       clickActionData={{ uri: tapUri }}
     >
       <TextWidget
-        text={`\u201c${quote.text}\u201d`}
+        text={quote.text}
         style={{
           color: '#FFFFFF',
           fontSize,
