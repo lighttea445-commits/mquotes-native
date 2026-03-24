@@ -64,18 +64,19 @@ export default function ShareScreen({ onClose }: { onClose?: () => void }) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setIsBusy(true);
     try {
-      if (!captureRef) throw new Error('needs dev build');
-      const uri = await captureRef(cardRef, { format: 'png', quality: 1.0, result: 'tmpfile' });
-      if (MediaLibrary) {
-        const { status } = await MediaLibrary.requestPermissionsAsync();
-        if (status === 'granted') {
-          await MediaLibrary.saveToLibraryAsync(uri);
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          return;
-        }
+      if (!captureRef || !MediaLibrary) {
+        Alert.alert('Dev build required', 'Saving images requires a development build.');
+        return;
       }
-      const canShare = await ExpoSharing.isAvailableAsync();
-      if (canShare) await ExpoSharing.shareAsync(uri, { mimeType: 'image/png' });
+      const uri = await captureRef(cardRef, { format: 'png', quality: 1.0, result: 'tmpfile' });
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission required', 'Please allow photo library access in Settings, then try again.');
+        return;
+      }
+      await MediaLibrary.saveToLibraryAsync(uri);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert('Saved!', 'Quote image saved to your photo library.');
     } catch (e) {
       errorReporting.captureException(e as Error, { context: 'ShareScreen:save' });
       Alert.alert('Could not save image', 'Please try again.');
