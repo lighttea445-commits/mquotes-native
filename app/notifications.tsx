@@ -602,7 +602,7 @@ const ss = StyleSheet.create({
   editRowLabel: { fontSize: 16 },
   editRepeatSection: {
     borderTopWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 20, paddingTop: 14, paddingBottom: 6,
+    paddingHorizontal: 20, paddingTop: 14, paddingBottom: 16,
   },
   editRepeatLabel: { fontSize: 16, marginBottom: 14 },
 
@@ -624,7 +624,7 @@ const ss = StyleSheet.create({
   timeBtnText: { fontSize: 16, fontWeight: '700' },
 
   // ── Day chips ──────────────────────────────────────────────────────────
-  dayChipsWrap: { flexDirection: 'row', gap: 8, marginBottom: 14 },
+  dayChipsWrap: { flexDirection: 'row', gap: 8 },
   dayChip: {
     width: 40, height: 40, borderRadius: 20,
     borderWidth: 1,
