@@ -36,12 +36,6 @@ function hhmmToDate(hhmm: string): Date {
 function dateToHHMM(date: Date): string {
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
-function stepHHMM(hhmm: string, deltaMinutes: number): string {
-  const [h, m] = hhmm.split(':').map(Number);
-  let total = h * 60 + m + deltaMinutes;
-  total = ((total % (24 * 60)) + 24 * 60) % (24 * 60);
-  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
-}
 function describeDays(days: number[]): string {
   if (days.length === 7) return 'Every day';
   const sorted = [...days].sort((a, b) => a - b);
@@ -215,6 +209,21 @@ export default function NotificationsScreen({ onClose, onBack, onContinue }: { o
     );
   }
 
+  function TimeButton({ hhmm, target }: { hhmm: string; target: PickerTarget }) {
+    return (
+      <TouchableOpacity
+        onPress={() => openPicker(target, hhmm)}
+        activeOpacity={0.7}
+        style={[ss.timeBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}
+      >
+        <MaterialCommunityIcons name="clock-outline" size={16} color={theme.textMuted} style={{ marginRight: 6 }} />
+        <Text style={[ss.timeBtnText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
+          {formatHHMMto12h(hhmm)}
+        </Text>
+      </TouchableOpacity>
+    );
+  }
+
   function EditRow({ label, children }: { label: string; children: React.ReactNode }) {
     return (
       <View style={[ss.editRow, { borderBottomColor: theme.border }]}>
@@ -318,18 +327,10 @@ export default function NotificationsScreen({ onClose, onBack, onContinue }: { o
           />
         </EditRow>
         <EditRow label="Start at">
-          <Stepper
-            display={formatHHMMto12h(startTime)}
-            onDecrement={() => { const v = stepHHMM(startTime, -30); setStartTime(v); debouncedApply(buildSettings({ startTime: v })); }}
-            onIncrement={() => { const v = stepHHMM(startTime, 30); setStartTime(v); debouncedApply(buildSettings({ startTime: v })); }}
-          />
+          <TimeButton hhmm={startTime} target="startTime" />
         </EditRow>
         <EditRow label="End at">
-          <Stepper
-            display={formatHHMMto12h(endTime)}
-            onDecrement={() => { const v = stepHHMM(endTime, -30); setEndTime(v); debouncedApply(buildSettings({ endTime: v })); }}
-            onIncrement={() => { const v = stepHHMM(endTime, 30); setEndTime(v); debouncedApply(buildSettings({ endTime: v })); }}
-          />
+          <TimeButton hhmm={endTime} target="endTime" />
         </EditRow>
         <View style={[ss.editRepeatSection, { borderTopColor: theme.border }]}>
           <Text style={[ss.editRepeatLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}>Repeat</Text>
@@ -356,27 +357,7 @@ export default function NotificationsScreen({ onClose, onBack, onContinue }: { o
     return (
       <View style={[ss.editCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
         <EditRow label="Time">
-          <Stepper
-            display={formatHHMMto12h(timeValue)}
-            onDecrement={() => {
-              const v = stepHHMM(timeValue, -30);
-              setTimeValue(v);
-              const patch: Partial<Settings> = {};
-              if (pickerTgt === 'qodTime') patch.qodTime = v;
-              else if (pickerTgt === 'reflectTime') patch.reflectTime = v;
-              else if (pickerTgt === 'streakTime') patch.streakTime = v;
-              debouncedApply(buildSettings(patch));
-            }}
-            onIncrement={() => {
-              const v = stepHHMM(timeValue, 30);
-              setTimeValue(v);
-              const patch: Partial<Settings> = {};
-              if (pickerTgt === 'qodTime') patch.qodTime = v;
-              else if (pickerTgt === 'reflectTime') patch.reflectTime = v;
-              else if (pickerTgt === 'streakTime') patch.streakTime = v;
-              debouncedApply(buildSettings(patch));
-            }}
-          />
+          <TimeButton hhmm={timeValue} target={pickerTgt} />
         </EditRow>
         <View style={[ss.editRepeatSection, { borderTopColor: theme.border }]}>
           <Text style={[ss.editRepeatLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}>Repeat</Text>
@@ -633,6 +614,14 @@ const ss = StyleSheet.create({
     justifyContent: 'center', alignItems: 'center',
   },
   stepperValue: { fontSize: 16, fontWeight: '700', minWidth: 64, textAlign: 'center' },
+
+  // ── Time button ────────────────────────────────────────────────────────
+  timeBtn: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 14, paddingVertical: 10,
+    borderRadius: 12, borderWidth: 1,
+  },
+  timeBtnText: { fontSize: 16, fontWeight: '700' },
 
   // ── Day chips ──────────────────────────────────────────────────────────
   dayChipsWrap: { flexDirection: 'row', gap: 8, marginBottom: 14 },
