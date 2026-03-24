@@ -40,9 +40,13 @@ import { useModal } from '../../contexts/ModalContext';
 import { DailyReflectPill } from './DailyReflectPill';
 import { PremiumModal } from '../subscriptions/PremiumModal';
 import * as ExpoSharing from 'expo-sharing';
-import * as ExpoClipboard from 'expo-clipboard';
 import * as MediaLibrary from 'expo-media-library';
 import { captureRef } from 'react-native-view-shot';
+
+// expo-clipboard: dynamic require so a missing native module doesn't crash the bundle
+const Clipboard: { setStringAsync: (t: string) => Promise<void> } | null = (() => {
+  try { return require('expo-clipboard'); } catch { return null; }
+})();
 
 import { ShareCard } from './ShareCard';
 import { errorReporting } from '../../lib/errorReporting';
@@ -370,7 +374,7 @@ export function QuoteCard() {
   const handleCopyText = useCallback(async () => {
     if (!converted) return;
     if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    await ExpoClipboard.setStringAsync(converted.text);
+    await Clipboard?.setStringAsync(converted.text);
     setCopiedFeedback(true);
     setTimeout(() => setCopiedFeedback(false), 1500);
     analytics.track('quote_copied', { author: converted.author, category: converted.category });
