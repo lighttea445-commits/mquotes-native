@@ -417,7 +417,7 @@ export default function NotificationsScreen({ onClose, onBack, onContinue }: { o
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
-      <SafeAreaView style={{ flex: 1 }} edges={['bottom']}>
+      <SafeAreaView style={{ flex: 1 }} edges={onContinue ? ['top', 'bottom'] : ['bottom']}>
 
         {/* Header */}
         <View style={ss.header}>
