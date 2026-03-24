@@ -4,6 +4,7 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
+  ScrollView,
   useWindowDimensions,
   Share,
   Alert,
@@ -48,7 +49,7 @@ export default function ShareScreen({ onClose }: { onClose?: () => void }) {
   const cardRef = useRef<View>(null);
 
   const close = onClose ?? (() => router.back());
-  const CARD_SIZE = Math.round(width * 0.72);
+  const CARD_SIZE = Math.round(width * 0.62);
 
   const handleCopyText = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -63,7 +64,7 @@ export default function ShareScreen({ onClose }: { onClose?: () => void }) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setIsBusy(true);
     try {
-      if (!captureRef) throw new Error('captureRef unavailable — needs dev build');
+      if (!captureRef) throw new Error('needs dev build');
       const uri = await captureRef(cardRef, { format: 'png', quality: 1.0, result: 'tmpfile' });
       if (MediaLibrary) {
         const { status } = await MediaLibrary.requestPermissionsAsync();
@@ -74,9 +75,9 @@ export default function ShareScreen({ onClose }: { onClose?: () => void }) {
         }
       }
       const canShare = await ExpoSharing.isAvailableAsync();
-      if (canShare) await ExpoSharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Save Quote Image' });
+      if (canShare) await ExpoSharing.shareAsync(uri, { mimeType: 'image/png' });
     } catch (e) {
-      errorReporting.captureException(e as Error, { context: 'ShareScreen:handleSaveImage' });
+      errorReporting.captureException(e as Error, { context: 'ShareScreen:save' });
       Alert.alert('Could not save image', 'Please try again.');
     } finally {
       setIsBusy(false);
@@ -99,7 +100,7 @@ export default function ShareScreen({ onClose }: { onClose?: () => void }) {
       }
       await Share.share({ message: `"${quote}"\n\n— ${author}` });
     } catch (e) {
-      errorReporting.captureException(e as Error, { context: 'ShareScreen:handleShare' });
+      errorReporting.captureException(e as Error, { context: 'ShareScreen:share' });
       await Share.share({ message: `"${quote}"\n\n— ${author}` });
     } finally {
       setIsBusy(false);
@@ -119,96 +120,100 @@ export default function ShareScreen({ onClose }: { onClose?: () => void }) {
   }, [isPro, watermarkRemoved, setWatermarkRemoved, close, modal]);
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
+    <View style={[styles.root, { backgroundColor: theme.background }]}>
       <SafeAreaView style={styles.safe} edges={['bottom']}>
-        {/* Header */}
+
+        {/* Header — matches profile/themes exactly */}
         <View style={styles.header}>
           <TouchableOpacity onPress={close} style={[styles.closeBtn, { backgroundColor: theme.surface }]}>
             <MaterialCommunityIcons name="close" size={20} color={theme.textMuted} />
           </TouchableOpacity>
-          <Text style={[styles.title, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>Share</Text>
+          <Text style={[styles.headerTitle, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
+            Share
+          </Text>
           <View style={{ width: 36 }} />
         </View>
 
-        {/* Card preview */}
-        <View style={styles.cardWrapper}>
-          <View ref={cardRef} collapsable={false}>
-            <ShareCard
-              quote={quote}
-              author={author}
-              theme={theme}
-              size={CARD_SIZE}
-              showWatermark={!(isPro && watermarkRemoved)}
-            />
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+
+          {/* Card preview */}
+          <View style={styles.cardWrapper}>
+            <View ref={cardRef} collapsable={false}>
+              <ShareCard
+                quote={quote}
+                author={author}
+                theme={theme}
+                size={CARD_SIZE}
+                showWatermark={!(isPro && watermarkRemoved)}
+              />
+            </View>
           </View>
-        </View>
 
-        {/* Action buttons */}
-        <View style={styles.actions}>
-          <TouchableOpacity onPress={handleSaveImage} style={styles.actionItem}>
-            <View style={[styles.actionCircle, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-              <MaterialCommunityIcons name="tray-arrow-down" size={24} color={theme.text} />
-            </View>
-            <Text style={[styles.actionLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
-              {'Save\nimage'}
+          {/* Action buttons */}
+          <View style={styles.actions}>
+            <TouchableOpacity onPress={handleSaveImage} style={styles.actionItem}>
+              <View style={[styles.actionCircle, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                <MaterialCommunityIcons name="tray-arrow-down" size={22} color={theme.text} />
+              </View>
+              <Text style={[styles.actionLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
+                {'Save\nimage'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={handleCopyText} style={styles.actionItem}>
+              <View style={[styles.actionCircle, { backgroundColor: theme.surface, borderColor: copiedFeedback ? theme.gold : theme.border }]}>
+                <MaterialCommunityIcons
+                  name={copiedFeedback ? 'check' : 'content-copy'}
+                  size={22}
+                  color={copiedFeedback ? theme.gold : theme.text}
+                />
+              </View>
+              <Text style={[styles.actionLabel, { color: copiedFeedback ? theme.gold : theme.text, fontFamily: theme.uiFontFamily }]}>
+                {copiedFeedback ? 'Copied!' : 'Copy\ntext'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={handleToggleWatermark} style={styles.actionItem}>
+              <View style={[styles.actionCircle, { backgroundColor: theme.surface, borderColor: (isPro && watermarkRemoved) ? theme.gold : theme.border }]}>
+                <MaterialCommunityIcons
+                  name={(isPro && watermarkRemoved) ? 'image-off-outline' : 'image-minus-outline'}
+                  size={22}
+                  color={(isPro && watermarkRemoved) ? theme.gold : theme.text}
+                />
+              </View>
+              <Text style={[styles.actionLabel, { color: (isPro && watermarkRemoved) ? theme.gold : theme.text, fontFamily: theme.uiFontFamily }]}>
+                {(isPro && watermarkRemoved) ? 'Show\nwatermark' : 'Hide\nwatermark'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Share button */}
+          <TouchableOpacity
+            onPress={handleShare}
+            style={[styles.shareBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}
+          >
+            <MaterialCommunityIcons name="export-variant" size={20} color={theme.text} />
+            <Text style={[styles.shareBtnText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
+              Share
             </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={handleCopyText} style={styles.actionItem}>
-            <View style={[styles.actionCircle, { backgroundColor: theme.surface, borderColor: copiedFeedback ? theme.gold : theme.border }]}>
-              <MaterialCommunityIcons
-                name={copiedFeedback ? 'check' : 'content-copy'}
-                size={24}
-                color={copiedFeedback ? theme.gold : theme.text}
-              />
-            </View>
-            <Text style={[styles.actionLabel, { color: copiedFeedback ? theme.gold : theme.text, fontFamily: theme.uiFontFamily }]}>
-              {copiedFeedback ? 'Copied!' : 'Copy\ntext'}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity onPress={handleToggleWatermark} style={styles.actionItem}>
-            <View style={[styles.actionCircle, { backgroundColor: theme.surface, borderColor: (isPro && watermarkRemoved) ? theme.gold : theme.border }]}>
-              <MaterialCommunityIcons
-                name={(isPro && watermarkRemoved) ? 'image-off-outline' : 'image-minus-outline'}
-                size={24}
-                color={(isPro && watermarkRemoved) ? theme.gold : theme.text}
-              />
-            </View>
-            <Text style={[styles.actionLabel, { color: (isPro && watermarkRemoved) ? theme.gold : theme.text, fontFamily: theme.uiFontFamily }]}>
-              {(isPro && watermarkRemoved) ? 'Show\nwatermark' : 'Hide\nwatermark'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Share button */}
-        <TouchableOpacity
-          onPress={handleShare}
-          style={[styles.shareBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}
-        >
-          <MaterialCommunityIcons name="export-variant" size={20} color={theme.text} />
-          <Text style={[styles.shareBtnText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
-            Share
-          </Text>
-        </TouchableOpacity>
+        </ScrollView>
       </SafeAreaView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  safe: {
-    flex: 1,
-    paddingHorizontal: 24,
-  },
+  root: { flex: 1 },
+  safe: { flex: 1 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
     paddingTop: 8,
-    paddingBottom: 24,
+    paddingBottom: 8,
   },
   closeBtn: {
     width: 36,
@@ -217,38 +222,35 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  title: {
-    flex: 1,
-    fontSize: 22,
-    fontWeight: '600',
-    textAlign: 'center',
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  scroll: {
+    paddingHorizontal: 20,
+    paddingBottom: 32,
   },
   cardWrapper: {
     alignItems: 'center',
-    marginBottom: 36,
+    marginVertical: 20,
     borderRadius: 20,
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 10,
   },
   actions: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 32,
-    marginBottom: 36,
+    gap: 28,
+    marginBottom: 24,
   },
   actionItem: {
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
     minWidth: 72,
   },
   actionCircle: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     borderWidth: 1,
     justifyContent: 'center',
     alignItems: 'center',
@@ -256,19 +258,19 @@ const styles = StyleSheet.create({
   actionLabel: {
     fontSize: 12,
     textAlign: 'center',
-    lineHeight: 17,
+    lineHeight: 16,
   },
   shareBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
-    paddingVertical: 16,
-    borderRadius: 16,
+    paddingVertical: 15,
+    borderRadius: 14,
     borderWidth: 1,
   },
   shareBtnText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
   },
 });
