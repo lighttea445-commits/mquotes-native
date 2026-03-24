@@ -40,7 +40,10 @@ import { useModal } from '../../contexts/ModalContext';
 import { DailyReflectPill } from './DailyReflectPill';
 import { PremiumModal } from '../subscriptions/PremiumModal';
 import * as ExpoSharing from 'expo-sharing';
-import { captureRef } from 'react-native-view-shot';
+
+const captureRef: ((ref: React.RefObject<any>, opts: object) => Promise<string>) | null = (() => {
+  try { return require('react-native-view-shot').captureRef; } catch { return null; }
+})();
 
 const Clipboard: { setStringAsync: (t: string) => Promise<void> } | null = (() => {
   try { return require('expo-clipboard'); } catch { return null; }
@@ -361,16 +364,19 @@ export function QuoteCard() {
     analytics.track('quote_shared', { author: converted.author, category: converted.category });
     setIsSharingMedia(true);
     try {
-      const uri = await captureRef(shareCardRef, { format: 'png', quality: 1.0, result: 'tmpfile' });
-      const canShare = await ExpoSharing.isAvailableAsync();
-      if (canShare) {
-        await ExpoSharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Share Quote' });
-      } else {
-        await Share.share({ message: `"${converted.text}"\n\n— ${converted.author}` });
+      if (captureRef) {
+        const uri = await captureRef(shareCardRef, { format: 'png', quality: 1.0, result: 'tmpfile' });
+        const canShare = await ExpoSharing.isAvailableAsync();
+        if (canShare) {
+          await ExpoSharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Share Quote' });
+          return;
+        }
       }
+      // Fallback to text if capture unavailable
+      await Share.share({ message: `"${converted.text}"\n\n— ${converted.author}` });
     } catch (e) {
       errorReporting.captureException(e as Error, { context: 'handleShare' });
-      Alert.alert('Could not share', 'Please try again.');
+      await Share.share({ message: `"${converted.text}"\n\n— ${converted.author}` });
     } finally {
       setIsSharingMedia(false);
     }
@@ -391,6 +397,7 @@ export function QuoteCard() {
     analytics.track('quote_saved', { author: converted.author, category: converted.category });
     setIsSharingMedia(true);
     try {
+      if (!captureRef) throw new Error('captureRef unavailable');
       const uri = await captureRef(shareCardRef, { format: 'png', quality: 1.0, result: 'tmpfile' });
       if (MediaLibrary) {
         const { status } = await MediaLibrary.requestPermissionsAsync();
