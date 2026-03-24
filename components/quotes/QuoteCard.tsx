@@ -20,8 +20,8 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../../hooks/useTheme';
 import { useRevenueCat } from '../../hooks/useRevenueCat';
@@ -38,9 +38,18 @@ import { useModal } from '../../contexts/ModalContext';
 import { DailyReflectPill } from './DailyReflectPill';
 import { PremiumModal } from '../subscriptions/PremiumModal';
 import * as ExpoSharing from 'expo-sharing';
+import * as ExpoClipboard from 'expo-clipboard';
 import { ShareCard } from './ShareCard';
 import { errorReporting } from '../../lib/errorReporting';
 import { analytics } from '../../lib/analytics';
+
+let saveToLibrary: ((uri: string) => Promise<void>) | null = null;
+let requestMediaPermissions: (() => Promise<{ status: string }>) | null = null;
+try {
+  const MediaLibrary = require('expo-media-library');
+  saveToLibrary = MediaLibrary.saveToLibraryAsync;
+  requestMediaPermissions = MediaLibrary.requestPermissionsAsync;
+} catch {}
 
 let captureRef: ((ref: React.RefObject<any>, opts: object) => Promise<string>) | null = null;
 try { captureRef = require('react-native-view-shot').captureRef; } catch {}
@@ -64,6 +73,8 @@ export function QuoteCard() {
   const theme = useTheme();
   const router = useRouter();
   const modal = useModal();
+  const hapticsEnabled = useAppStore((s) => s.preferences.hapticsEnabled);
+  const showAuthor = useAppStore((s) => s.preferences.showAuthor);
   const { isPro } = useRevenueCat();
   const { mixActive, selectedCategories, loadQuotesForMix } = useMix();
   const activeCategory = useMixStore((s) => s.activeCategory);
@@ -78,6 +89,8 @@ export function QuoteCard() {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [showPremiumModal, setShowPremiumModal] = useState(false);
   const [isSharingMedia, setIsSharingMedia] = useState(false);
+  const [watermarkRemoved, setWatermarkRemoved] = useState(false);
+  const [copiedFeedback, setCopiedFeedback] = useState(false);
   const shareCardRef = useRef<View>(null);
   const isFetching = useRef(false);
   // Incremented by the deep-link effect to cancel any in-flight loadQuotes fetch.
@@ -204,7 +217,7 @@ export function QuoteCard() {
       }
     } catch (err) {
       if (gen !== loadGenRef.current) return; // cancelled by deep-link
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      if (hapticsEnabled) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       errorReporting.captureError(err, { context: 'loadQuotes', activeCategory: activeCategory ?? undefined, mixActive });
       setFetchError("Couldn't load quotes. Check your connection.");
       setLoading(false);
@@ -221,7 +234,7 @@ export function QuoteCard() {
     }
     // Network failure — all fetchers returned empty
     if (quotes.length === 0) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      if (hapticsEnabled) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       setFetchError("Couldn't load quotes. Check your connection.");
       setLoading(false);
       return;
@@ -280,7 +293,7 @@ export function QuoteCard() {
     const nextIdx = currentIndex + 1;
     if (nextIdx >= buffer.length - 3) prefetchMore();
     if (nextIdx >= buffer.length) { loadQuotes(); return; }
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     animateOut('up', () => {
       const q = buffer[nextIdx]; // capture before potential trim
       if (nextIdx > BUFFER_TRIM_THRESHOLD) {
@@ -301,7 +314,7 @@ export function QuoteCard() {
 
   const goPrev = useCallback(() => {
     if (currentIndex <= 0) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     animateOut('down', () => {
       setCurrentIndex(prev => prev - 1);
       runOnJS(animateIn)('down');
@@ -310,7 +323,7 @@ export function QuoteCard() {
 
   const handleFavorite = useCallback(() => {
     if (!converted) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     const willFavorite = !favorited;
     analytics.track(willFavorite ? 'quote_favorited' : 'quote_unfavorited', {
       author: converted.author,
@@ -339,16 +352,21 @@ export function QuoteCard() {
 
   const handleShare = useCallback(async () => {
     if (!converted || isSharingMedia) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     analytics.track('quote_shared', { author: converted.author, category: converted.category });
     setIsSharingMedia(true);
     try {
       if (captureRef) {
-        const uri = await captureRef(shareCardRef, { format: 'png', quality: 1.0, result: 'tmpfile' });
-        const canShare = await ExpoSharing.isAvailableAsync();
-        if (canShare) {
-          await ExpoSharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Share Quote' });
-          return;
+        try {
+          const uri = await captureRef(shareCardRef, { format: 'png', quality: 1.0, result: 'tmpfile' });
+          const canShare = await ExpoSharing.isAvailableAsync();
+          if (canShare) {
+            await ExpoSharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Share Quote' });
+            return;
+          }
+        } catch (captureErr) {
+          errorReporting.captureException(captureErr as Error, { context: 'handleShare:capture' });
+          // fall through to text share
         }
       }
       await Share.share({ message: `"${converted.text}"\n\n— ${converted.author}` });
@@ -358,6 +376,53 @@ export function QuoteCard() {
       setIsSharingMedia(false);
     }
   }, [converted, isSharingMedia]);
+
+  const handleCopyText = useCallback(async () => {
+    if (!converted) return;
+    if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    await ExpoClipboard.setStringAsync(converted.text);
+    setCopiedFeedback(true);
+    setTimeout(() => setCopiedFeedback(false), 1500);
+    analytics.track('quote_copied', { author: converted.author, category: converted.category });
+  }, [converted]);
+
+  const handleSaveImage = useCallback(async () => {
+    if (!converted || isSharingMedia) return;
+    if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    analytics.track('quote_saved', { author: converted.author, category: converted.category });
+    setIsSharingMedia(true);
+    try {
+      if (captureRef) {
+        const uri = await captureRef(shareCardRef, { format: 'png', quality: 1.0, result: 'tmpfile' });
+        if (saveToLibrary && requestMediaPermissions) {
+          const { status } = await requestMediaPermissions();
+          if (status === 'granted') {
+            await saveToLibrary(uri);
+            return;
+          }
+        }
+        // Fallback: share if no media library access
+        const canShare = await ExpoSharing.isAvailableAsync();
+        if (canShare) {
+          await ExpoSharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Save Quote Image' });
+        }
+      }
+    } catch (e) {
+      errorReporting.captureException(e as Error, { context: 'handleSaveImage' });
+    } finally {
+      setIsSharingMedia(false);
+    }
+  }, [converted, isSharingMedia]);
+
+  const handleToggleWatermark = useCallback(() => {
+    if (!isPro) {
+      if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      modal ? modal.openSheet('features') : setShowPremiumModal(true);
+      return;
+    }
+    if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setWatermarkRemoved(prev => !prev);
+  }, [isPro, modal]);
 
   // Pan gesture — require 15px vertical movement before activating so taps
   // on the share/heart buttons pass through cleanly to TouchableOpacity.
@@ -499,7 +564,7 @@ export function QuoteCard() {
             ) : (
               <TouchableOpacity
                 onPress={() => {
-                  Haptics.selectionAsync();
+                  if (hapticsEnabled) Haptics.selectionAsync();
                   modal ? modal.openSheet('mix') : router.push('/mix/create');
                 }}
                 style={[styles.collectionPill, { backgroundColor: theme.surface, borderColor: theme.border }]}
@@ -518,7 +583,7 @@ export function QuoteCard() {
           {/* Right: crown icon — gold if Pro, muted if free */}
           <TouchableOpacity
             onPress={() => {
-              Haptics.selectionAsync();
+              if (hapticsEnabled) Haptics.selectionAsync();
               if (isPro) setShowPremiumModal(true);
               else modal ? modal.openSheet('features') : undefined;
             }}
@@ -545,13 +610,18 @@ export function QuoteCard() {
               >
                 {converted?.text}
               </Text>
+              {showAuthor && converted?.author ? (
+                <Text style={[styles.authorText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+                  — {converted.author}
+                </Text>
+              ) : null}
               <Animated.View style={[styles.bigHeartOverlay, bigHeartAnimStyle]} pointerEvents="none">
                 <MaterialCommunityIcons name="heart" size={180} color={theme.gold} />
               </Animated.View>
             </View>
             <View style={styles.actionRow}>
               <TouchableOpacity onPress={handleShare} hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}>
-                <MaterialCommunityIcons name="export-variant" size={32} color={theme.textMuted} />
+                <MaterialCommunityIcons name="redo" size={32} color={theme.textMuted} />
               </TouchableOpacity>
               <TouchableOpacity onPress={handleFavorite} hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}>
                 <MaterialCommunityIcons
@@ -561,12 +631,62 @@ export function QuoteCard() {
                 />
               </TouchableOpacity>
             </View>
+
+            {/* Media action row */}
+            <View style={styles.mediaActionRow}>
+              <TouchableOpacity
+                onPress={handleCopyText}
+                style={[styles.mediaActionBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <MaterialCommunityIcons
+                  name={copiedFeedback ? 'check' : 'content-copy'}
+                  size={16}
+                  color={copiedFeedback ? theme.gold : theme.textMuted}
+                />
+                <Text style={[styles.mediaActionLabel, { color: copiedFeedback ? theme.gold : theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+                  {copiedFeedback ? 'Copied!' : 'Copy'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={handleSaveImage}
+                style={[styles.mediaActionBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <MaterialCommunityIcons name="download" size={16} color={theme.textMuted} />
+                <Text style={[styles.mediaActionLabel, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+                  Save
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={handleToggleWatermark}
+                style={[
+                  styles.mediaActionBtn,
+                  {
+                    backgroundColor: theme.surface,
+                    borderColor: (isPro && watermarkRemoved) ? theme.gold : theme.border,
+                  },
+                ]}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <MaterialCommunityIcons
+                  name={(isPro && watermarkRemoved) ? 'image-off-outline' : 'image-outline'}
+                  size={16}
+                  color={(isPro && watermarkRemoved) ? theme.gold : theme.textMuted}
+                />
+                <Text style={[styles.mediaActionLabel, { color: (isPro && watermarkRemoved) ? theme.gold : theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+                  No Mark
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </Animated.View>
 
         {/* ── CORNER BUTTONS: fixed — never animate ── */}
         <TouchableOpacity
-          onPress={() => { Haptics.selectionAsync(); modal ? modal.openSheet('categories') : router.push('/categories'); }}
+          onPress={() => { if (hapticsEnabled) Haptics.selectionAsync(); modal ? modal.openSheet('categories') : router.push('/categories'); }}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           style={[styles.categoriesFloat, { backgroundColor: theme.surface, bottom: BTN_BOTTOM, left: BTN_BOTTOM }]}
           accessibilityLabel="Browse categories"
@@ -574,14 +694,14 @@ export function QuoteCard() {
           <MaterialCommunityIcons name="apps" size={22} color={theme.gold} />
         </TouchableOpacity>
         <TouchableOpacity
-          onPress={() => { Haptics.selectionAsync(); modal ? modal.openSheet('profile') : router.push('/profile'); }}
+          onPress={() => { if (hapticsEnabled) Haptics.selectionAsync(); modal ? modal.openSheet('profile') : router.push('/profile'); }}
           style={[styles.profileFloat, { backgroundColor: theme.surface, bottom: PROFILE_BOTTOM, right: BTN_BOTTOM }]}
           accessibilityLabel="Open profile"
         >
           <MaterialCommunityIcons name="account-outline" size={20} color={theme.gold} />
         </TouchableOpacity>
         <TouchableOpacity
-          onPress={() => { Haptics.selectionAsync(); modal ? modal.openSheet('themes') : router.push('/themes'); }}
+          onPress={() => { if (hapticsEnabled) Haptics.selectionAsync(); modal ? modal.openSheet('themes') : router.push('/themes'); }}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           style={[styles.themesFloat, { backgroundColor: theme.surface, bottom: BTN_BOTTOM, right: BTN_BOTTOM }]}
           accessibilityLabel="Change theme"
@@ -601,14 +721,15 @@ export function QuoteCard() {
         {containerContent}
       </GestureDetector>
       <PremiumModal visible={showPremiumModal} onClose={() => setShowPremiumModal(false)} />
-      {/* Hidden off-screen card used for image capture — must be rendered so captureRef works */}
-      <View style={{ position: 'absolute', left: -9999, top: -9999 }} pointerEvents="none">
-        <View ref={shareCardRef} collapsable={false} style={{ borderRadius: 16, overflow: 'hidden' }}>
+      {/* Hidden card for image capture — opacity:0 keeps it in viewport so Fabric allocates a real native view */}
+      <View style={{ position: 'absolute', top: 0, left: 0, opacity: 0 }} pointerEvents="none" collapsable={false}>
+        <View ref={shareCardRef} collapsable={false} renderToHardwareTextureAndroid style={{ borderRadius: 0, overflow: 'hidden' }}>
           <ShareCard
             quote={converted?.text ?? ''}
             author={converted?.author ?? ''}
             theme={theme}
             size={400}
+            showWatermark={!(isPro && watermarkRemoved)}
           />
         </View>
       </View>
@@ -736,6 +857,27 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 32,
     marginTop: 28,
+  },
+
+  // Media action row (copy / save / watermark)
+  mediaActionRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 10,
+    marginTop: 14,
+  },
+  mediaActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  mediaActionLabel: {
+    fontSize: 12,
+    fontWeight: '500',
   },
 
   // Collection pill (mix / category / general)
