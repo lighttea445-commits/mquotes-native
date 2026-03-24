@@ -402,7 +402,8 @@ export function QuoteCard() {
     setIsSharingMedia(true);
     try {
       if (captureRef) {
-        const uri = await captureRef(shareCardRef, { format: 'png', quality: 1.0, result: 'tmpfile' });
+        const ref = sharePreviewRef.current ? sharePreviewRef : shareCardRef;
+        const uri = await captureRef(ref, { format: 'png', quality: 1.0, result: 'tmpfile' });
         if (saveToLibrary && requestMediaPermissions) {
           const { status } = await requestMediaPermissions();
           if (status === 'granted') {
