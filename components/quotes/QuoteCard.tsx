@@ -40,12 +40,17 @@ import { useModal } from '../../contexts/ModalContext';
 import { DailyReflectPill } from './DailyReflectPill';
 import { PremiumModal } from '../subscriptions/PremiumModal';
 import * as ExpoSharing from 'expo-sharing';
-import * as MediaLibrary from 'expo-media-library';
 import { captureRef } from 'react-native-view-shot';
 
-// expo-clipboard: dynamic require so a missing native module doesn't crash the bundle
 const Clipboard: { setStringAsync: (t: string) => Promise<void> } | null = (() => {
   try { return require('expo-clipboard'); } catch { return null; }
+})();
+
+const MediaLibrary: {
+  requestPermissionsAsync: () => Promise<{ status: string }>;
+  saveToLibraryAsync: (uri: string) => Promise<void>;
+} | null = (() => {
+  try { return require('expo-media-library'); } catch { return null; }
 })();
 
 import { ShareCard } from './ShareCard';
@@ -387,16 +392,18 @@ export function QuoteCard() {
     setIsSharingMedia(true);
     try {
       const uri = await captureRef(shareCardRef, { format: 'png', quality: 1.0, result: 'tmpfile' });
-      const { status } = await MediaLibrary.requestPermissionsAsync();
-      if (status === 'granted') {
-        await MediaLibrary.saveToLibraryAsync(uri);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      } else {
-        // Fallback: share sheet
-        const canShare = await ExpoSharing.isAvailableAsync();
-        if (canShare) {
-          await ExpoSharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Save Quote Image' });
+      if (MediaLibrary) {
+        const { status } = await MediaLibrary.requestPermissionsAsync();
+        if (status === 'granted') {
+          await MediaLibrary.saveToLibraryAsync(uri);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          return;
         }
+      }
+      // Fallback: share sheet
+      const canShare = await ExpoSharing.isAvailableAsync();
+      if (canShare) {
+        await ExpoSharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Save Quote Image' });
       }
     } catch (e) {
       errorReporting.captureException(e as Error, { context: 'handleSaveImage' });
