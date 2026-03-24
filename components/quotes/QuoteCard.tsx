@@ -7,7 +7,6 @@ import {
   ActivityIndicator,
   useWindowDimensions,
   Share,
-  Modal,
   Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -98,6 +97,7 @@ export function QuoteCard() {
   const [watermarkRemoved, setWatermarkRemoved] = useState(false);
   const [copiedFeedback, setCopiedFeedback] = useState(false);
   const [showShareSheet, setShowShareSheet] = useState(false);
+  const shareSheetY = useSharedValue(1000);
   const shareCardRef = useRef<View>(null);
   const sharePreviewRef = useRef<View>(null);
   const isFetching = useRef(false);
@@ -107,6 +107,21 @@ export function QuoteCard() {
   const translateY = useSharedValue(0);
   const opacity = useSharedValue(1);
   const scale = useSharedValue(1);
+
+  const shareSheetAnimStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: shareSheetY.value }],
+  }));
+
+  const openShareSheet = useCallback(() => {
+    setShowShareSheet(true);
+    shareSheetY.value = withSpring(0, { damping: 20, stiffness: 200 });
+  }, []);
+
+  const closeShareSheet = useCallback(() => {
+    shareSheetY.value = withTiming(1000, { duration: 280 }, (finished) => {
+      if (finished) runOnJS(setShowShareSheet)(false);
+    });
+  }, []);
   const bigHeartScale = useSharedValue(0);
   const bigHeartOpacity = useSharedValue(0);
 
@@ -423,14 +438,14 @@ export function QuoteCard() {
   const handleToggleWatermark = useCallback(() => {
     if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (!isPro) {
-      setShowShareSheet(false);
+      closeShareSheet();
       setTimeout(() => {
         modal ? modal.openSheet('features') : setShowPremiumModal(true);
-      }, 350);
+      }, 320);
       return;
     }
     setWatermarkRemoved(prev => !prev);
-  }, [isPro, modal]);
+  }, [isPro, modal, closeShareSheet]);
 
   // Pan gesture — require 15px vertical movement before activating so taps
   // on the share/heart buttons pass through cleanly to TouchableOpacity.
@@ -628,7 +643,7 @@ export function QuoteCard() {
               </Animated.View>
             </View>
             <View style={styles.actionRow}>
-              <TouchableOpacity onPress={() => { if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowShareSheet(true); }} hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}>
+              <TouchableOpacity onPress={() => { if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openShareSheet(); }} hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}>
                 <MaterialCommunityIcons name="redo" size={32} color={theme.textMuted} />
               </TouchableOpacity>
               <TouchableOpacity onPress={handleFavorite} hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}>
@@ -680,13 +695,9 @@ export function QuoteCard() {
       </GestureDetector>
       <PremiumModal visible={showPremiumModal} onClose={() => setShowPremiumModal(false)} />
 
-      {/* ── SHARE SHEET MODAL ── */}
-      <Modal
-        visible={showShareSheet}
-        animationType="slide"
-        onRequestClose={() => setShowShareSheet(false)}
-      >
-        <View style={[styles.sheetScreen, { paddingTop: insets.top, paddingBottom: insets.bottom + 16 }]}>
+      {/* ── SHARE SHEET OVERLAY (inline, same hierarchy as app so modal.openSheet works) ── */}
+      {showShareSheet && (
+      <Animated.View style={[styles.sheetScreen, { paddingTop: insets.top, paddingBottom: insets.bottom + 16 }, shareSheetAnimStyle]}>
           {/* Drag handle */}
           <View style={styles.sheetDragHandle}>
             <View style={styles.sheetDragPill} />
@@ -695,7 +706,7 @@ export function QuoteCard() {
           {/* Header */}
           <View style={styles.sheetHeader}>
             <TouchableOpacity
-              onPress={() => setShowShareSheet(false)}
+              onPress={closeShareSheet}
               style={styles.sheetCloseBtn}
               accessibilityLabel="Close share sheet"
             >
@@ -769,8 +780,8 @@ export function QuoteCard() {
               Share
             </Text>
           </TouchableOpacity>
-        </View>
-      </Modal>
+        </Animated.View>
+      )}
 
       {/* Hidden card for image capture — translated off-screen so Android fully renders it (opacity:0 breaks captureRef on Android) */}
       <View style={{ position: 'absolute', top: 0, left: -5000 }} pointerEvents="none" collapsable={false}>
@@ -912,10 +923,15 @@ const styles = StyleSheet.create({
 
   // Share sheet screen
   sheetScreen: {
-    flex: 1,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: '#000',
     alignItems: 'center',
     paddingHorizontal: 24,
+    zIndex: 100,
   },
   sheetDragHandle: {
     width: '100%',
