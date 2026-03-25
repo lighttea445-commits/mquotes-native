@@ -64,7 +64,6 @@ function defaultConfig(): WidgetInstanceConfig {
     updateInterval: 'hourly',
     quoteType: 'general',
     textSize: 'medium',
-    themeId: 'default',
     cachedQuote: null,
     lastRefreshed: null,
   };

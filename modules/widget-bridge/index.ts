@@ -22,7 +22,7 @@ export interface ActiveWidget {
 export interface RenderPayload {
   widgetId: number;
   quote: QuoteData;
-  config: Pick<WidgetInstanceConfig, 'showAuthor' | 'transparentBg' | 'textSize' | 'themeId'>;
+  config: Pick<WidgetInstanceConfig, 'showAuthor' | 'transparentBg' | 'textSize'>;
 }
 
 class WidgetBridgeClass {

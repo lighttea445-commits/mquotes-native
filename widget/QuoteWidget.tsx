@@ -2,7 +2,6 @@ import React from 'react';
 import { FlexWidget, TextWidget } from 'react-native-android-widget';
 import type { WidgetInfo } from 'react-native-android-widget';
 import type { WidgetInstanceConfig } from '../store/useWidgetStore';
-import { getTheme } from '../constants/themes';
 
 export interface QuoteData {
   id?: string;
@@ -28,7 +27,7 @@ function adaptiveFontSize(
 
 interface Props {
   quote: QuoteData;
-  config: Pick<WidgetInstanceConfig, 'showAuthor' | 'transparentBg' | 'textSize' | 'themeId'>;
+  config: Pick<WidgetInstanceConfig, 'showAuthor' | 'transparentBg' | 'textSize'>;
   widgetInfo: WidgetInfo;
 }
 
@@ -49,15 +48,9 @@ export function QuoteWidget({ quote, config, widgetInfo }: Props) {
   // after every renderWidget call) and read by app/widget-open.tsx.
   const tapUri = `quotable://widget-open?widgetId=${widgetInfo.widgetId}`;
 
-  // Resolve theme colors. 'default' keeps the original dark look.
-  // Only the solid background color is used — widget primitives don't support
-  // background images, so we deliberately ignore theme.backgroundImage here.
-  const appTheme  = config.themeId !== 'default' ? getTheme(config.themeId) : null;
-  const bgColor   = config.transparentBg
-    ? ('#00000000' as `#${string}`)
-    : ((appTheme?.background ?? '#080808') as `#${string}`);
-  const textColor = (appTheme?.text      ?? '#FFFFFF') as `#${string}`;
-  const mutedColor = appTheme?.textMuted ?? 'rgba(255, 255, 255, 0.65)';
+  const bgColor    = config.transparentBg ? ('#00000000' as `#${string}`) : ('#080808' as `#${string}`);
+  const textColor  = '#FFFFFF' as `#${string}`;
+  const mutedColor = 'rgba(255, 255, 255, 0.65)';
 
   return (
     <FlexWidget

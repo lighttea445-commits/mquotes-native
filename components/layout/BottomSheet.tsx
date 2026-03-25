@@ -23,9 +23,11 @@ interface BottomSheetProps {
   instantClose?: boolean;
   /** Skip open animation — sheet appears instantly at full height (used when replacing another sheet). */
   instantOpen?: boolean;
+  /** Override the top gap (distance from top of screen). Defaults to SHEET_TOP_GAP (~8%). */
+  topGap?: number;
 }
 
-export function BottomSheet({ visible, onClose, children, backgroundColor, instantClose, instantOpen }: BottomSheetProps) {
+export function BottomSheet({ visible, onClose, children, backgroundColor, instantClose, instantOpen, topGap }: BottomSheetProps) {
   const translateY = useSharedValue(SCREEN_HEIGHT);
   const backdropOpacity = useSharedValue(0);
 
@@ -147,7 +149,7 @@ export function BottomSheet({ visible, onClose, children, backgroundColor, insta
       <Animated.View
         style={[
           styles.sheet,
-          { top: SHEET_TOP_GAP, backgroundColor },
+          { top: topGap ?? SHEET_TOP_GAP, backgroundColor },
           sheetStyle,
         ]}
       >

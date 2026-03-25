@@ -87,8 +87,6 @@ export interface WidgetInstanceConfig {
   updateInterval: WidgetRefreshFrequency;
   quoteType: WidgetQuoteType;
   textSize: WidgetTextSize;
-  /** Theme id from constants/themes (e.g. 'minimal', 'rose-sky'). 'default' = original dark #080808. */
-  themeId: string;
   cachedQuote: { text: string; author: string; quoteId?: string } | null;
   lastRefreshed: string | null;
 }
@@ -102,7 +100,6 @@ export function defaultInstanceConfig(type: WidgetType): WidgetInstanceConfig {
     updateInterval: 'hourly',
     quoteType: 'general',
     textSize: 'large',
-    themeId: 'default',
     cachedQuote: null,
     lastRefreshed: null,
   };

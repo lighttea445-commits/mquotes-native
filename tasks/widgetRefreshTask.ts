@@ -119,7 +119,6 @@ if (TaskManager) {
             showAuthor:    config.showAuthor,
             transparentBg: config.transparentBg,
             textSize:      config.textSize,
-            themeId:       config.themeId ?? 'default',
           },
         });
 
