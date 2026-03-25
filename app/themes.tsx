@@ -87,6 +87,12 @@ export default function ThemesScreen({ onClose }: { onClose?: () => void }) {
           renderItem={({ item: t }) => {
             const isSelected = preferences.theme === t.id;
             const aaColor = t.isDark ? '#E8E0D0' : '#1A1208';
+            const cardStyle = {
+              width: CARD_WIDTH,
+              height: CARD_HEIGHT,
+              borderColor: isSelected ? theme.gold : theme.border,
+              borderWidth: 2,
+            };
             return (
               <TouchableOpacity
                 style={[styles.cardWrapper, { width: CARD_WIDTH }]}
@@ -96,33 +102,33 @@ export default function ThemesScreen({ onClose }: { onClose?: () => void }) {
                 {t.backgroundImage ? (
                   <ImageBackground
                     source={t.backgroundImage}
-                    style={[
-                      styles.card,
-                      {
-                        width: CARD_WIDTH,
-                        height: CARD_HEIGHT,
-                        borderColor: isSelected ? theme.gold : theme.border,
-                        borderWidth: 2,
-                      },
-                    ]}
+                    style={[styles.card, cardStyle]}
                     imageStyle={{ borderRadius: 14 }}
                     resizeMode="cover"
-                  />
-                ) : (
-                  <View
-                    style={[
-                      styles.card,
-                      {
-                        width: CARD_WIDTH,
-                        height: CARD_HEIGHT,
-                        borderColor: isSelected ? theme.gold : theme.border,
-                        borderWidth: 2,
-                      },
-                    ]}
                   >
+                    <View style={styles.aaOverlay}>
+                      <Text
+                        style={[
+                          styles.aaTextImage,
+                          { fontFamily: t.quoteFontFamily },
+                        ]}
+                      >
+                        Aa
+                      </Text>
+                    </View>
+                  </ImageBackground>
+                ) : (
+                  <View style={[styles.card, cardStyle]}>
                     <View style={[styles.cardBg, { backgroundColor: t.background }]}>
                       <View style={styles.aaContainer}>
-                        <Text style={[styles.aaText, { color: aaColor }]}>Aa</Text>
+                        <Text
+                          style={[
+                            styles.aaText,
+                            { color: aaColor, fontFamily: t.quoteFontFamily },
+                          ]}
+                        >
+                          Aa
+                        </Text>
                       </View>
                     </View>
                   </View>
@@ -222,6 +228,18 @@ const styles = StyleSheet.create({
   },
   aaText: {
     fontSize: 20,
-    fontFamily: 'PlayfairDisplay_700Bold',
+  },
+  aaOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.28)',
+  },
+  aaTextImage: {
+    fontSize: 22,
+    color: '#FFFFFF',
+    textShadowColor: 'rgba(0,0,0,0.7)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
   },
 });

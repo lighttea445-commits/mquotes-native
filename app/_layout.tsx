@@ -19,6 +19,35 @@ import {
   Inter_700Bold,
 } from '@expo-google-fonts/inter';
 import { Allkin_400Regular } from '@expo-google-fonts/allkin';
+import {
+  Lora_400Regular,
+  Lora_400Regular_Italic,
+  Lora_700Bold,
+} from '@expo-google-fonts/lora';
+import {
+  Cormorant_300Light,
+  Cormorant_400Regular,
+  Cormorant_400Regular_Italic,
+  Cormorant_600SemiBold,
+  Cormorant_700Bold,
+} from '@expo-google-fonts/cormorant';
+import {
+  DMSerifDisplay_400Regular,
+  DMSerifDisplay_400Regular_Italic,
+} from '@expo-google-fonts/dm-serif-display';
+import {
+  EBGaramond_400Regular,
+  EBGaramond_700Bold,
+} from '@expo-google-fonts/eb-garamond';
+import {
+  Nunito_400Regular,
+  Nunito_600SemiBold,
+} from '@expo-google-fonts/nunito';
+import {
+  Raleway_300Light,
+  Raleway_400Regular,
+  Raleway_600SemiBold,
+} from '@expo-google-fonts/raleway';
 import { View, ActivityIndicator } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAppStore } from '../store/useAppStore';
@@ -192,6 +221,23 @@ export default function RootLayout() {
     Inter_600SemiBold,
     Inter_700Bold,
     Allkin_400Regular,
+    Lora_400Regular,
+    Lora_400Regular_Italic,
+    Lora_700Bold,
+    Cormorant_300Light,
+    Cormorant_400Regular,
+    Cormorant_400Regular_Italic,
+    Cormorant_600SemiBold,
+    Cormorant_700Bold,
+    DMSerifDisplay_400Regular,
+    DMSerifDisplay_400Regular_Italic,
+    EBGaramond_400Regular,
+    EBGaramond_700Bold,
+    Nunito_400Regular,
+    Nunito_600SemiBold,
+    Raleway_300Light,
+    Raleway_400Regular,
+    Raleway_600SemiBold,
   });
 
   // ── Widget tap deep-link handler (Linking fallback) ───────────────────────
