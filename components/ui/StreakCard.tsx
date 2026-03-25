@@ -19,19 +19,12 @@ export function StreakCard({ streakCount, weekData, onShare }: StreakCardProps) 
   const todayIndex = jsDayOfWeek === 0 ? 6 : jsDayOfWeek - 1;
 
   return (
-    <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-      {/* Share button — absolute top-right, card paddingTop clears it */}
-      {onShare && (
-        <TouchableOpacity
-          style={[styles.shareBtn, { backgroundColor: theme.surfaceElevated ?? theme.surface }]}
-          onPress={onShare}
-          activeOpacity={0.7}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <MaterialCommunityIcons name="share-variant" size={15} color={theme.textMuted} />
-        </TouchableOpacity>
-      )}
-
+    <TouchableOpacity
+      style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}
+      onPress={onShare}
+      activeOpacity={onShare ? 0.75 : 1}
+      disabled={!onShare}
+    >
       {/* Sun + tracker row */}
       <View style={styles.row}>
         <View style={styles.sunWrapper}>
@@ -73,7 +66,7 @@ export function StreakCard({ streakCount, weekData, onShare }: StreakCardProps) 
           })}
         </View>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 
@@ -81,19 +74,8 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: 28,
     borderWidth: 1,
-    paddingTop: 40,
-    paddingBottom: 18,
+    paddingVertical: 18,
     paddingHorizontal: 20,
-  },
-  shareBtn: {
-    position: 'absolute',
-    top: 10,
-    right: 12,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   row: {
     flexDirection: 'row',
