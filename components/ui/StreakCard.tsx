@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../../hooks/useTheme';
 import { SunIcon } from './SunIcon';
@@ -15,16 +15,15 @@ const DAY_LABELS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
 export function StreakCard({ streakCount, weekData, onShare }: StreakCardProps) {
   const theme = useTheme();
 
-  // Today's day index: 0=Sun in JS, shift to Mon=0
-  const jsDayOfWeek = new Date().getDay(); // 0=Sun
-  const todayIndex = jsDayOfWeek === 0 ? 6 : jsDayOfWeek - 1; // Mon=0..Sun=6
+  const jsDayOfWeek = new Date().getDay();
+  const todayIndex = jsDayOfWeek === 0 ? 6 : jsDayOfWeek - 1;
 
   return (
     <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-      {/* Share button — top-right, only rendered when onShare provided */}
+      {/* Share button — absolute top-right, card paddingTop clears it */}
       {onShare && (
         <TouchableOpacity
-          style={[styles.shareBtn, { backgroundColor: theme.surfaceElevated ?? theme.surface, alignSelf: 'flex-end' }]}
+          style={[styles.shareBtn, { backgroundColor: theme.surfaceElevated ?? theme.surface }]}
           onPress={onShare}
           activeOpacity={0.7}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -33,8 +32,8 @@ export function StreakCard({ streakCount, weekData, onShare }: StreakCardProps) 
         </TouchableOpacity>
       )}
 
-      {/* Bottom row: Sun left, 7-day tracker right */}
-      <View style={styles.contentRow}>
+      {/* Sun + tracker row */}
+      <View style={styles.row}>
         <View style={styles.sunWrapper}>
           <SunIcon day={streakCount} size={72} color={theme.gold} />
         </View>
@@ -80,21 +79,23 @@ export function StreakCard({ streakCount, weekData, onShare }: StreakCardProps) 
 
 const styles = StyleSheet.create({
   card: {
-    flexDirection: 'column',
     borderRadius: 28,
     borderWidth: 1,
-    paddingVertical: 14,
+    paddingTop: 40,
+    paddingBottom: 18,
     paddingHorizontal: 20,
-    gap: 10,
   },
   shareBtn: {
+    position: 'absolute',
+    top: 10,
+    right: 12,
     width: 28,
     height: 28,
     borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  contentRow: {
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 16,
