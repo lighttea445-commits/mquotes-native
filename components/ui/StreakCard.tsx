@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../../hooks/useTheme';
 import { SunIcon } from './SunIcon';
@@ -21,22 +21,17 @@ export function StreakCard({ streakCount, weekData, onShare }: StreakCardProps) 
 
   return (
     <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-      {/* Top row: label left, share button right */}
-      <View style={styles.cardHeader}>
-        <Text style={[styles.headerLabel, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-          Your streak
-        </Text>
-        {onShare && (
-          <TouchableOpacity
-            style={[styles.shareBtn, { backgroundColor: theme.surfaceElevated ?? theme.surface }]}
-            onPress={onShare}
-            activeOpacity={0.7}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <MaterialCommunityIcons name="share-variant" size={15} color={theme.textMuted} />
-          </TouchableOpacity>
-        )}
-      </View>
+      {/* Share button — top-right, only rendered when onShare provided */}
+      {onShare && (
+        <TouchableOpacity
+          style={[styles.shareBtn, { backgroundColor: theme.surfaceElevated ?? theme.surface, alignSelf: 'flex-end' }]}
+          onPress={onShare}
+          activeOpacity={0.7}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <MaterialCommunityIcons name="share-variant" size={15} color={theme.textMuted} />
+        </TouchableOpacity>
+      )}
 
       {/* Bottom row: Sun left, 7-day tracker right */}
       <View style={styles.contentRow}>
@@ -91,16 +86,6 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 20,
     gap: 10,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  headerLabel: {
-    fontSize: 11,
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
   },
   shareBtn: {
     width: 28,
