@@ -94,7 +94,7 @@ export function StreakShareSheet({ visible, streakCount, onClose }: Props) {
       } catch {}
     }
     await Share.share({
-      message: `${streakCount} day streak! I've made a habit of reading motivating quotes every day! — Quotable`,
+      message: `${streakCount} day streak! I've made a habit of getting motivated each day! — Quotable`,
     });
   }, [streakCount]);
 

@@ -84,7 +84,7 @@ export function StreakShareCard({ streakCount, theme, showWatermark = true, size
             lineHeight: subtitleFontSize * 1.6,
           }}
         >
-          {"I've made a habit of reading\nmotivating quotes every day!"}
+          {"I've made a habit of getting\nmotivated each day!"}
         </Text>
       </View>
 
