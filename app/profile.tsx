@@ -60,9 +60,7 @@ export default function ProfileScreen({ onClose }: { onClose?: () => void }) {
           <TouchableOpacity onPress={close} style={[styles.closeBtn, { backgroundColor: theme.surface }]}>
             <MaterialCommunityIcons name="close" size={20} color={theme.textMuted} />
           </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
-            Profile
-          </Text>
+          <View style={{ flex: 1 }} />
           <TouchableOpacity onPress={openSettings} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Text style={[styles.settingsLink, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>Settings</Text>
           </TouchableOpacity>
@@ -78,17 +76,7 @@ export default function ProfileScreen({ onClose }: { onClose?: () => void }) {
 
           {/* Streak card */}
           <View style={styles.streakWrapper}>
-            <StreakCard streakCount={streakCount} weekData={weekData} />
-            <TouchableOpacity
-              style={[styles.shareStreakBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}
-              onPress={() => setShowStreakShare(true)}
-              activeOpacity={0.75}
-            >
-              <MaterialCommunityIcons name="share-variant-outline" size={16} color={theme.textMuted} />
-              <Text style={[styles.shareStreakText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-                Share streak
-              </Text>
-            </TouchableOpacity>
+            <StreakCard streakCount={streakCount} weekData={weekData} onShare={() => setShowStreakShare(true)} />
           </View>
 
           {/* Stats row */}
@@ -198,14 +186,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-  },
   nameSection: {
     paddingHorizontal: 24,
-    paddingTop: 8,
-    paddingBottom: 20,
+    marginTop: 16,
+    marginBottom: 20,
   },
   name: {
     fontSize: 32,
@@ -214,19 +198,6 @@ const styles = StyleSheet.create({
   streakWrapper: {
     marginHorizontal: 16,
     marginBottom: 16,
-    gap: 10,
-  },
-  shareStreakBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    borderRadius: 14,
-    borderWidth: 1,
-    paddingVertical: 10,
-  },
-  shareStreakText: {
-    fontSize: 13,
   },
   statsRow: {
     flexDirection: 'row',

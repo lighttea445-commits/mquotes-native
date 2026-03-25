@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../../hooks/useTheme';
 import { SunIcon } from './SunIcon';
@@ -7,11 +7,12 @@ import { SunIcon } from './SunIcon';
 interface StreakCardProps {
   streakCount: number;
   weekData: boolean[]; // 7 elements: Mon=0 … Sun=6
+  onShare?: () => void;
 }
 
 const DAY_LABELS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
 
-export function StreakCard({ streakCount, weekData }: StreakCardProps) {
+export function StreakCard({ streakCount, weekData, onShare }: StreakCardProps) {
   const theme = useTheme();
 
   // Today's day index: 0=Sun in JS, shift to Mon=0
@@ -20,6 +21,16 @@ export function StreakCard({ streakCount, weekData }: StreakCardProps) {
 
   return (
     <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+      {onShare && (
+        <TouchableOpacity
+          style={[styles.shareBtn, { backgroundColor: theme.surfaceElevated ?? theme.surface }]}
+          onPress={onShare}
+          activeOpacity={0.7}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <MaterialCommunityIcons name="share-variant-outline" size={16} color={theme.textMuted} />
+        </TouchableOpacity>
+      )}
       {/* Left: Sun with streak count */}
       <View style={styles.sunWrapper}>
         <SunIcon day={streakCount} size={72} color={theme.gold} />
@@ -73,6 +84,16 @@ const styles = StyleSheet.create({
     paddingVertical: 18,
     paddingHorizontal: 20,
     gap: 16,
+  },
+  shareBtn: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   sunWrapper: {
     justifyContent: 'center',

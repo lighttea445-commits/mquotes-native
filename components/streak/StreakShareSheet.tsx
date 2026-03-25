@@ -1,18 +1,25 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
+  useWindowDimensions,
   Share,
   Modal,
-  useWindowDimensions,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
-import * as ExpoSharing from 'expo-sharing';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withTiming,
+  runOnJS,
+} from 'react-native-reanimated';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
+import * as ExpoSharing from 'expo-sharing';
 import { useTheme } from '../../hooks/useTheme';
 import { StreakShareCard } from './StreakShareCard';
 
@@ -25,225 +32,226 @@ interface Props {
   onClose: () => void;
 }
 
-const SOCIAL_BUTTONS = [
-  { label: 'Instagram', bg: '#C13584', icon: 'logo-instagram' as const },
-  { label: 'Facebook', bg: '#1877F2', icon: 'logo-facebook' as const },
-  { label: 'WhatsApp', bg: '#25D366', icon: 'logo-whatsapp' as const },
-];
+const DRAG_CLOSE_THRESHOLD = 120;
 
 export function StreakShareSheet({ visible, streakCount, onClose }: Props) {
-  const { width: W } = useWindowDimensions();
+  const { width: W, height: H } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const theme = useTheme();
   const cardRef = useRef<View>(null);
-  const [showWatermark, setShowWatermark] = useState(true);
 
-  const cardSize = Math.min(W - 72, 300);
+  const cardPreviewWidth = Math.min(W - 80, 280);
 
-  const captureCard = useCallback(async (): Promise<string | null> => {
-    if (!captureRef) return null;
-    try {
-      return await captureRef(cardRef, { format: 'png', quality: 1.0, result: 'tmpfile' });
-    } catch {
-      return null;
-    }
+  const SHEET_HEIGHT = H * 0.82;
+  const translateY = useSharedValue(SHEET_HEIGHT);
+  const backdropOpacity = useSharedValue(0);
+
+  const open = useCallback(() => {
+    translateY.value = withSpring(0, { damping: 28, stiffness: 320, mass: 0.9 });
+    backdropOpacity.value = withTiming(1, { duration: 250 });
   }, []);
 
-  const handleSave = useCallback(async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    const uri = await captureCard();
-    if (uri) {
-      const canShare = await ExpoSharing.isAvailableAsync();
-      if (canShare) {
-        await ExpoSharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Save Streak Image' });
-        return;
-      }
-    }
-    await Share.share({
-      message: `${streakCount} day streak! I've made a habit of reading motivating quotes every day! — Quotable`,
-    });
-  }, [captureCard, streakCount]);
+  const close = useCallback(() => {
+    translateY.value = withTiming(SHEET_HEIGHT, { duration: 260 });
+    backdropOpacity.value = withTiming(0, { duration: 220 });
+  }, [SHEET_HEIGHT]);
 
-  const handleSocialShare = useCallback(async (platform: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const uri = await captureCard();
-    if (uri) {
-      const canShare = await ExpoSharing.isAvailableAsync();
-      if (canShare) {
-        await ExpoSharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: `Share to ${platform}` });
-        return;
+  React.useEffect(() => {
+    if (visible) open();
+    else close();
+  }, [visible]);
+
+  const dragGesture = Gesture.Pan()
+    .onStart(() => {})
+    .onUpdate((e) => {
+      if (e.translationY > 0) translateY.value = e.translationY;
+    })
+    .onEnd((e) => {
+      if (e.translationY > DRAG_CLOSE_THRESHOLD) {
+        runOnJS(onClose)();
+      } else {
+        translateY.value = withSpring(0, { damping: 26, stiffness: 300 });
       }
+    });
+
+  const sheetStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value }],
+  }));
+  const backdropStyle = useAnimatedStyle(() => ({
+    opacity: backdropOpacity.value,
+  }));
+
+  const handleShare = useCallback(async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    if (captureRef) {
+      try {
+        const uri = await captureRef(cardRef, { format: 'png', quality: 1.0, result: 'tmpfile' });
+        const canShare = await ExpoSharing.isAvailableAsync();
+        if (canShare) {
+          await ExpoSharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Share Streak' });
+          return;
+        }
+      } catch {}
     }
     await Share.share({
       message: `${streakCount} day streak! I've made a habit of reading motivating quotes every day! — Quotable`,
     });
-  }, [captureCard, streakCount]);
+  }, [streakCount]);
 
   return (
-    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={onClose}>
-      <View
-        style={[
-          styles.overlay,
-          { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 20 },
-        ]}
-      >
-        {/* Top bar — X button */}
-        <View style={styles.topBar}>
-          <TouchableOpacity onPress={onClose} style={styles.closeBtn} activeOpacity={0.7}>
-            <MaterialCommunityIcons name="close" size={22} color="#ffffff" />
-          </TouchableOpacity>
-        </View>
+    <Modal visible={visible} transparent animationType="none" statusBarTranslucent onRequestClose={onClose}>
+      <View style={StyleSheet.absoluteFill} pointerEvents={visible ? 'auto' : 'none'}>
+        {/* Backdrop */}
+        <Animated.View style={[StyleSheet.absoluteFill, styles.backdrop, backdropStyle]}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} onPress={onClose} activeOpacity={1} />
+        </Animated.View>
 
-        {/* Card preview */}
-        <View style={styles.cardArea}>
-          <View
+        {/* Sheet */}
+        <GestureDetector gesture={dragGesture}>
+          <Animated.View
             style={[
-              styles.cardShadow,
-              { width: cardSize, height: Math.round(cardSize * 1.35), borderRadius: 20 },
+              styles.sheet,
+              {
+                height: SHEET_HEIGHT,
+                backgroundColor: theme.surface,
+                borderColor: theme.border,
+                paddingBottom: insets.bottom + 16,
+              },
+              sheetStyle,
             ]}
           >
-            <View ref={cardRef} collapsable={false} style={{ borderRadius: 20, overflow: 'hidden' }}>
-              <StreakShareCard
-                streakCount={streakCount}
-                showWatermark={showWatermark}
-                size={cardSize}
-                uiFontFamily={theme.uiFontFamily}
-                quoteFontFamily={theme.quoteFontFamily}
-              />
+            {/* Drag handle */}
+            <View style={styles.handleRow}>
+              <View style={[styles.handle, { backgroundColor: theme.border }]} />
             </View>
-          </View>
-        </View>
 
-        {/* Action buttons row */}
-        <View style={styles.actionsRow}>
-          <TouchableOpacity style={styles.actionBtn} onPress={handleSave} activeOpacity={0.7}>
-            <View style={styles.actionCircle}>
-              <Ionicons name="download-outline" size={24} color="#fff" />
-            </View>
-            <Text style={[styles.actionLabel, { fontFamily: theme.uiFontFamily }]}>
-              {'Save\nimage'}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.actionBtn}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              setShowWatermark((v) => !v);
-            }}
-            activeOpacity={0.7}
-          >
-            <View style={styles.actionCircle}>
-              <Ionicons
-                name={showWatermark ? 'eye-off-outline' : 'eye-outline'}
-                size={24}
-                color="#fff"
-              />
-            </View>
-            <Text style={[styles.actionLabel, { fontFamily: theme.uiFontFamily }]}>
-              {showWatermark ? 'Hide\nwatermark' : 'Show\nwatermark'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Social sharing row */}
-        <View style={styles.socialRow}>
-          {SOCIAL_BUTTONS.map((btn) => (
-            <TouchableOpacity
-              key={btn.label}
-              style={styles.socialBtn}
-              onPress={() => handleSocialShare(btn.label)}
-              activeOpacity={0.75}
-            >
-              <View style={[styles.socialCircle, { backgroundColor: btn.bg }]}>
-                <Ionicons name={btn.icon} size={28} color="#fff" />
-              </View>
-              <Text style={[styles.socialLabel, { fontFamily: theme.uiFontFamily }]}>
-                {btn.label}
+            {/* Header */}
+            <View style={styles.header}>
+              <Text style={[styles.title, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
+                Share Streak
               </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+              <TouchableOpacity
+                onPress={onClose}
+                style={[styles.closeBtn, { backgroundColor: theme.surfaceElevated ?? theme.surface }]}
+              >
+                <MaterialCommunityIcons name="close" size={18} color={theme.textMuted} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Card preview */}
+            <View style={styles.previewArea}>
+              <View
+                style={[
+                  styles.previewShadow,
+                  {
+                    shadowColor: '#000',
+                    width: cardPreviewWidth,
+                    height: Math.round(cardPreviewWidth * 1.35),
+                  },
+                ]}
+              >
+                <View ref={cardRef} collapsable={false} style={{ borderRadius: 16, overflow: 'hidden' }}>
+                  <StreakShareCard
+                    streakCount={streakCount}
+                    showWatermark
+                    size={cardPreviewWidth}
+                    uiFontFamily={theme.uiFontFamily}
+                    quoteFontFamily={theme.quoteFontFamily}
+                  />
+                </View>
+              </View>
+            </View>
+
+            {/* Share button */}
+            <View style={styles.actionsArea}>
+              <TouchableOpacity
+                onPress={handleShare}
+                style={[styles.primaryBtn, { backgroundColor: theme.gold }]}
+                activeOpacity={0.8}
+              >
+                <MaterialCommunityIcons name="export-variant" size={20} color="#000" />
+                <Text style={[styles.primaryBtnText, { fontFamily: theme.uiFontFamily }]}>
+                  Share
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+        </GestureDetector>
       </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(8,14,26,0.97)',
-    paddingHorizontal: 20,
+  backdrop: {
+    backgroundColor: 'rgba(0,0,0,0.6)',
   },
-  topBar: {
+  sheet: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderTopWidth: 1,
+  },
+  handleRow: {
+    alignItems: 'center',
+    paddingTop: 12,
+    paddingBottom: 4,
+  },
+  handle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+  },
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 16,
+  },
+  title: {
+    flex: 1,
+    fontSize: 20,
+    fontWeight: '700',
   },
   closeBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  cardArea: {
+  previewArea: {
     flex: 1,
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
+    paddingHorizontal: 20,
   },
-  cardShadow: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 16 },
-    shadowOpacity: 0.55,
-    shadowRadius: 28,
-    elevation: 20,
+  previewShadow: {
+    borderRadius: 16,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.45,
+    shadowRadius: 24,
+    elevation: 18,
   },
-  actionsRow: {
+  actionsArea: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+  },
+  primaryBtn: {
     flexDirection: 'row',
-    gap: 32,
-    paddingHorizontal: 4,
-    marginTop: 28,
-    marginBottom: 28,
-  },
-  actionBtn: {
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 8,
+    height: 52,
+    borderRadius: 14,
   },
-  actionCircle: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.22)',
-  },
-  actionLabel: {
-    color: '#ffffff',
-    fontSize: 12,
-    textAlign: 'center',
-    lineHeight: 17,
-  },
-  socialRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-  },
-  socialBtn: {
-    alignItems: 'center',
-    gap: 7,
-  },
-  socialCircle: {
-    width: 62,
-    height: 62,
-    borderRadius: 31,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  socialLabel: {
-    color: '#ffffff',
-    fontSize: 11,
-    textAlign: 'center',
+  primaryBtnText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#000',
   },
 });
