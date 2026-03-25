@@ -13,8 +13,7 @@ export function StreakShareCard({ streakCount, theme, showWatermark = true, size
   const W = size;
   const H = Math.round(size * 1.25);
 
-  const flameFontSize = Math.round(W * 0.28);
-  const countFontSize = Math.round(W * 0.22);
+  const countFontSize = Math.round(W * 0.32);
   const labelFontSize = Math.round(W * 0.09);
   const subtitleFontSize = Math.round(W * 0.052);
   const padding = Math.round(W * 0.1);
@@ -48,17 +47,17 @@ export function StreakShareCard({ streakCount, theme, showWatermark = true, size
           paddingTop: padding,
           justifyContent: 'center',
           alignItems: 'center',
-          gap: 4,
+          gap: 0,
         }}
       >
-        <Text style={{ fontSize: flameFontSize, lineHeight: flameFontSize * 1.05 }}>🔥</Text>
         <Text
           style={{
             fontSize: countFontSize,
-            color: theme.text,
+            color: '#B8975A',
             fontFamily: theme.quoteFontFamily,
             fontWeight: '800',
-            lineHeight: countFontSize * 1.1,
+            lineHeight: countFontSize * 1.0,
+            letterSpacing: -2,
           }}
         >
           {streakCount}
@@ -66,22 +65,33 @@ export function StreakShareCard({ streakCount, theme, showWatermark = true, size
         <Text
           style={{
             fontSize: labelFontSize,
-            color: theme.text,
+            color: 'rgba(255,255,255,0.9)',
             fontFamily: theme.quoteFontFamily,
-            fontWeight: '700',
-            letterSpacing: 0.5,
+            fontWeight: '600',
+            letterSpacing: 3,
+            textTransform: 'uppercase',
+            marginTop: Math.round(W * 0.03),
           }}
         >
           day streak
         </Text>
+        <View
+          style={{
+            width: Math.round(W * 0.12),
+            height: 1,
+            backgroundColor: 'rgba(255,255,255,0.3)',
+            marginTop: Math.round(W * 0.06),
+            marginBottom: Math.round(W * 0.06),
+          }}
+        />
         <Text
           style={{
             fontSize: subtitleFontSize,
-            color: 'rgba(255,255,255,0.78)',
+            color: 'rgba(255,255,255,0.72)',
             fontFamily: theme.uiFontFamily,
             textAlign: 'center',
-            marginTop: 10,
-            lineHeight: subtitleFontSize * 1.6,
+            lineHeight: subtitleFontSize * 1.65,
+            letterSpacing: 0.3,
           }}
         >
           {"I've made a habit of getting\nmotivated each day!"}
