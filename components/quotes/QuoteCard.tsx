@@ -532,7 +532,7 @@ export function QuoteCard() {
             </View>
             <View style={styles.actionRow}>
               <TouchableOpacity onPress={() => { if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShareQuote(converted?.text ?? '', converted?.author ?? ''); modal ? modal.openSheet('share') : router.push('/share'); }} hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}>
-                <MaterialCommunityIcons name="redo" size={32} color={theme.textMuted} />
+                <MaterialCommunityIcons name="share-variant" size={30} color={theme.textMuted} />
               </TouchableOpacity>
               <TouchableOpacity onPress={handleFavorite} hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}>
                 <MaterialCommunityIcons
