@@ -146,7 +146,7 @@ export function StreakShareSheet({ visible, streakCount, onClose }: Props) {
                   {
                     shadowColor: '#000',
                     width: cardPreviewWidth,
-                    height: Math.round(cardPreviewWidth * 1.35),
+                    height: Math.round(cardPreviewWidth * 1.25),
                   },
                 ]}
               >
@@ -155,8 +155,7 @@ export function StreakShareSheet({ visible, streakCount, onClose }: Props) {
                     streakCount={streakCount}
                     showWatermark
                     size={cardPreviewWidth}
-                    uiFontFamily={theme.uiFontFamily}
-                    quoteFontFamily={theme.quoteFontFamily}
+                    theme={theme}
                   />
                 </View>
               </View>
