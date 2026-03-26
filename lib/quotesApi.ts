@@ -32,14 +32,44 @@ export interface Quote {
 
 // ─── Response transformation ──────────────────────────────────────────────────
 
+/**
+ * Fix mojibake: UTF-8 characters that were decoded as Latin-1/Windows-1252.
+ * e.g. "â€™" (bytes E2 80 99 misread) → "'" (U+2019)
+ */
+function fixMojibake(str: string): string {
+  return str
+    .replace(/â€™/g, '\u2019')   // '  right single quote / apostrophe
+    .replace(/â€˜/g, '\u2018')   // '  left single quote
+    .replace(/â€œ/g, '\u201C')   // "  left double quote
+    .replace(/â€\u009D/g, '\u201D') // "  right double quote (control char variant)
+    .replace(/â€"/g, '\u2014')   // —  em dash
+    .replace(/â€"/g, '\u2013')   // –  en dash
+    .replace(/â€¦/g, '\u2026')   // …  ellipsis
+    .replace(/Ã©/g, '\u00E9')    // é
+    .replace(/Ã¨/g, '\u00E8')    // è
+    .replace(/Ã /g, '\u00E0')    // à
+    .replace(/Ã¢/g, '\u00E2')    // â
+    .replace(/Ã®/g, '\u00EE')    // î
+    .replace(/Ã´/g, '\u00F4')    // ô
+    .replace(/Ã»/g, '\u00FB')    // û
+    .replace(/Ã§/g, '\u00E7')    // ç
+    .replace(/Ã«/g, '\u00EB')    // ë
+    .replace(/Ã¯/g, '\u00EF')    // ï
+    .replace(/Ã¼/g, '\u00FC')    // ü
+    .replace(/Ã¶/g, '\u00F6')    // ö
+    .replace(/Ã¤/g, '\u00E4')    // ä
+    .replace(/Ã/g, '\u00C0');    // À and similar leftovers
+}
+
 function toApiQuote(q: KurokuoteQuote): ApiQuote {
+  const content = fixMojibake(q.content);
   return {
     _id: q.id,
-    content: q.content,
-    author: q.author.name,
+    content,
+    author: fixMojibake(q.author.name),
     authorSlug: q.author.slug,
     tags: q.tags.map(t => t.name.toLowerCase()),
-    length: q.content.length,
+    length: content.length,
   };
 }
 
@@ -51,7 +81,7 @@ const seenIds = new Set<string>();
 // Keep seenIds bounded so it doesn't grow indefinitely over a long session.
 const MAX_SEEN_IDS = 2000;
 
-const PERSIST_KEY = 'quotesApi:random:v1';
+const PERSIST_KEY = 'quotesApi:random:v2';
 const PERSIST_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 interface PersistedCache {
