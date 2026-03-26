@@ -28,6 +28,9 @@ jobs:
       - name: Prebuild Android
         run: npx expo prebuild --platform android --non-interactive
 
+      - name: Copy keystore
+        run: cp release.keystore android/app/release.keystore
+
       - name: Build release AAB
         run: cd android && ./gradlew bundleRelease
 
