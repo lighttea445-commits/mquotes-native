@@ -196,7 +196,8 @@ function HomeScreenInner() {
 
       {/* Share sheet */}
       <BottomSheet visible={activeSheet === 'share'} onClose={closeSheet} backgroundColor={theme.background}
-        instantClose={previousSheet === 'share'} instantOpen={isSwitching}>
+        instantClose={previousSheet === 'share'} instantOpen={isSwitching}
+        topGap={Math.round(SCREEN_HEIGHT * 0.18)}>
         <ShareScreen onClose={closeSheet} />
       </BottomSheet>
 
