@@ -1,4 +1,4 @@
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -20,11 +20,18 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import * as ExpoSharing from 'expo-sharing';
 import { useTheme } from '../../hooks/useTheme';
+import { useRevenueCat } from '../../hooks/useRevenueCat';
+import { useShareStore } from '../../store/useShareStore';
+import { useModal } from '../../contexts/ModalContext';
 
 // Lazy-require so the app doesn't crash when the native module isn't linked yet.
-// After `npx expo run:android` / `npx expo run:ios` this will resolve correctly.
 let captureRef: ((ref: React.RefObject<any>, opts: object) => Promise<string>) | null = null;
 try { captureRef = require('react-native-view-shot').captureRef; } catch {}
+
+const Clipboard: { setStringAsync: (t: string) => Promise<void> } | null = (() => {
+  try { return require('expo-clipboard'); } catch { return null; }
+})();
+
 import { ShareCard } from './ShareCard';
 
 interface Props {
@@ -40,7 +47,11 @@ export function ShareSheet({ visible, quote, author, onClose }: Props) {
   const { width: W, height: H } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const theme = useTheme();
+  const { isPro } = useRevenueCat();
+  const { watermarkRemoved, setWatermarkRemoved } = useShareStore();
+  const modal = useModal();
   const cardRef = useRef<View>(null);
+  const [copiedFeedback, setCopiedFeedback] = useState(false);
 
   const cardPreviewWidth = Math.min(W - 80, 280);
 
@@ -83,6 +94,25 @@ export function ShareSheet({ visible, quote, author, onClose }: Props) {
   const backdropStyle = useAnimatedStyle(() => ({
     opacity: backdropOpacity.value,
   }));
+
+  const handleCopyText = useCallback(async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    await Clipboard?.setStringAsync(quote);
+    setCopiedFeedback(true);
+    setTimeout(() => setCopiedFeedback(false), 1500);
+  }, [quote]);
+
+  const handleToggleWatermark = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (!isPro) {
+      onClose();
+      setTimeout(() => {
+        modal?.openSheet('features');
+      }, 320);
+      return;
+    }
+    setWatermarkRemoved(!watermarkRemoved);
+  }, [isPro, watermarkRemoved, setWatermarkRemoved, onClose, modal]);
 
   const handleShare = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -161,9 +191,39 @@ export function ShareSheet({ visible, quote, author, onClose }: Props) {
                   author={author}
                   theme={theme}
                   size={cardPreviewWidth}
+                  showWatermark={!(isPro && watermarkRemoved)}
                 />
               </View>
             </View>
+          </View>
+
+          {/* Extra action buttons */}
+          <View style={styles.actionsRow}>
+            <TouchableOpacity onPress={handleCopyText} style={styles.actionItem}>
+              <View style={[styles.actionCircle, { backgroundColor: theme.surfaceElevated, borderColor: copiedFeedback ? theme.gold : theme.border }]}>
+                <MaterialCommunityIcons
+                  name={copiedFeedback ? 'check' : 'content-copy'}
+                  size={22}
+                  color={copiedFeedback ? theme.gold : theme.text}
+                />
+              </View>
+              <Text style={[styles.actionLabel, { color: copiedFeedback ? theme.gold : theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+                {copiedFeedback ? 'Copied!' : 'Copy\ntext'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={handleToggleWatermark} style={styles.actionItem}>
+              <View style={[styles.actionCircle, { backgroundColor: theme.surfaceElevated, borderColor: (isPro && watermarkRemoved) ? theme.gold : theme.border }]}>
+                <MaterialCommunityIcons
+                  name={(isPro && watermarkRemoved) ? 'image-off-outline' : 'image-minus-outline'}
+                  size={22}
+                  color={(isPro && watermarkRemoved) ? theme.gold : theme.text}
+                />
+              </View>
+              <Text style={[styles.actionLabel, { color: (isPro && watermarkRemoved) ? theme.gold : theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+                {(isPro && watermarkRemoved) ? 'Show\nwatermark' : 'Hide\nwatermark'}
+              </Text>
+            </TouchableOpacity>
           </View>
 
           {/* Share button */}
@@ -240,9 +300,34 @@ const styles = StyleSheet.create({
     shadowRadius: 24,
     elevation: 18,
   },
-  actionsArea: {
+  actionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 28,
     paddingHorizontal: 20,
     paddingTop: 16,
+  },
+  actionItem: {
+    alignItems: 'center',
+    gap: 6,
+    minWidth: 72,
+  },
+  actionCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  actionLabel: {
+    fontSize: 12,
+    textAlign: 'center',
+    lineHeight: 16,
+  },
+  actionsArea: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
   },
   primaryBtn: {
     flexDirection: 'row',
