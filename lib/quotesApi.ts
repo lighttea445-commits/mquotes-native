@@ -32,11 +32,27 @@ export interface Quote {
 
 // ─── Response transformation ──────────────────────────────────────────────────
 
+/**
+ * Fix mojibake caused by the API serving UTF-8 text that was decoded as
+ * Windows-1252. Each multi-byte UTF-8 sequence becomes a run of Latin-1
+ * characters; we reverse the most common ones here.
+ */
+function fixMojibake(text: string): string {
+  return text
+    .replace(/\u00e2\u20ac\u2122/g, '\u2019') // ' RIGHT SINGLE QUOTATION MARK
+    .replace(/\u00e2\u20ac\u02dc/g, '\u2018')  // ' LEFT SINGLE QUOTATION MARK
+    .replace(/\u00e2\u20ac\u0153/g, '\u201c')  // " LEFT DOUBLE QUOTATION MARK
+    .replace(/\u00e2\u20ac\u009d/g, '\u201d')  // " RIGHT DOUBLE QUOTATION MARK
+    .replace(/\u00e2\u20ac\u00a6/g, '\u2026')  // … ELLIPSIS
+    .replace(/\u00e2\u20ac\u2013/g, '\u2013')  // – EN DASH
+    .replace(/\u00e2\u20ac\u2014/g, '\u2014'); // — EM DASH
+}
+
 function toApiQuote(q: KurokuoteQuote): ApiQuote {
   return {
     _id: q.id,
-    content: q.content,
-    author: q.author.name,
+    content: fixMojibake(q.content),
+    author: fixMojibake(q.author.name),
     authorSlug: q.author.slug,
     tags: q.tags.map(t => t.name.toLowerCase()),
     length: q.content.length,
@@ -51,7 +67,7 @@ const seenIds = new Set<string>();
 // Keep seenIds bounded so it doesn't grow indefinitely over a long session.
 const MAX_SEEN_IDS = 2000;
 
-const PERSIST_KEY = 'quotesApi:random:v1';
+const PERSIST_KEY = 'quotesApi:random:v2';
 const PERSIST_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 interface PersistedCache {
