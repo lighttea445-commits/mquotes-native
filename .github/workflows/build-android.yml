@@ -1,0 +1,47 @@
+name: Build Android AAB
+
+on:
+  workflow_dispatch:   # run manually from GitHub Actions tab
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Prebuild Android
+        run: npx expo prebuild --platform android --non-interactive --clean
+
+      - name: Decode keystore
+        run: echo "${{ secrets.RELEASE_KEYSTORE }}" | base64 --decode > android/app/release.keystore
+
+      - name: Build release AAB
+        run: |
+          cd android && ./gradlew bundleRelease \
+            -Pandroid.injected.signing.store.file=$GITHUB_WORKSPACE/android/app/release.keystore \
+            -Pandroid.injected.signing.store.password=a41ef96dad422ab4dbd462b1c35e52b9 \
+            -Pandroid.injected.signing.key.alias=4f99a71d9326ba7d404d0b20038aa471 \
+            -Pandroid.injected.signing.key.password=18ba1e5e227682cb1c6ed534a7a0cec0
+
+      - name: Upload AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: quotable-release-aab
+          path: android/app/build/outputs/bundle/release/app-release.aab
+          retention-days: 30

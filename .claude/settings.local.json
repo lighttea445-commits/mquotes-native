@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx expo install @react-native-community/datetimepicker)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:api.github.com)",
+      "Bash(gh repo view lighttea445-commits/v0-onboarding-flow-design --json name,description,defaultBranchRef,isPrivate)",
+      "Bash(echo \"EXIT_CODE: $?\")",
+      "Bash(git ls-remote https://github.com/lighttea445-commits/v0-onboarding-flow-design)",
+      "Bash(git archive --remote=https://github.com/lighttea445-commits/v0-onboarding-flow-design HEAD --format=tar)",
+      "Bash(tar -t)",
+      "Bash(eas init --id e8da2946-21f4-4a2d-abde-a759bda58a65)",
+      "Bash(node -e \"const p = require\\(''./package.json''\\); console.log\\(p.dependencies[''expo-dev-client''] || p.devDependencies?.[''expo-dev-client''] || ''NOT FOUND''\\)\")",
+      "Bash(git add:*)",
+      "Bash(git reset:*)"
+    ]
+  },
+  "disableAllHooks": true,
+  "enabledPlugins": {
+    "supabase@claude-plugins-official": true,
+    "github@claude-plugins-official": true,
+    "figma@claude-plugins-official": true,
+    "playwright@claude-plugins-official": false,
+    "frontend-design@claude-plugins-official": false
+  },
+  "disabledMcpjsonServers": ["Claude_Preview", "claude-preview", "preview"]
+}
