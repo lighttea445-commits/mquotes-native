@@ -1,8 +1,9 @@
 import Purchases from 'react-native-purchases';
 import { Platform } from 'react-native';
 
+// iOS key: RevenueCat dashboard → (your iOS app) → API Keys → Public SDK Key (starts with appl_)
 const REVENUECAT_API_KEY = Platform.select({
-  ios: 'PASTE_YOUR_APPLE_KEY_HERE',      // TODO: replace with your appl_ iOS key
+  ios: 'REPLACE_WITH_IOS_KEY',
   android: 'goog_nBgUNhjUDilBhGkZPixZCobHSWu',
 })!;
 

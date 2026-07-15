@@ -213,20 +213,23 @@ struct QuoteWidgetView: View {
 private struct AccessoryCircularView: View {
   let entry: QuoteEntry
 
+  private var fontSize: CGFloat {
+    switch entry.textSize {
+    case "small": return 8
+    case "large": return 10
+    default:      return 9
+    }
+  }
+
   var body: some View {
     ZStack {
       AccessoryWidgetBackground()
-      if entry.widgetType == "streak" && entry.streakCount > 0 {
-        VStack(spacing: 1) {
-          Image(systemName: "flame.fill")
-            .font(.system(size: 16))
-          Text("\(entry.streakCount)")
-            .font(.system(size: 13, weight: .semibold))
-        }
-      } else {
-        Image(systemName: "quote.opening")
-          .font(.system(size: 20))
-      }
+      Text(entry.quoteText)
+        .font(.system(size: fontSize))
+        .lineLimit(4)
+        .multilineTextAlignment(.center)
+        .minimumScaleFactor(0.6)
+        .padding(5)
     }
     .widgetAccentable()
     .containerBackground(.clear, for: .widget)
@@ -236,24 +239,31 @@ private struct AccessoryCircularView: View {
 private struct AccessoryRectangularView: View {
   let entry: QuoteEntry
 
+  private var quoteFontSize: CGFloat {
+    switch entry.textSize {
+    case "small": return 11
+    case "large": return 13
+    default:      return 12
+    }
+  }
+
+  private var authorFontSize: CGFloat { quoteFontSize - 2 }
+
+  private var quoteLineLimit: Int {
+    entry.showAuthor && !entry.quoteAuthor.isEmpty ? 2 : 3
+  }
+
   var body: some View {
     VStack(alignment: .leading, spacing: 2) {
-      if entry.widgetType == "streak" && entry.streakCount > 0 {
-        Label("\(entry.streakCount) day streak", systemImage: "flame.fill")
-          .font(.system(size: 13, weight: .semibold))
-          .widgetAccentable()
-      } else {
-        Text(entry.quoteText)
-          .font(.system(size: 13))
-          .lineLimit(2)
-          .minimumScaleFactor(0.85)
-
-        if entry.showAuthor && !entry.quoteAuthor.isEmpty {
-          Text(entry.quoteAuthor)
-            .font(.system(size: 11))
-            .lineLimit(1)
-            .opacity(0.7)
-        }
+      Text(entry.quoteText)
+        .font(.system(size: quoteFontSize))
+        .lineLimit(quoteLineLimit)
+        .minimumScaleFactor(0.85)
+      if entry.showAuthor && !entry.quoteAuthor.isEmpty {
+        Text("— \(entry.quoteAuthor)")
+          .font(.system(size: authorFontSize))
+          .lineLimit(1)
+          .opacity(0.7)
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
@@ -265,11 +275,7 @@ private struct AccessoryInlineView: View {
   let entry: QuoteEntry
 
   var body: some View {
-    if entry.widgetType == "streak" && entry.streakCount > 0 {
-      Label("\(entry.streakCount) day streak", systemImage: "flame.fill")
-    } else {
-      Label(entry.quoteText, systemImage: "quote.opening")
-    }
+    Label(entry.quoteText, systemImage: "quote.opening")
   }
 }
 

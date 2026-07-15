@@ -2,8 +2,8 @@
 module.exports = {
   type: 'widget',
   name: 'QuotesWidget',
-  // Resolves to com.eriksen_dawson.quotable.QuotesWidget
-  bundleIdentifier: '.QuotesWidget',
+  // Resolves to com.eriksen_dawson.quotable.quotes-widget
+  bundleIdentifier: '.quotes-widget',
   // Required by QuotesWidget.swift's use of .containerBackground(for: .widget)
   deploymentTarget: '17.0',
   frameworks: ['WidgetKit', 'SwiftUI'],
