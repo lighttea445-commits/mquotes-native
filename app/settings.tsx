@@ -9,6 +9,7 @@ import {
   Platform,
   ScrollView,
   Switch,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -155,6 +156,33 @@ export default function SettingsScreen({ onClose, onBack }: { onClose?: () => vo
               <MaterialCommunityIcons name="pencil-outline" size={20} color={theme.gold} />
               <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
                 Reflections
+              </Text>
+              <MaterialCommunityIcons name="chevron-right" size={18} color={theme.textMuted} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Account */}
+          <View style={styles.section}>
+            <Text style={[styles.sectionLabel, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+              ACCOUNT
+            </Text>
+            <TouchableOpacity
+              style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border }]}
+              onPress={() => Linking.openURL('https://play.google.com/store/account/subscriptions?package=com.eriksen_dawson.quotable')}
+            >
+              <MaterialCommunityIcons name="crown-outline" size={20} color={theme.gold} />
+              <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
+                Manage Subscription
+              </Text>
+              <MaterialCommunityIcons name="chevron-right" size={18} color={theme.textMuted} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border, marginTop: 8 }]}
+              onPress={() => Linking.openURL('market://details?id=com.eriksen_dawson.quotable')}
+            >
+              <MaterialCommunityIcons name="star-outline" size={20} color={theme.gold} />
+              <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
+                Rate Quotable
               </Text>
               <MaterialCommunityIcons name="chevron-right" size={18} color={theme.textMuted} />
             </TouchableOpacity>

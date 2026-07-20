@@ -64,6 +64,10 @@ export default function ProfileScreen({ onClose }: { onClose?: () => void }) {
 
   const openSettings = () => modal ? modal.openSheet('settings') : router.push('/settings');
 
+  const handleFavorites = () => {
+    modal ? modal.openSheet('favorites') : router.push('/favorites');
+  };
+
   const handleHistory = () => {
     if (isPro) {
       modal ? modal.openSheet('history') : router.push('/history');
@@ -111,8 +115,8 @@ export default function ProfileScreen({ onClose }: { onClose?: () => void }) {
 
           {/* Stats row */}
           <View style={styles.statsRow}>
-            <StatCard label="Favorites" value={favorites.length} theme={theme} />
-            <StatCard label="Quotes Read" value={totalQuotesRead} theme={theme} />
+            <StatCard label="Favorites" value={favorites.length} theme={theme} onPress={handleFavorites} />
+            <StatCard label="Quotes Read" value={totalQuotesRead} theme={theme} onPress={handleHistory} />
             <StatCard label="Reflections" value={reflectionsCount} theme={theme} onPress={handleReflections} />
           </View>
 
