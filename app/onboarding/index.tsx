@@ -76,7 +76,7 @@ function TypewriterText({
       intervalRef.current = setInterval(() => {
         i += 1;
         setCount(i);
-        if (playSound && i % 2 === 0) playClick();
+        if (playSound && i % 2 === 0) playClick(text[i - 1] ?? '');
         if (i >= text.length && intervalRef.current) {
           clearInterval(intervalRef.current);
         }
@@ -118,7 +118,7 @@ function TypewriterColorText({
       intervalRef.current = setInterval(() => {
         i += 1;
         setCount(i);
-        if (playSound && i % 2 === 0) playClick();
+        if (playSound && i % 2 === 0) playClick(fullText[i - 1] ?? '');
         if (i >= fullText.length && intervalRef.current) {
           clearInterval(intervalRef.current);
         }
