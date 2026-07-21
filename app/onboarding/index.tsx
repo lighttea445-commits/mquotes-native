@@ -33,6 +33,7 @@ import { StreakCard } from '../../components/ui/StreakCard';
 import { WidgetBridge } from '../../modules/widget-bridge';
 import { CATEGORIES } from '../../constants/categories';
 import * as Haptics from 'expo-haptics';
+import { playClick } from '../../lib/typewriterSound';
 import { ConfirmSheet } from '../../components/ui/ConfirmSheet';
 import { BottomSheet } from '../../components/layout/BottomSheet';
 import { PaywallSheet } from '../../components/subscriptions/PaywallSheet';
@@ -57,11 +58,13 @@ function TypewriterText({
   style,
   charDelay = 35,
   startDelay = 150,
+  playSound = false,
 }: {
   text: string;
   style?: any;
   charDelay?: number;
   startDelay?: number;
+  playSound?: boolean;
 }) {
   const [count, setCount] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -73,6 +76,7 @@ function TypewriterText({
       intervalRef.current = setInterval(() => {
         i += 1;
         setCount(i);
+        if (playSound && i % 2 === 0) playClick();
         if (i >= text.length && intervalRef.current) {
           clearInterval(intervalRef.current);
         }
@@ -94,11 +98,13 @@ function TypewriterColorText({
   style,
   charDelay = 35,
   startDelay = 150,
+  playSound = false,
 }: {
   segments: { text: string; color: string }[];
   style?: any;
   charDelay?: number;
   startDelay?: number;
+  playSound?: boolean;
 }) {
   // Flatten to a single string — identical dep pattern to TypewriterText
   const fullText = segments.map(s => s.text).join('');
@@ -112,6 +118,7 @@ function TypewriterColorText({
       intervalRef.current = setInterval(() => {
         i += 1;
         setCount(i);
+        if (playSound && i % 2 === 0) playClick();
         if (i >= fullText.length && intervalRef.current) {
           clearInterval(intervalRef.current);
         }
@@ -378,6 +385,7 @@ function SplashScreen_({ next, progress }: { next: () => void; progress?: number
                     style={ss.brand}
                     charDelay={70}
                     startDelay={400}
+                    playSound
                   />
                   <TypewriterText
                     text="Daily Affirmations & Motivation"
@@ -445,7 +453,7 @@ const ss = StyleSheet.create({
 function TapScreen_({ text, next }: { text: string; next: () => void; back?: () => void; progress?: number }) {
   const theme = useTheme();
   return (
-    <TouchableOpacity style={{ flex: 1 }} onPress={next} activeOpacity={1}>
+    <TouchableOpacity style={{ flex: 1 }} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); next(); }} activeOpacity={1}>
       <View style={[tps.root, { backgroundColor: theme.background }]}>
         <SafeAreaView style={tps.safe} edges={['top', 'bottom']}>
           <View style={tps.center}>
@@ -513,7 +521,7 @@ function HookScreen_({ next, back, progress }: { next: () => void; back?: () => 
         <OnboardingHeader progress={progress} onBack={back} />
         <TouchableOpacity
           style={hks.body}
-          onPress={next}
+          onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); next(); }}
           activeOpacity={1}
         >
           <View style={hks.content}>
@@ -522,6 +530,7 @@ function HookScreen_({ next, back, progress }: { next: () => void; back?: () => 
               style={[hks.para, { fontFamily: 'Allkin_400Regular' }]}
               charDelay={18}
               startDelay={100}
+              playSound
             />
             <View style={hks.subWrap}>
               <TypewriterText
@@ -670,7 +679,7 @@ function PersonalizedHookScreen_({ next, back, progress }: { next: () => void; b
         <OnboardingHeader progress={progress} onBack={back} />
         <TouchableOpacity
           style={phs.body}
-          onPress={next}
+          onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); next(); }}
           activeOpacity={1}
         >
           <View style={phs.content}>
@@ -679,6 +688,7 @@ function PersonalizedHookScreen_({ next, back, progress }: { next: () => void; b
               style={[phs.main, { fontFamily: 'Allkin_400Regular' }]}
               charDelay={30}
               startDelay={150}
+              playSound
             />
           </View>
           <View style={[phs.footer, { opacity: footerVisible ? 1 : 0 }]}>
