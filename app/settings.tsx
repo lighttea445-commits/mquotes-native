@@ -11,6 +11,7 @@ import {
   Switch,
   Linking,
 } from 'react-native';
+import * as StoreReview from 'expo-store-review';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -178,7 +179,13 @@ export default function SettingsScreen({ onClose, onBack }: { onClose?: () => vo
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border, marginTop: 8 }]}
-              onPress={() => Linking.openURL('market://details?id=com.eriksen_dawson.quotable')}
+              onPress={async () => {
+                if (await StoreReview.hasAction()) {
+                  await StoreReview.requestReview();
+                } else {
+                  Linking.openURL('market://details?id=com.eriksen_dawson.quotable');
+                }
+              }}
             >
               <MaterialCommunityIcons name="star-outline" size={20} color={theme.gold} />
               <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
