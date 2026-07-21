@@ -48,7 +48,7 @@ async function loadSound(key: string) {
   pending[key] = true;
   try {
     await ensureAudioMode();
-    const { sound } = await Audio.Sound.createAsync(FILES[key], { volume: 0.4 });
+    const { sound } = await Audio.Sound.createAsync(FILES[key], { volume: 0.2 });
     cache[key] = sound;
   } catch {
     cache[key] = null;
