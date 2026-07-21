@@ -33,7 +33,6 @@ import { StreakCard } from '../../components/ui/StreakCard';
 import { WidgetBridge } from '../../modules/widget-bridge';
 import { CATEGORIES } from '../../constants/categories';
 import * as Haptics from 'expo-haptics';
-import { playClick } from '../../lib/typewriterSound';
 import { ConfirmSheet } from '../../components/ui/ConfirmSheet';
 import { BottomSheet } from '../../components/layout/BottomSheet';
 import { PaywallSheet } from '../../components/subscriptions/PaywallSheet';
@@ -64,7 +63,6 @@ function TypewriterText({
   style?: any;
   charDelay?: number;
   startDelay?: number;
-  playSound?: boolean;
 }) {
   const [count, setCount] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -76,7 +74,6 @@ function TypewriterText({
       intervalRef.current = setInterval(() => {
         i += 1;
         setCount(i);
-        if (playSound && i % 2 === 0) playClick(text[i - 1] ?? '');
         if (i >= text.length && intervalRef.current) {
           clearInterval(intervalRef.current);
         }
@@ -104,7 +101,6 @@ function TypewriterColorText({
   style?: any;
   charDelay?: number;
   startDelay?: number;
-  playSound?: boolean;
 }) {
   // Flatten to a single string — identical dep pattern to TypewriterText
   const fullText = segments.map(s => s.text).join('');
@@ -118,7 +114,6 @@ function TypewriterColorText({
       intervalRef.current = setInterval(() => {
         i += 1;
         setCount(i);
-        if (playSound && i % 2 === 0) playClick(fullText[i - 1] ?? '');
         if (i >= fullText.length && intervalRef.current) {
           clearInterval(intervalRef.current);
         }
@@ -385,7 +380,6 @@ function SplashScreen_({ next, progress }: { next: () => void; progress?: number
                     style={ss.brand}
                     charDelay={70}
                     startDelay={400}
-                    playSound
                   />
                   <TypewriterText
                     text="Daily Affirmations & Motivation"
@@ -450,7 +444,7 @@ const ss = StyleSheet.create({
 
 // ─── Screen: TapScreen ───────────────────────────────────────────────────────
 
-function TapScreen_({ text, next, playSound = false }: { text: string; next: () => void; back?: () => void; progress?: number; playSound?: boolean }) {
+function TapScreen_({ text, next }: { text: string; next: () => void; back?: () => void; progress?: number }) {
   const theme = useTheme();
   return (
     <TouchableOpacity style={{ flex: 1 }} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); next(); }} activeOpacity={1}>
@@ -462,7 +456,6 @@ function TapScreen_({ text, next, playSound = false }: { text: string; next: () 
               style={[tps.title, { color: theme.text, fontFamily: 'Allkin_400Regular' }]}
               charDelay={55}
               startDelay={200}
-              playSound={playSound}
             />
           </View>
         </SafeAreaView>
@@ -531,7 +524,6 @@ function HookScreen_({ next, back, progress }: { next: () => void; back?: () => 
               style={[hks.para, { fontFamily: 'Allkin_400Regular' }]}
               charDelay={18}
               startDelay={100}
-              playSound
             />
             <View style={hks.subWrap}>
               <TypewriterText
@@ -689,7 +681,6 @@ function PersonalizedHookScreen_({ next, back, progress }: { next: () => void; b
               style={[phs.main, { fontFamily: 'Allkin_400Regular' }]}
               charDelay={30}
               startDelay={150}
-              playSound
             />
           </View>
           <View style={[phs.footer, { opacity: footerVisible ? 1 : 0 }]}>
@@ -1782,7 +1773,6 @@ export default function OnboardingScreen() {
           next={next}
           back={back}
           progress={progress}
-          playSound
         />
       )}
       {step === 5 && <PersonalizedHookScreen_ next={next} back={back} progress={progress} />}
