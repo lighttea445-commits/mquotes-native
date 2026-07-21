@@ -450,7 +450,7 @@ const ss = StyleSheet.create({
 
 // ─── Screen: TapScreen ───────────────────────────────────────────────────────
 
-function TapScreen_({ text, next }: { text: string; next: () => void; back?: () => void; progress?: number }) {
+function TapScreen_({ text, next, playSound = false }: { text: string; next: () => void; back?: () => void; progress?: number; playSound?: boolean }) {
   const theme = useTheme();
   return (
     <TouchableOpacity style={{ flex: 1 }} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); next(); }} activeOpacity={1}>
@@ -462,6 +462,7 @@ function TapScreen_({ text, next }: { text: string; next: () => void; back?: () 
               style={[tps.title, { color: theme.text, fontFamily: 'Allkin_400Regular' }]}
               charDelay={55}
               startDelay={200}
+              playSound={playSound}
             />
           </View>
         </SafeAreaView>
@@ -1781,6 +1782,7 @@ export default function OnboardingScreen() {
           next={next}
           back={back}
           progress={progress}
+          playSound
         />
       )}
       {step === 5 && <PersonalizedHookScreen_ next={next} back={back} progress={progress} />}
