@@ -32,6 +32,7 @@ import { useTheme } from '../../hooks/useTheme';
 import { StreakCard } from '../../components/ui/StreakCard';
 import { WidgetBridge } from '../../modules/widget-bridge';
 import { CATEGORIES } from '../../constants/categories';
+import * as Haptics from 'expo-haptics';
 import { ConfirmSheet } from '../../components/ui/ConfirmSheet';
 import { BottomSheet } from '../../components/layout/BottomSheet';
 import { PaywallSheet } from '../../components/subscriptions/PaywallSheet';
@@ -44,9 +45,9 @@ const { width: SW, height: SH } = Dimensions.get('window');
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
-const TOTAL_STEPS = 16;
+const TOTAL_STEPS = 17;
 const PROGRESS_START_STEP = 6;
-const PROGRESS_END_STEP = 15;
+const PROGRESS_END_STEP = 16;
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 // ─── TypewriterText ──────────────────────────────────────────────────────────
@@ -564,6 +565,11 @@ function NameInputScreen_({ data, updateData, next }: ScreenProps) {
     next();
   };
 
+  const handleSkip = () => {
+    updateData({ name: '' });
+    next();
+  };
+
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
@@ -579,7 +585,7 @@ function NameInputScreen_({ data, updateData, next }: ScreenProps) {
               startDelay={100}
             />
             <TypewriterText
-              text="What should we call you?"
+              text="What's your name?"
               style={[ns.title, { color: theme.text, fontFamily: theme.quoteFontFamily }]}
               charDelay={40}
               startDelay={750}
@@ -599,6 +605,9 @@ function NameInputScreen_({ data, updateData, next }: ScreenProps) {
             />
           </View>
           <ContinueButton onPress={handleContinue} disabled={!name.trim()} />
+          <TouchableOpacity onPress={handleSkip} style={ns.skip}>
+            <Text style={[ns.skipText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>Skip</Text>
+          </TouchableOpacity>
         </SafeAreaView>
       </View>
     </KeyboardAvoidingView>
@@ -619,6 +628,8 @@ const ns = StyleSheet.create({
     fontSize: 16,
     borderWidth: 1,
   },
+  skip: { alignItems: 'center', paddingBottom: 24 },
+  skipText: { fontSize: 14 },
 });
 
 // ─── Screen: PersonalizedHookScreen ──────────────────────────────────────────
@@ -1547,6 +1558,7 @@ function CommitmentScreen_({ next, back, progress }: ScreenProps) {
 
   const startHold = () => {
     if (completed) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     progressRef.current = 0;
     setHoldProgress(0);
     intervalRef.current = setInterval(() => {
@@ -1572,6 +1584,7 @@ function CommitmentScreen_({ next, back, progress }: ScreenProps) {
 
   useEffect(() => {
     if (completed) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       const t = setTimeout(next, 1200);
       return () => clearTimeout(t);
     }
@@ -1763,14 +1776,15 @@ export default function OnboardingScreen() {
       {step === 5 && <PersonalizedHookScreen_ next={next} back={back} progress={progress} />}
       {step === 6 && <PhoneUsageScreen_ {...sp} />}
       {step === 7 && <GoalsScreen_ {...sp} />}
-      {step === 8 && <AgeScreen_ {...sp} />}
-      {step === 9 && <GenderScreen_ {...sp} />}
-      {step === 10 && <BenefitsScreen_ {...sp} />}
-      {step === 11 && <NotificationsScreen_ {...sp} />}
-      {step === 12 && <StreakScreen_ {...sp} />}
-      {step === 13 && <CategoriesScreen_ {...sp} />}
-      {step === 14 && <WidgetScreen_ {...sp} />}
-      {step === 15 && <CommitmentScreen_ {...sp} next={handleComplete} />}
+      {step === 8 && <ValidationScreen_ {...sp} />}
+      {step === 9 && <AgeScreen_ {...sp} />}
+      {step === 10 && <GenderScreen_ {...sp} />}
+      {step === 11 && <BenefitsScreen_ {...sp} />}
+      {step === 12 && <NotificationsScreen_ {...sp} />}
+      {step === 13 && <StreakScreen_ {...sp} />}
+      {step === 14 && <CategoriesScreen_ {...sp} />}
+      {step === 15 && <WidgetScreen_ {...sp} />}
+      {step === 16 && <CommitmentScreen_ {...sp} next={handleComplete} />}
     </Animated.View>
 
       {/* Premium flow — slides up as BottomSheets over the ReadyScreen */}
