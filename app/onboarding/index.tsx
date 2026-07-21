@@ -885,6 +885,7 @@ const gs = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 10,
+    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
