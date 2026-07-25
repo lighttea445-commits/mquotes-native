@@ -1817,10 +1817,10 @@ export default function OnboardingScreen() {
         <TrialScreen onContinue={() => setPremiumStep('paywall')} onClose={handleFinish} />
       </BottomSheet>
 
-      <PaywallSheet
-        visible={premiumStep === 'paywall'}
-        onClose={handleFinish}
-      />
+      {/* Mounted only when visible — keeps RevenueCat off the launch path. */}
+      {premiumStep === 'paywall' && (
+        <PaywallSheet visible onClose={handleFinish} />
+      )}
     </View>
   );
 }

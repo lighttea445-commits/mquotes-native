@@ -64,6 +64,32 @@ class WidgetBridgeModule: NSObject {
     resolve(nil)
   }
 
+  // MARK: getSwallowedExceptions
+
+  /// Returns the "Module.method | Name: reason" strings recorded by the patched
+  /// RCTTurboModule.mm (patches/react-native+0.81.5.patch) when a native module
+  /// throws from a void TurboModule method during startup. Upstream React Native
+  /// turns those into Hermes heap corruption on iOS 26; the patch swallows them
+  /// and stashes them here so the app can say which module actually misbehaved.
+  @objc
+  func getSwallowedExceptions(
+    _ resolve: @escaping (Any?) -> Void,
+    rejecter reject: @escaping (String?, String?, Error?) -> Void
+  ) {
+    let stored = UserDefaults.standard.array(forKey: "RCTSwallowedTurboModuleExceptions") as? [String]
+    resolve(stored ?? [])
+  }
+
+  /// Clears the recorded list (used by the in-app "Dismiss" action).
+  @objc
+  func clearSwallowedExceptions(
+    _ resolve: @escaping (Any?) -> Void,
+    rejecter reject: @escaping (String?, String?, Error?) -> Void
+  ) {
+    UserDefaults.standard.removeObject(forKey: "RCTSwallowedTurboModuleExceptions")
+    resolve(nil)
+  }
+
   // MARK: React Native bridge requirements
 
   @objc static func requiresMainQueueSetup() -> Bool { false }

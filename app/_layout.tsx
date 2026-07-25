@@ -1,5 +1,4 @@
-import React, { useEffect, useRef } from 'react';
-import * as Sentry from '@sentry/react-native';
+import React, { useEffect, useRef, useState } from 'react';
 import * as Notifications from 'expo-notifications';
 import { rescheduleAll, requestPermissions } from '../lib/notifications';
 import { Stack, useRouter, useRootNavigationState } from 'expo-router';
@@ -48,11 +47,13 @@ import {
   Raleway_400Regular,
   Raleway_600SemiBold,
 } from '@expo-google-fonts/raleway';
-import { View, ActivityIndicator } from 'react-native';
+import { View, ActivityIndicator, Text, ScrollView, Pressable } from 'react-native';
+import type { ErrorBoundaryProps } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAppStore } from '../store/useAppStore';
 import { useTheme } from '../hooks/useTheme';
 import { registerWidgetRefreshTask } from '../tasks/widgetRefreshTask';
+import { WidgetBridge } from '../modules/widget-bridge';
 import { useDeepLinkStore } from '../store/useDeepLinkStore';
 import type { WidgetInstanceConfig } from '../store/useWidgetStore';
 
@@ -67,6 +68,48 @@ Notifications.setNotificationHandler({
     shouldSetBadge: false,
   }),
 });
+
+// ── Swallowed native-exception report (iOS) ─────────────────────────────────
+//
+// The patched RCTTurboModule.mm records any native module that throws from a
+// void TurboModule method during startup instead of letting React Native
+// convert it to a JSError off-thread — which corrupts the Hermes heap and
+// segfaults the JS thread (confirmed in the 2026-07-24 crash report).
+//
+// Swallowing stops the crash but hides the culprit, so surface it here. Nothing
+// renders on a healthy launch. Reading iOS device logs needs a Mac; this
+// doesn't.
+function SwallowedNativeExceptionBanner() {
+  const [entries, setEntries] = useState<string[]>([]);
+
+  useEffect(() => {
+    WidgetBridge.getSwallowedExceptions().then(setEntries).catch(() => {});
+  }, []);
+
+  if (entries.length === 0) return null;
+
+  return (
+    <View style={{ backgroundColor: '#2A1A08', paddingTop: 60, paddingHorizontal: 16, paddingBottom: 12 }}>
+      <Text style={{ color: '#E8B44A', fontSize: 13, fontWeight: '700', marginBottom: 6 }}>
+        Native module threw during startup
+      </Text>
+      {entries.map((entry) => (
+        <Text key={entry} selectable style={{ color: '#D8C08A', fontSize: 11, lineHeight: 15, marginBottom: 4 }}>
+          {entry}
+        </Text>
+      ))}
+      <Pressable
+        onPress={() => {
+          WidgetBridge.clearSwallowedExceptions().catch(() => {});
+          setEntries([]);
+        }}
+        style={{ alignSelf: 'flex-start', marginTop: 4 }}
+      >
+        <Text style={{ color: '#B8975A', fontSize: 12, fontWeight: '600' }}>Dismiss</Text>
+      </Pressable>
+    </View>
+  );
+}
 
 function RootLayoutInner() {
   const theme = useTheme();
@@ -188,6 +231,7 @@ function RootLayoutInner() {
   return (
     <>
       <StatusBar style={theme.isDark ? 'light' : 'dark'} />
+      <SwallowedNativeExceptionBanner />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" options={{ animation: 'fade' }} />
         <Stack.Screen name="onboarding/index" options={{ animation: 'fade' }} />
@@ -210,8 +254,8 @@ function RootLayoutInner() {
   );
 }
 
-function RootLayout() {
-  const [fontsLoaded] = useFonts({
+export default function RootLayout() {
+  const [fontsLoaded, fontError] = useFonts({
     PlayfairDisplay_400Regular,
     PlayfairDisplay_700Bold,
     PlayfairDisplay_400Regular_Italic,
@@ -318,7 +362,22 @@ function RootLayout() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (!fontsLoaded) {
+  // ── Font loading must never block launch ────────────────────────────────
+  //
+  // Safety net only. Custom fonts load and are used exactly as before — this
+  // just guarantees the app still appears if expo-font hangs or fails instead
+  // of sitting on a blank dark screen forever.
+  //
+  // The window is deliberately generous so it never fires during normal
+  // loading of the 25 families below. If fonts do arrive late, `fontsLoaded`
+  // flips to true and React re-renders with the real fonts automatically.
+  const [fontWaitElapsed, setFontWaitElapsed] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setFontWaitElapsed(true), 10000);
+    return () => clearTimeout(t);
+  }, []);
+
+  if (!fontsLoaded && !fontError && !fontWaitElapsed) {
     return (
       <View style={{ flex: 1, backgroundColor: '#0D0D0D', justifyContent: 'center', alignItems: 'center' }}>
         <ActivityIndicator color="#B8975A" />
@@ -333,5 +392,40 @@ function RootLayout() {
   );
 }
 
-// Sentry.wrap adds navigation context and an error boundary around the tree.
-export default Sentry.wrap(RootLayout);
+// ── On-device error display ─────────────────────────────────────────────────
+//
+// Expo Router renders this instead of the tree when a render throws. Without
+// it, an unhandled JS error in a production build shows nothing at all — the
+// blank/black screen we've been chasing — because there is no dev redbox to
+// surface it.
+//
+// This makes the failure readable directly on the phone, which matters because
+// reading iOS device logs requires a Mac.
+export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
+  return (
+    <View style={{ flex: 1, backgroundColor: '#1A0A0A', paddingHorizontal: 20, paddingTop: 72, paddingBottom: 28 }}>
+      <Text style={{ color: '#FF6B6B', fontSize: 20, fontWeight: '700', marginBottom: 4 }}>
+        Startup error
+      </Text>
+      <Text style={{ color: '#8A6A6A', fontSize: 12, marginBottom: 16 }}>
+        Screenshot this and send it over.
+      </Text>
+
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 16 }}>
+        <Text selectable style={{ color: '#FFD7D7', fontSize: 15, fontWeight: '600', marginBottom: 14 }}>
+          {error?.name ? `${error.name}: ` : ''}{error?.message ?? 'Unknown error'}
+        </Text>
+        <Text selectable style={{ color: '#C9A0A0', fontSize: 11, lineHeight: 16 }}>
+          {error?.stack ?? 'No stack trace available.'}
+        </Text>
+      </ScrollView>
+
+      <Pressable
+        onPress={retry}
+        style={{ backgroundColor: '#B8975A', borderRadius: 99, paddingVertical: 16, alignItems: 'center' }}
+      >
+        <Text style={{ color: '#1A1208', fontSize: 16, fontWeight: '600' }}>Retry</Text>
+      </Pressable>
+    </View>
+  );
+}

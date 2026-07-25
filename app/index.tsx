@@ -213,8 +213,12 @@ function HomeScreenInner() {
         <TrialScreen onClose={closeSheet} />
       </BottomSheet>
 
-      {/* Paywall — rendered last so it appears above all sheets */}
-      <PaywallSheet visible={paywallVisible} onClose={closePaywall} />
+      {/* Paywall — rendered last so it appears above all sheets.
+          Mounted only when visible so the native RevenueCatUI.Paywall view
+          isn't constructed on every home-screen render. (Note: QuoteCard also
+          calls useRevenueCat() for isPro gating, so the SDK still configures
+          at launch — this only avoids the native paywall view.) */}
+      {paywallVisible && <PaywallSheet visible onClose={closePaywall} />}
     </ThemeBackground>
   );
 }

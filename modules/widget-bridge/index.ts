@@ -133,6 +133,31 @@ class WidgetBridgeClass {
     }
   }
 
+  /**
+   * iOS only. Native-module exceptions swallowed during startup by the patched
+   * RCTTurboModule.mm, as "Module.method | Name: reason" strings. Empty on a
+   * healthy launch. See patches/react-native+0.81.5.patch.
+   */
+  async getSwallowedExceptions(): Promise<string[]> {
+    if (Platform.OS !== 'ios') return [];
+    try {
+      return (await NativeModules.WidgetBridge?.getSwallowedExceptions()) ?? [];
+    } catch {
+      // Older build without the native method — nothing to report.
+      return [];
+    }
+  }
+
+  /** Clears the list read by getSwallowedExceptions(). */
+  async clearSwallowedExceptions(): Promise<void> {
+    if (Platform.OS !== 'ios') return;
+    try {
+      await NativeModules.WidgetBridge?.clearSwallowedExceptions();
+    } catch {
+      // Nothing to clear.
+    }
+  }
+
   /** Re-render all placed instances (e.g. after settings change). */
   async reloadTimelines(): Promise<void> {
     if (Platform.OS === 'ios') {

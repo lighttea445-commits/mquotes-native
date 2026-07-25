@@ -1,0 +1,56 @@
+diff --git a/node_modules/react-native/ReactCommon/react/nativemodule/core/platform/ios/ReactCommon/RCTTurboModule.mm b/node_modules/react-native/ReactCommon/react/nativemodule/core/platform/ios/ReactCommon/RCTTurboModule.mm
+index 2a67797..ee4250e 100644
+--- a/node_modules/react-native/ReactCommon/react/nativemodule/core/platform/ios/ReactCommon/RCTTurboModule.mm
++++ b/node_modules/react-native/ReactCommon/react/nativemodule/core/platform/ios/ReactCommon/RCTTurboModule.mm
+@@ -10,6 +10,7 @@
+ #import <React/RCTBridgeModule.h>
+ #import <React/RCTConvert.h>
+ #import <React/RCTCxxConvert.h>
++#import <React/RCTLog.h>
+ #import <React/RCTManagedPointer.h>
+ #import <React/RCTModuleMethod.h>
+ #import <React/RCTUtils.h>
+@@ -435,7 +436,42 @@ void ObjCTurboModule::performVoidMethodInvocation(
+     @try {
+       [inv invokeWithTarget:strongModule];
+     } @catch (NSException *exception) {
+-      throw convertNSExceptionToJSError(runtime, exception, std::string{moduleName}, methodNameStr);
++      // PATCHED — facebook/react-native#53960, #54859.
++      //
++      // Upstream converts the NSException into a jsi::JSError and rethrows it.
++      // Both halves are unsafe for void methods:
++      //
++      //   1. convertNSExceptionToJSError() allocates JSI values on the Hermes
++      //      runtime from the native method queue, concurrently with the JS
++      //      thread. Hermes is not thread-safe, so this corrupts its heap and
++      //      the app later dies inside unrelated GC code.
++      //   2. For async void methods the rethrow escapes a dispatch block where
++      //      nothing can catch it, terminating the process outright.
++      //
++      // Confirmed by an on-device crash report (iOS 26.5.2, EXC_BAD_ACCESS on
++      // com.facebook.react.runtime.JavaScript inside GCScope::_newChunkAndPHV,
++      // while com.meta.react.turbomodulemanager.queue sat in
++      // convertNSExceptionToJSError -> convertNSArrayToJSIArray).
++      //
++      // Swallow the exception, and record module+method so JS can report which
++      // native module is actually misbehaving (WidgetBridge.getSwallowedExceptions).
++      (void)runtime;
++      NSString *offender = [NSString stringWithFormat:@"%s.%s | %@: %@",
++                                                      moduleName,
++                                                      methodNameStr.c_str(),
++                                                      exception.name,
++                                                      exception.reason];
++      RCTLogWarn(@"[TurboModule] Swallowed exception in void method %@", offender);
++      @try {
++        NSUserDefaults *store = [NSUserDefaults standardUserDefaults];
++        NSArray *previous = [store arrayForKey:@"RCTSwallowedTurboModuleExceptions"] ?: @[];
++        if (![previous containsObject:offender] && previous.count < 32) {
++          [store setObject:[previous arrayByAddingObject:offender]
++                    forKey:@"RCTSwallowedTurboModuleExceptions"];
++        }
++      } @catch (__unused NSException *ignored) {
++        // Diagnostics must never be the thing that breaks startup.
++      }
+     } @finally {
+       [retainedObjectsForInvocation removeAllObjects];
+     }

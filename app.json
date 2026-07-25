@@ -17,7 +17,7 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.kovoapps.quotable",
       "appleTeamId": "HF7548K866",
-      "buildNumber": "8",
+      "buildNumber": "19",
       "entitlements": {
         "com.apple.security.application-groups": [
           "group.com.mquotes.shared"
@@ -101,7 +101,14 @@
         }
       ],
       "@react-native-community/datetimepicker",
-      "@sentry/react-native"
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "buildReactNativeFromSource": true
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

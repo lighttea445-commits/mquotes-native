@@ -51,12 +51,24 @@ function patch(update: Partial<RevenueCatState>) {
   notify();
 }
 
+// Escape hatch: skips every RevenueCat native call at startup. Left in place
+// because it was useful for isolating startup crashes — a build with this set
+// to true confirmed RevenueCat is NOT the source of the iOS 26 launch crash.
+const DISABLE_REVENUECAT: boolean = false;
+
 // Initialization runs only once regardless of how many hook instances exist.
 let _initStarted = false;
 
 async function initialize() {
   if (_initStarted) return;
   _initStarted = true;
+
+  if (DISABLE_REVENUECAT) {
+    // Report as "settled, not pro" so the UI renders normally instead of
+    // sitting on a loading spinner forever.
+    patch({ isInitialized: true, isLoading: false, error: null, isPro: false });
+    return;
+  }
 
   try {
     await initializeRevenueCat();
