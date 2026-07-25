@@ -86,7 +86,7 @@ export default function SubscriptionsScreen() {
               RevenueCatUI.presentPaywall({ offering }).catch(() => {});
             }}
           >
-            <Text style={[styles.tabText, { color: activeView !== 'customer-center' ? theme.text : theme.secondaryText, fontWeight: activeView !== 'customer-center' ? '600' : '400' }]}>
+            <Text style={[styles.tabText, { color: activeView !== 'customer-center' ? theme.text : theme.textMuted, fontWeight: activeView !== 'customer-center' ? '600' : '400' }]}>
               Benefits
             </Text>
           </Pressable>
@@ -94,7 +94,7 @@ export default function SubscriptionsScreen() {
             style={[styles.tab, { borderBottomColor: activeView === 'customer-center' ? theme.accent : 'transparent' }]}
             onPress={() => setActiveView('customer-center')}
           >
-            <Text style={[styles.tabText, { color: activeView === 'customer-center' ? theme.text : theme.secondaryText, fontWeight: activeView === 'customer-center' ? '600' : '400' }]}>
+            <Text style={[styles.tabText, { color: activeView === 'customer-center' ? theme.text : theme.textMuted, fontWeight: activeView === 'customer-center' ? '600' : '400' }]}>
               Account
             </Text>
           </Pressable>

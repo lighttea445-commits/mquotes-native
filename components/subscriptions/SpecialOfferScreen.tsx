@@ -94,7 +94,7 @@ export default function SpecialOfferScreen({ onClose, onContinue }: Props) {
           </Text>
 
           <Text style={[styles.subtext, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-            Start your 3-day free trial today — no charge until it ends.
+            Start your 3-day free trial today. No charge until it ends.
           </Text>
 
           {/* Perks row */}

@@ -3,7 +3,7 @@ import { Platform } from 'react-native';
 
 // iOS key: RevenueCat dashboard → (your iOS app) → API Keys → Public SDK Key (starts with appl_)
 const REVENUECAT_API_KEY = Platform.select({
-  ios: 'REPLACE_WITH_IOS_KEY',
+  ios: 'appl_PuOsvzMhWbwtEyiacGTvpQpPUBW',
   android: 'goog_nBgUNhjUDilBhGkZPixZCobHSWu',
 })!;
 
@@ -69,7 +69,10 @@ export async function getOfferings() {
 export async function purchasePackage(packageId: string, offering: string) {
   try {
     const offerings = await Purchases.getOfferings();
-    const selectedPackage = offerings.all[offering]?.packagesById[packageId];
+    // PurchasesOffering exposes availablePackages — there is no packagesById map.
+    const selectedPackage = offerings.all[offering]?.availablePackages.find(
+      (p) => p.identifier === packageId,
+    );
 
     if (!selectedPackage) {
       throw new Error(`Package ${packageId} not found in offering ${offering}`);

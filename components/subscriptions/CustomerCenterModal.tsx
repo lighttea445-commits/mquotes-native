@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, StyleSheet, Text, Pressable, ActivityIndicator, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { RevenueCatUI } from 'react-native-purchases-ui';
+import RevenueCatUI from 'react-native-purchases-ui';
 import { useTheme } from '../../hooks/useTheme';
 import * as RevenueChat from '../../lib/revenuecat';
 
@@ -49,8 +49,8 @@ export function CustomerCenterModal({ onClose }: CustomerCenterModalProps) {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* RevenueCat Customer Center UI */}
         <View style={styles.customerCenterContainer}>
-          <RevenueCatUI.CustomerCenter
-            onDismissed={() => onClose?.()}
+          <RevenueCatUI.CustomerCenterView
+            onDismiss={() => onClose?.()}
             style={styles.customerCenter}
           />
         </View>
@@ -58,7 +58,7 @@ export function CustomerCenterModal({ onClose }: CustomerCenterModalProps) {
         {/* Manual Restore Purchases Button */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: theme.text }]}>Restore Purchases</Text>
-          <Text style={[styles.sectionDescription, { color: theme.secondaryText }]}>
+          <Text style={[styles.sectionDescription, { color: theme.textMuted }]}>
             If you purchased a subscription on another device or reinstalled the app, tap below to restore your access.
           </Text>
           <Pressable
@@ -95,7 +95,7 @@ export function CustomerCenterModal({ onClose }: CustomerCenterModalProps) {
 
         {/* Info */}
         <View style={styles.infoSection}>
-          <Text style={[styles.infoText, { color: theme.secondaryText }]}>
+          <Text style={[styles.infoText, { color: theme.textMuted }]}>
             All subscription and billing management happens through the RevenueCat Customer Center above. Changes made here will be reflected on all your devices.
           </Text>
         </View>

@@ -1,5 +1,5 @@
-import '../global.css';
 import React, { useEffect, useRef } from 'react';
+import * as Sentry from '@sentry/react-native';
 import * as Notifications from 'expo-notifications';
 import { rescheduleAll, requestPermissions } from '../lib/notifications';
 import { Stack, useRouter, useRootNavigationState } from 'expo-router';
@@ -60,7 +60,9 @@ import type { WidgetInstanceConfig } from '../store/useWidgetStore';
 // OS to know what to do when a notification fires (alert + sound, no badge).
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
+    // SDK 54 split the old `shouldShowAlert` into banner + list.
+    shouldShowBanner: true,
+    shouldShowList: true,
     shouldPlaySound: true,
     shouldSetBadge: false,
   }),
@@ -187,11 +189,8 @@ function RootLayoutInner() {
     <>
       <StatusBar style={theme.isDark ? 'light' : 'dark'} />
       <Stack screenOptions={{ headerShown: false }}>
-        {!onboardingComplete ? (
-          <Stack.Screen name="onboarding/index" options={{ animation: 'fade' }} />
-        ) : (
-          <Stack.Screen name="index" options={{ animation: 'fade' }} />
-        )}
+        <Stack.Screen name="index" options={{ animation: 'fade' }} />
+        <Stack.Screen name="onboarding/index" options={{ animation: 'fade' }} />
         <Stack.Screen name="categories" options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
         <Stack.Screen name="profile" options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
         <Stack.Screen name="mix/create" options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
@@ -211,7 +210,7 @@ function RootLayoutInner() {
   );
 }
 
-export default function RootLayout() {
+function RootLayout() {
   const [fontsLoaded] = useFonts({
     PlayfairDisplay_400Regular,
     PlayfairDisplay_700Bold,
@@ -333,3 +332,6 @@ export default function RootLayout() {
     </GestureHandlerRootView>
   );
 }
+
+// Sentry.wrap adds navigation context and an error boundary around the tree.
+export default Sentry.wrap(RootLayout);

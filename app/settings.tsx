@@ -169,7 +169,11 @@ export default function SettingsScreen({ onClose, onBack }: { onClose?: () => vo
             </Text>
             <TouchableOpacity
               style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border }]}
-              onPress={() => Linking.openURL('https://play.google.com/store/account/subscriptions?package=com.eriksen_dawson.quotable')}
+              onPress={() => Linking.openURL(
+              Platform.OS === 'ios'
+                ? 'https://apps.apple.com/account/subscriptions'
+                : 'https://play.google.com/store/account/subscriptions?package=com.eriksen_dawson.quotable'
+            )}
             >
               <MaterialCommunityIcons name="crown-outline" size={20} color={theme.gold} />
               <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
@@ -182,8 +186,6 @@ export default function SettingsScreen({ onClose, onBack }: { onClose?: () => vo
               onPress={async () => {
                 if (await StoreReview.hasAction()) {
                   await StoreReview.requestReview();
-                } else {
-                  Linking.openURL('market://details?id=com.eriksen_dawson.quotable');
                 }
               }}
             >

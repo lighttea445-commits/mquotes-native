@@ -9,6 +9,7 @@ export type AnalyticsEvent =
   | 'quote_favorited'
   | 'quote_unfavorited'
   | 'quote_shared'
+  | 'quote_copied'
   | 'category_selected'
   | 'category_cleared'
   | 'theme_changed'

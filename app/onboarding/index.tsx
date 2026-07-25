@@ -57,7 +57,6 @@ function TypewriterText({
   style,
   charDelay = 35,
   startDelay = 150,
-  playSound = false,
 }: {
   text: string;
   style?: any;
@@ -95,7 +94,6 @@ function TypewriterColorText({
   style,
   charDelay = 35,
   startDelay = 150,
-  playSound = false,
 }: {
   segments: { text: string; color: string }[];
   style?: any;
@@ -1774,7 +1772,7 @@ export default function OnboardingScreen() {
       {step === 3 && <NameInputScreen_ {...sp} />}
       {step === 4 && (
         <TapScreen_
-          text={`Okay ${data.name || 'friend'}, consider this…`}
+          text={`Okay ${data.name || 'reader'}, consider this…`}
           next={next}
           back={back}
           progress={progress}

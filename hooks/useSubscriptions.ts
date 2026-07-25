@@ -61,7 +61,9 @@ export function useSubscriptions() {
     async (packageId: string, offering: string = 'sale'): Promise<string | null> => {
       try {
         const offerings = await RevenueChat.getOfferings();
-        const pkg = offerings.all[offering]?.packagesById[packageId];
+        const pkg = offerings.all[offering]?.availablePackages.find(
+          (p) => p.identifier === packageId,
+        );
         return pkg?.product?.priceString || null;
       } catch (error) {
         console.error('Error getting package price:', error);
@@ -91,7 +93,7 @@ export function useSubscriptions() {
     try {
       const customerInfo = await RevenueChat.getCustomerInfo();
       const entitlement = customerInfo.entitlements.active[ENTITLEMENT_PRO];
-      return entitlement?.isActive && entitlement?.isSandbox ? true : false;
+      return entitlement?.isActive && entitlement?.periodType === 'trial';
     } catch (error) {
       console.error('Error checking trial status:', error);
       return false;

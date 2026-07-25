@@ -1,6 +1,6 @@
 import { useEffect, useReducer } from 'react';
 import { AppState } from 'react-native';
-import Purchases, { CustomerInfo, Offerings } from 'react-native-purchases';
+import Purchases, { CustomerInfo, PurchasesOfferings } from 'react-native-purchases';
 import { initializeRevenueCat, ENTITLEMENT_PRO } from '../lib/revenuecat';
 
 export interface RevenueCatState {
@@ -8,7 +8,7 @@ export interface RevenueCatState {
   isLoading: boolean;
   error: Error | null;
   customerInfo: CustomerInfo | null;
-  offerings: Offerings | null;
+  offerings: PurchasesOfferings | null;
   isPro: boolean;
   userID: string | null;
 }

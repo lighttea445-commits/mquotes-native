@@ -21,8 +21,8 @@ class WidgetBridgeModule: NSObject {
   @objc
   func updateWidget(
     _ jsonPayload: String,
-    resolver resolve: @escaping RCTPromiseResolveBlock,
-    rejecter reject: @escaping RCTPromiseRejectBlock
+    resolver resolve: @escaping (Any?) -> Void,
+    rejecter reject: @escaping (String?, String?, Error?) -> Void
   ) {
     guard
       let data = jsonPayload.data(using: .utf8),
@@ -55,8 +55,8 @@ class WidgetBridgeModule: NSObject {
 
   @objc
   func reloadAllTimelines(
-    _ resolve: @escaping RCTPromiseResolveBlock,
-    rejecter reject: @escaping RCTPromiseRejectBlock
+    _ resolve: @escaping (Any?) -> Void,
+    rejecter reject: @escaping (String?, String?, Error?) -> Void
   ) {
     if #available(iOS 14.0, *) {
       WidgetCenter.shared.reloadAllTimelines()

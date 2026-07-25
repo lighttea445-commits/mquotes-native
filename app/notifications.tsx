@@ -18,6 +18,8 @@ import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
 import { useAppStore } from '../store/useAppStore';
+import { useRevenueCat } from '../hooks/useRevenueCat';
+import { useModal } from '../contexts/ModalContext';
 import {
   requestPermissions,
   getPermissionStatus,
@@ -64,9 +66,16 @@ const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 export default function NotificationsScreen({ onClose, onBack, onContinue, progress }: { onClose?: () => void; onBack?: () => void; onContinue?: () => void; progress?: number }) {
   const theme = useTheme();
   const router = useRouter();
+  const modal = useModal();
   const close = onClose ?? (() => router.back());
   const back = onBack ?? close;
+  const { isPro } = useRevenueCat();
   const { preferences, setPreferences } = useAppStore();
+
+  const openPaywall = () => {
+    if (modal) modal.openSheet('features');
+    else router.push('/subscriptions');
+  };
   const pref = preferences;
 
   const [days, setDays] = useState<number[]>(pref.notificationDays?.length ? pref.notificationDays : ALL_DAYS);
@@ -117,11 +126,14 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
   useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current); }, []);
 
   function buildSettings(o: Partial<Settings> = {}): Settings {
-    const anyEnabled = quotesEnabled || qodEnabled || reflectEnabled || streakEnabled;
+    const effectiveReflectEnabled = isPro ? reflectEnabled : false;
+    const anyEnabled = quotesEnabled || qodEnabled || effectiveReflectEnabled || streakEnabled;
     return {
       enabled: anyEnabled,
       days, quotesEnabled, showAuthor, count, startTime, endTime,
-      qodEnabled, qodTime, reflectEnabled, reflectTime, streakEnabled, streakTime,
+      qodEnabled, qodTime,
+      reflectEnabled: effectiveReflectEnabled, reflectTime,
+      streakEnabled, streakTime,
       ...o,
     };
   }
@@ -259,7 +271,7 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
   }
 
   // ── Reminder card (main list) ──────────────────────────────────────────
-  function ReminderCard({ anim, icon, title, timeLabel, countLabel, isEnabled, onToggle, onPress }: {
+  function ReminderCard({ anim, icon, title, timeLabel, countLabel, isEnabled, onToggle, onPress, locked }: {
     anim: Animated.Value;
     icon: string;
     title: string;
@@ -268,47 +280,61 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
     isEnabled: boolean;
     onToggle: (v: boolean) => void;
     onPress: () => void;
+    locked?: boolean;
   }) {
+    const handlePress = locked ? (onContinue ? undefined : openPaywall) : onPress;
     return (
       <Animated.View style={{
         opacity: anim,
         transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }],
       }}>
         <TouchableOpacity
-          onPress={onPress}
-          activeOpacity={0.8}
+          onPress={handlePress}
+          activeOpacity={locked ? (onContinue ? 1 : 0.8) : 0.8}
           style={[ss.reminderCard, {
             backgroundColor: theme.surface,
-            borderColor: isEnabled ? 'rgba(184,151,90,0.25)' : theme.border,
+            borderColor: locked ? theme.border : isEnabled ? 'rgba(184,151,90,0.25)' : theme.border,
+            opacity: locked ? 0.6 : 1,
           }]}
         >
-          {/* Top row: title + time */}
+          {/* Top row: title + time + pro badge */}
           <View style={ss.reminderCardTop}>
             <Text style={[ss.reminderCardTitle, {
-              color: isEnabled ? theme.text : theme.textMuted,
+              color: locked ? theme.textMuted : isEnabled ? theme.text : theme.textMuted,
               fontFamily: theme.quoteFontFamily,
             }]}>{title}</Text>
-            <Text style={[ss.reminderCardTime, { color: isEnabled ? theme.gold : theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-              {timeLabel}
-            </Text>
+            {locked ? (
+              <View style={[ss.proBadge, { backgroundColor: theme.gold + '22', borderColor: theme.gold + '55' }]}>
+                <MaterialCommunityIcons name="crown" size={10} color={theme.gold} style={{ marginRight: 3 }} />
+                <Text style={[ss.proBadgeText, { color: theme.gold, fontFamily: theme.uiFontFamily }]}>Pro</Text>
+              </View>
+            ) : (
+              <Text style={[ss.reminderCardTime, { color: isEnabled ? theme.gold : theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+                {timeLabel}
+              </Text>
+            )}
           </View>
 
-          {/* Bottom row: count+days + toggle */}
+          {/* Bottom row: count+days + toggle/lock */}
           <View style={ss.reminderCardBottom}>
             <View style={ss.reminderCardMeta}>
-              <Text style={[ss.reminderCardCount, { color: isEnabled ? theme.text : theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+              <Text style={[ss.reminderCardCount, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
                 {countLabel}
               </Text>
               <Text style={[ss.reminderCardDays, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
                 {'  '}{describeDays(days)}
               </Text>
             </View>
-            <Switch
-              value={isEnabled}
-              onValueChange={onToggle}
-              trackColor={{ false: theme.border, true: theme.gold }}
-              thumbColor={theme.background}
-            />
+            {locked ? (
+              <MaterialCommunityIcons name="lock-outline" size={20} color={theme.textMuted} />
+            ) : (
+              <Switch
+                value={isEnabled}
+                onValueChange={onToggle}
+                trackColor={{ false: theme.border, true: theme.gold }}
+                thumbColor={theme.background}
+              />
+            )}
           </View>
         </TouchableOpacity>
       </Animated.View>
@@ -513,8 +539,9 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
               timeLabel={formatHHMMto12h(reflectTime)}
               countLabel="1×"
               isEnabled={reflectEnabled}
-              onToggle={v => { setReflectEnabled(v); debouncedApply(buildSettings({ reflectEnabled: v })); }}
-              onPress={() => setActiveCard('reflect')}
+              onToggle={v => { if (!isPro) { if (!onContinue) openPaywall(); return; } setReflectEnabled(v); debouncedApply(buildSettings({ reflectEnabled: v })); }}
+              onPress={() => { if (!isPro) { if (!onContinue) openPaywall(); return; } setActiveCard('reflect'); }}
+              locked={!isPro}
             />
 
             <ReminderCard
@@ -611,6 +638,15 @@ const ss = StyleSheet.create({
   reminderCardMeta: { flexDirection: 'row', alignItems: 'center' },
   reminderCardCount: { fontSize: 15, fontWeight: '700' },
   reminderCardDays: { fontSize: 13 },
+  proBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  proBadgeText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
 
   // ── Edit card ──────────────────────────────────────────────────────────
   editCard: {

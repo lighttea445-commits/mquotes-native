@@ -14,9 +14,12 @@ interface PaywallSheetProps {
  * No custom header — the RC paywall handles its own close/dismiss.
  */
 export function PaywallSheet({ visible, onClose }: PaywallSheetProps) {
-  const { refresh } = useRevenueCat();
+  const { refresh, isInitialized, offerings } = useRevenueCat();
 
   if (!visible) return null;
+  // Don't render the native paywall until RC is initialized with valid offerings.
+  // Rendering before init (e.g. placeholder iOS key) causes a native-level crash.
+  if (!isInitialized || !offerings) return null;
 
   return (
     <View style={[StyleSheet.absoluteFill, { zIndex: 1000, elevation: 100 }]}>
@@ -28,6 +31,9 @@ export function PaywallSheet({ visible, onClose }: PaywallSheetProps) {
         }}
         onRestoreCompleted={async () => {
           await refresh();
+          onClose();
+        }}
+        onPurchaseError={() => {
           onClose();
         }}
         style={styles.paywall}

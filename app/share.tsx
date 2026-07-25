@@ -67,7 +67,7 @@ export default function ShareScreen({ onClose }: { onClose?: () => void }) {
       }
       await Share.share({ message: `"${quote}"\n\n— ${author}` });
     } catch (e) {
-      errorReporting.captureException(e as Error, { context: 'ShareScreen:share' });
+      errorReporting.captureError(e as Error, { context: 'ShareScreen:share' });
       await Share.share({ message: `"${quote}"\n\n— ${author}` });
     } finally {
       setIsBusy(false);

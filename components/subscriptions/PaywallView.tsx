@@ -80,7 +80,7 @@ export function PaywallView({
             style={styles.paywall}
           />
           {footerText && (
-            <Text style={[styles.footerText, { color: theme.secondaryText }]}>{footerText}</Text>
+            <Text style={[styles.footerText, { color: theme.textMuted }]}>{footerText}</Text>
           )}
         </>
       )}
