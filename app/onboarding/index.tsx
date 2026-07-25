@@ -1403,18 +1403,23 @@ function WidgetScreen_({ next, back, progress }: ScreenProps) {
   const [showWidgetInstructions, setShowWidgetInstructions] = useState(false);
 
   const handleInstallWidget = useCallback(async () => {
-    if (!WidgetBridge.canPinWidget) {
-      setShowWidgetInstructions(true);
-      return;
-    }
     setInstalling(true);
+    let pinned = false;
     try {
-      await WidgetBridge.requestPinWidget();
+      pinned = await WidgetBridge.requestPinWidget();
     } catch {
-      // no-op — native module will handle errors internally
+      // no-op — treated as "not pinned" below
     } finally {
       setInstalling(false);
+    }
+
+    // The system dialog never appeared (module not linked, or the launcher
+    // doesn't support pinning) — show the manual steps instead of silently
+    // advancing past a step that did nothing.
+    if (pinned) {
       next();
+    } else {
+      setShowWidgetInstructions(true);
     }
   }, [next]);
 
@@ -1466,7 +1471,7 @@ function WidgetScreen_({ next, back, progress }: ScreenProps) {
           visible={showWidgetInstructions}
           onClose={() => setShowWidgetInstructions(false)}
           title="Add a Widget"
-          message={'To add a Quotable widget:\n\n1. Long-press your home screen\n2. Tap the "+" button\n3. Search for Quotable\n4. Choose your widget size'}
+          message={'To add a Quotable widget:\n\n1. Long-press your home screen\n2. Tap the "+" button\n3. Search for Quotable'}
           confirmLabel="Got it!"
           onConfirm={next}
         />

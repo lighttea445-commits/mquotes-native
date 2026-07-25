@@ -330,7 +330,6 @@ function EmptyState({ theme, onRefresh }: { theme: ReturnType<typeof useTheme>; 
           'Tap "Add Widget" above',
           'Confirm in the system prompt',
           'Position it on your home screen',
-          'Come back here and tap ↻ Refresh',
         ].map((step, i) => (
           <View key={i} style={emptyStyles.stepRow}>
             <View style={[emptyStyles.stepBadge, { backgroundColor: theme.gold + '22' }]}>

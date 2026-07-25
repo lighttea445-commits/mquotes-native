@@ -32,22 +32,32 @@ class WidgetBridgeClass {
     return Platform.OS === 'android';
   }
 
-  /** True when running on Android — pin widget is always available via long-press. */
+  /**
+   * True only when the native pin module is actually linked. Android alone
+   * isn't enough — without WidgetPin there is no way to raise the system
+   * dialog, and callers must fall back to manual long-press instructions.
+   */
   get canPinWidget(): boolean {
-    return Platform.OS === 'android';
+    return Platform.OS === 'android' && typeof NativeModules.WidgetPin?.requestPin === 'function';
   }
 
   /**
    * On Android 8+, invokes the system's native widget-pin dialog via
-   * AppWidgetManager.requestPinAppWidget(). Falls back silently if the
-   * launcher doesn't support it (e.g. Android < 8 or unsupported launcher).
+   * AppWidgetManager.requestPinAppWidget().
+   *
+   * Returns true only if the dialog was actually raised. False means the
+   * caller should show manual instructions instead — the module isn't linked,
+   * or the launcher rejected/doesn't support pinning (Android < 8, or a
+   * launcher without pin support).
    */
-  async requestPinWidget(): Promise<void> {
-    if (Platform.OS !== 'android') return;
+  async requestPinWidget(): Promise<boolean> {
+    if (!this.canPinWidget) return false;
     try {
-      await NativeModules.WidgetPin?.requestPin();
+      await NativeModules.WidgetPin.requestPin();
+      return true;
     } catch {
-      // Launcher rejected or doesn't support pinning — no-op.
+      // Launcher rejected or doesn't support pinning.
+      return false;
     }
   }
 
