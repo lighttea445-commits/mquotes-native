@@ -39,7 +39,7 @@ import { PaywallSheet } from '../../components/subscriptions/PaywallSheet';
 import FeaturesScreen from '../../components/subscriptions/FeaturesScreen';
 import TrialScreen from '../../components/subscriptions/TrialScreen';
 import SpecialOfferScreen from '../../components/subscriptions/SpecialOfferScreen';
-import NotificationsScreen from '../notifications';
+import NotificationsScreen from '../../components/screens/NotificationsScreen';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 

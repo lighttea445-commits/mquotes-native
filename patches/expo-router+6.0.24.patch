@@ -1,0 +1,81 @@
+diff --git a/node_modules/expo-router/build/useScreens.js b/node_modules/expo-router/build/useScreens.js
+index af29ef7..daa3a85 100644
+--- a/node_modules/expo-router/build/useScreens.js
++++ b/node_modules/expo-router/build/useScreens.js
+@@ -125,7 +125,18 @@ function useSortedScreens(order, protectedScreens, useOnlyUserDefinedScreens = f
+         return routeToScreen(value.route, value.props);
+     }), [sorted, protectedScreens]);
+ }
+-function fromImport(value, { ErrorBoundary, ...component }) {
++function fromImport(value, __routeModule) {
++    // PATCHED (diagnostic): upstream destructures the module argument directly,
++    // so a route whose module resolves to undefined fails with the opaque
++    // "Cannot read property 'ErrorBoundary' of undefined". Name the route.
++    if (__routeModule === undefined || __routeModule === null) {
++        throw new Error('[expo-router] Route module is undefined. contextKey=' +
++            String(value && value.contextKey) +
++            ' route=' +
++            String(value && value.route) +
++            ' — this route file failed to load in the production bundle.');
++    }
++    const { ErrorBoundary, ...component } = __routeModule;
+     // If possible, add a more helpful display name for the component stack to improve debugging of React errors such as `Text strings must be rendered within a <Text> component.`.
+     if (component?.default && __DEV__) {
+         component.default.displayName ??= `${component.default.name ?? 'Route'}(${value.contextKey})`;
+diff --git a/node_modules/expo-router/build/getRoutesCore.js b/node_modules/expo-router/build/getRoutesCore.js
+index b110c14..84aa48d 100644
+--- a/node_modules/expo-router/build/getRoutesCore.js
++++ b/node_modules/expo-router/build/getRoutesCore.js
+@@ -221,16 +221,46 @@ function getDirectoryTree(contextModule, options) {
+             type: meta.isApi ? 'api' : meta.isLayout ? 'layout' : 'route',
+             loadRoute() {
+                 let routeModule;
+-                if (options.ignoreRequireErrors) {
+-                    try {
++                // PATCHED (diagnostic).
++                //
++                // Metro's guardedLoadModule swallows any error thrown while a module
++                // is evaluating: it passes the error to global.ErrorUtils.reportFatalError
++                // and returns undefined. The route then arrives here as `undefined` with
++                // no indication of what actually failed.
++                //
++                // Re-requiring does NOT help -- Metro stores the error and rethrows it,
++                // but that rethrow is caught by the very same guard and swallowed again.
++                // The only place the real error surfaces is reportFatalError, so hook it
++                // for the duration of this require and restore it immediately after.
++                let __capturedError;
++                const __errorUtils = typeof global !== 'undefined' ? global.ErrorUtils : undefined;
++                const __origReportFatalError = __errorUtils && __errorUtils.reportFatalError;
++                if (__origReportFatalError) {
++                    __errorUtils.reportFatalError = function (e) { __capturedError = e; };
++                }
++                try {
++                    if (options.ignoreRequireErrors) {
++                        try {
++                            routeModule = contextModule(filePath);
++                        }
++                        catch {
++                            routeModule = {};
++                        }
++                    }
++                    else {
+                         routeModule = contextModule(filePath);
+                     }
+-                    catch {
+-                        routeModule = {};
++                }
++                finally {
++                    if (__origReportFatalError) {
++                        __errorUtils.reportFatalError = __origReportFatalError;
+                     }
+                 }
+-                else {
+-                    routeModule = contextModule(filePath);
++                if (routeModule === undefined) {
++                    const __e = __capturedError;
++                    const __msg = __e && __e.message ? __e.message : String(__e);
++                    const __stack = __e && __e.stack ? '\n\nOriginal stack:\n' + __e.stack : '';
++                    throw new Error('Route "' + filePath + '" threw while evaluating: ' + __msg + __stack);
+                 }
+                 if (process.env.NODE_ENV === 'development' && importMode === 'sync') {
+                     // In development mode, when async routes are disabled, add some extra error handling to improve the developer experience.
