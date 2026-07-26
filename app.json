@@ -18,7 +18,7 @@
       "newArchEnabled": true,
       "bundleIdentifier": "com.kovoapps.quotable",
       "appleTeamId": "HF7548K866",
-      "buildNumber": "22",
+      "buildNumber": "24",
       "entitlements": {
         "com.apple.security.application-groups": [
           "group.com.mquotes.shared"

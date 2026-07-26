@@ -2,7 +2,9 @@
 
 Read CLAUDE.md first. Then work through this top to bottom.
 
-Bundle ID: com.eriksen_dawson.quotable
+Bundle ID: com.kovoapps.quotable (ios.bundleIdentifier in app.json)
+Widget extension bundle ID: com.kovoapps.quotable.quotes-widget
+Apple Team ID: HF7548K866
 App Group: group.com.mquotes.shared
 Git: https://github.com/lighttea445-commits/mquotes-native (branch: main)
 EAS project ID: 7076af1d-0e03-4913-813f-3fa8061e252d
@@ -16,14 +18,14 @@ EAS project ID: 7076af1d-0e03-4913-813f-3fa8061e252d
 - [ ] native/ios/WidgetBridge/WidgetBridgeModule.swift — writes quote data to shared UserDefaults, calls WidgetCenter.shared.reloadAllTimelines(). Verify App Group ID string matches exactly
 - [ ] native/ios/WidgetBridge/WidgetBridgeModule.m — Obj-C bridge registering the Swift module. Verify module name matches Swift class name
 - [ ] plugins/withWidgetBridgeModule.js — copies WidgetBridge files into generated /ios and adds them to main app target (not widget extension). Verify after prebuild
-- [ ] targets/quotes-widget/expo-target.config.js — widget extension wired via @bacons/apple-targets. Verify bundleId suffix and deploymentTarget (14+ for home, 16+ for lock screen)
+- [ ] targets/quotes-widget/expo-target.config.js — widget extension wired via @bacons/apple-targets. Verify bundleId suffix and deploymentTarget (17.0 — required by AppIntentConfiguration and .containerBackground). The App Group entitlement MUST be declared in this file: @bacons/apple-targets only mirrors app.json's app groups onto the target when an `entitlements` object is already present, otherwise it strips CODE_SIGN_ENTITLEMENTS and the extension can't read the shared container. After prebuild, confirm targets/quotes-widget/generated.entitlements exists
 - [ ] lib/revenuecat.ts — find Purchases.configure(). Currently Android-only key. Needs Platform.select with iOS key once RevenueCat iOS app is created
 
 
 ## Apple Developer portal (manual, requires paid account)
 
-- [ ] Register bundle ID com.eriksen_dawson.quotable
-- [ ] Register widget extension bundle ID com.eriksen_dawson.quotable.quotes-widget
+- [ ] Register bundle ID com.kovoapps.quotable
+- [ ] Register widget extension bundle ID com.kovoapps.quotable.quotes-widget
 - [ ] Create App Group group.com.mquotes.shared
 - [ ] Associate App Group with both bundle IDs
 - [ ] Create Distribution Certificate
@@ -59,7 +61,7 @@ EAS project ID: 7076af1d-0e03-4913-813f-3fa8061e252d
 
 ## App Store Connect
 
-- [ ] Create app listing with bundle ID com.eriksen_dawson.quotable
+- [ ] Create app listing with bundle ID com.kovoapps.quotable
 - [ ] Fill metadata: name, subtitle, description, keywords, support URL, privacy policy URL
 - [ ] Set age rating
 - [ ] Upload screenshots: iPhone 6.5" and 6.7" Pro Max required; 5.5" recommended
@@ -85,6 +87,14 @@ EAS project ID: 7076af1d-0e03-4913-813f-3fa8061e252d
 These exist in code but have never run against a real iOS build:
 - WidgetBridgeModule end-to-end (UserDefaults write + WidgetCenter reload)
 - QuotesWidget visual output across all six widget families
+- The quote queue (mq_quotes) and its multi-entry rotating timeline
+- Widget tap deep link (quotable://widget-open?src=ios&i=N)
+- Apple's Edit Widget panel (theme / text size / author via QuoteWidgetIntent)
+- The mq_is_pro render-path gate on those three settings
+
+Note: the widget moved from StaticConfiguration to AppIntentConfiguration. Any
+widget placed by an older build must be removed and re-added — iOS will not
+migrate a static widget onto an intent-configured one.
 - Lock screen widget rendering on device
 - RevenueCat iOS paywall and StoreKit purchase flow
 - Push notification delivery via APNs

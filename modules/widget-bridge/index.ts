@@ -11,12 +11,37 @@ import { getWidgetInfo, requestWidgetUpdateById } from 'react-native-android-wid
 import type { WidgetInfo } from 'react-native-android-widget';
 import type { WidgetInstanceConfig } from '../../store/useWidgetStore';
 import type { QuoteData } from '../../widget/QuoteWidget';
+import type { WidgetQuote } from '../../lib/widgetQuotes';
 
 export const WIDGET_NAME = 'BasicWidget';
+
+/**
+ * iOS has no per-widget ids, so all iOS widgets share one config stored under
+ * this key in useWidgetStore's widgetConfigs map.
+ */
+export const IOS_WIDGET_CONFIG_ID = 'ios';
+
+/**
+ * The quote queue written to the App Group, mirrored here so a widget tap
+ * (quotable://widget-open?src=ios&i=<index>) can resolve the displayed quote
+ * without a native read. See app/widget-open.tsx.
+ */
+export const IOS_WIDGET_QUEUE_KEY = 'ios-widget-queue';
+
+/** How many quotes to pre-write. iOS rotates through these without waking JS. */
+export const IOS_WIDGET_QUEUE_SIZE = 48;
 
 export interface ActiveWidget {
   widgetId: number;
   type: 'basic';
+}
+
+export interface IOSQueuePayload {
+  quotes: WidgetQuote[];
+  /** Minutes between rotations. Floored at 15 by the widget extension. */
+  rotateMinutes: number;
+  /** Gates theme / text size / author, which are configured in Apple's UI. */
+  isPro: boolean;
 }
 
 export interface RenderPayload {
@@ -29,7 +54,7 @@ export interface RenderPayload {
 
 class WidgetBridgeClass {
   get isAvailable(): boolean {
-    return Platform.OS === 'android';
+    return Platform.OS === 'android' || Platform.OS === 'ios';
   }
 
   /**
@@ -130,6 +155,42 @@ class WidgetBridgeClass {
       );
     } catch (err) {
       console.warn('[WidgetBridge] updateWidget error:', err);
+    }
+  }
+
+  /**
+   * iOS only. Writes a queue of quotes into the App Group and reloads the
+   * widget timeline.
+   *
+   * iOS cannot wake JS in the background to fetch a quote, so the widget
+   * extension rotates through this pre-written batch on its own. The queue is
+   * mirrored into AsyncStorage so a widget tap can resolve which quote was on
+   * screen from the index in its URL.
+   *
+   * Silently no-ops when the native module isn't linked (Expo Go).
+   */
+  async updateIOSQueue(payload: IOSQueuePayload): Promise<void> {
+    if (Platform.OS !== 'ios') return;
+    if (payload.quotes.length === 0) return;
+
+    try {
+      const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+      await AsyncStorage.setItem(IOS_WIDGET_QUEUE_KEY, JSON.stringify(payload.quotes));
+    } catch {
+      // Non-critical — the widget still renders; only tap resolution degrades.
+    }
+
+    try {
+      await NativeModules.WidgetBridge?.updateWidgetQueue(
+        JSON.stringify({
+          quotes: payload.quotes.map((q) => ({ text: q.text, author: q.author, id: q.id ?? '' })),
+          rotateMinutes: payload.rotateMinutes,
+          isPro: payload.isPro,
+          widgetType: 'basic',
+        }),
+      );
+    } catch (err) {
+      console.warn('[WidgetBridge] updateIOSQueue error:', err);
     }
   }
 

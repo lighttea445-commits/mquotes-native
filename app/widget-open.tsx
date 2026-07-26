@@ -2,7 +2,13 @@
  * Widget-open trampoline screen.
  *
  * When the user taps a home-screen widget, the OPEN_URI click action fires:
- *   quotable://widget-open?widgetId=<id>
+ *   quotable://widget-open?widgetId=<id>          (Android)
+ *   quotable://widget-open?src=ios&i=<queueIndex> (iOS)
+ *
+ * iOS has no widget ids. The index points into the quote queue the app wrote
+ * into the App Group, mirrored to AsyncStorage under IOS_WIDGET_QUEUE_KEY by
+ * WidgetBridge.updateIOSQueue() — so the app can show exactly the quote the
+ * widget's timeline had on screen.
  *
  * The URI is intentionally short (widgetId only) to avoid Android 12+
  * FLAG_IMMUTABLE PendingIntent limitations — embedding quote text caused the
@@ -23,16 +29,37 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useDeepLinkStore } from '../store/useDeepLinkStore';
 import type { WidgetInstanceConfig } from '../store/useWidgetStore';
+import { IOS_WIDGET_QUEUE_KEY } from '../modules/widget-bridge';
+import type { WidgetQuote } from '../lib/widgetQuotes';
 
 export default function WidgetOpenScreen() {
   const router = useRouter();
-  const { widgetId } = useLocalSearchParams<{ widgetId?: string }>();
+  const { widgetId, src, i } = useLocalSearchParams<{ widgetId?: string; src?: string; i?: string }>();
 
   useEffect(() => {
     async function handleAndNavigate() {
       const wid = String(widgetId ?? '');
 
-      if (wid) {
+      if (src === 'ios') {
+        try {
+          const raw = await AsyncStorage.getItem(IOS_WIDGET_QUEUE_KEY);
+          const queue = raw ? (JSON.parse(raw) as WidgetQuote[]) : [];
+          if (Array.isArray(queue) && queue.length > 0) {
+            const parsed = Number.parseInt(String(i ?? '0'), 10);
+            const index = Number.isNaN(parsed) ? 0 : Math.min(Math.max(parsed, 0), queue.length - 1);
+            const quote = queue[index];
+            if (quote?.text) {
+              useDeepLinkStore.getState().setPendingQuote({
+                id:     quote.id ?? '',
+                text:   quote.text,
+                author: quote.author ?? '',
+              });
+            }
+          }
+        } catch {
+          // Non-critical — navigate to main screen regardless.
+        }
+      } else if (wid) {
         try {
           // Primary: read the quote that was last rendered onto the widget face.
           const shown = await AsyncStorage.getItem(`widget-shown-${wid}`);

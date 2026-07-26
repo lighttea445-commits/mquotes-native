@@ -1,14 +1,31 @@
 import WidgetKit
 import SwiftUI
+import AppIntents
+import os
 
 // MARK: - Constants
 // Must match WidgetBridgeModule.swift
 private let kAppGroupId = "group.com.mquotes.shared"
 
+/// One line per timeline request. Visible in Console.app / sysdiagnose filtered
+/// on subsystem com.kovoapps.quotable.quotes-widget — the only way to tell a
+/// blank widget apart from an extension that never ran.
+private let kLog = Logger(subsystem: "com.kovoapps.quotable.quotes-widget", category: "timeline")
+
+/// Hard cap on timeline entries. The app writes ~48; WidgetKit will not thank
+/// us for thousands if the queue is ever malformed.
+private let kMaxEntries = 64
+
+/// Last-resort text when the App Group holds nothing at all.
+private let kFallbackText = "The journey of a thousand miles begins with a single step."
+
 // MARK: - Data model
 
 struct QuoteEntry: TimelineEntry {
   let date: Date
+  /// Position in the stored queue — travels in the widget tap URL so the app
+  /// can resolve exactly which quote was on screen.
+  let index: Int
   let quoteText: String
   let quoteAuthor: String
   let showAuthor: Bool
@@ -18,48 +35,250 @@ struct QuoteEntry: TimelineEntry {
   let textSize: String     // "small" | "medium" | "large"
 }
 
+/// Shape of each element in the `mq_quotes` JSON array written by the app.
+private struct StoredQuote: Decodable {
+  let text: String
+  let author: String
+  let id: String?
+
+  init(text: String, author: String, id: String?) {
+    self.text = text
+    self.author = author
+    self.id = id
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    text = try c.decode(String.self, forKey: .text)
+    author = (try? c.decode(String.self, forKey: .author)) ?? ""
+    id = try? c.decode(String.self, forKey: .id)
+  }
+
+  private enum CodingKeys: String, CodingKey { case text, author, id }
+}
+
+// MARK: - Widget configuration intent
+//
+// Appearance is configured in Apple's own "Edit Widget" panel (long-press the
+// widget on the home screen), not in the app — iOS gives the app no widget ids,
+// so it cannot drive per-instance appearance itself. The app still owns the
+// quote *data* (source and cadence) via the App Group.
+
+enum WidgetThemeOption: String, AppEnum {
+  case minimal, galaxy, orbit, tempest, seashore, apex, ember, daybreak
+  case crescent, shore, dusk, blush, woodland, botanical, lunar, alpine, obsidian
+  case roseSky = "rose-sky"
+
+  static var typeDisplayRepresentation: TypeDisplayRepresentation { "Theme" }
+
+  static var caseDisplayRepresentations: [WidgetThemeOption: DisplayRepresentation] {[
+    .minimal:   "Minimal",
+    .galaxy:    "Galaxy",
+    .orbit:     "Orbit",
+    .tempest:   "Tempest",
+    .seashore:  "Seashore",
+    .apex:      "Apex",
+    .ember:     "Ember",
+    .daybreak:  "Daybreak",
+    .crescent:  "Crescent",
+    .shore:     "Shore",
+    .roseSky:   "Rose Sky",
+    .dusk:      "Dusk",
+    .blush:     "Blush",
+    .woodland:  "Woodland",
+    .botanical: "Botanical",
+    .lunar:     "Lunar",
+    .alpine:    "Alpine",
+    .obsidian:  "Obsidian",
+  ]}
+}
+
+enum WidgetTextSizeOption: String, AppEnum {
+  case small, medium, large
+
+  static var typeDisplayRepresentation: TypeDisplayRepresentation { "Text Size" }
+
+  static var caseDisplayRepresentations: [WidgetTextSizeOption: DisplayRepresentation] {[
+    .small:  "Small",
+    .medium: "Medium",
+    .large:  "Large",
+  ]}
+}
+
+struct QuoteWidgetIntent: WidgetConfigurationIntent {
+  static var title: LocalizedStringResource { "Quote Widget" }
+  static var description: IntentDescription {
+    IntentDescription("Choose how the quote on your home screen looks.")
+  }
+
+  @Parameter(title: "Theme", default: .minimal)
+  var theme: WidgetThemeOption
+
+  @Parameter(title: "Text Size", default: .large)
+  var textSize: WidgetTextSizeOption
+
+  @Parameter(title: "Show Author", default: false)
+  var showAuthor: Bool
+
+  init() {}
+}
+
+// MARK: - Shared-container reads
+
+/// Resolved appearance. Theme, text size and author are Pro features in the
+/// app, and Apple's Edit Widget panel has no way to know about entitlements —
+/// so the gate has to live here, in the render path. Free users can pick
+/// anything; the widget renders defaults until `mq_is_pro` is true.
+private struct Appearance {
+  let themeName: String
+  let textSize: String
+  let showAuthor: Bool
+
+  static let free = Appearance(themeName: "minimal", textSize: "large", showAuthor: false)
+}
+
+private func resolveAppearance(_ configuration: QuoteWidgetIntent) -> Appearance {
+  let defaults = UserDefaults(suiteName: kAppGroupId)
+  guard defaults?.bool(forKey: "mq_is_pro") == true else { return .free }
+  return Appearance(
+    themeName: configuration.theme.rawValue,
+    textSize: configuration.textSize.rawValue,
+    showAuthor: configuration.showAuthor
+  )
+}
+
+/// The quote queue the app pre-writes, so the widget can rotate on its own —
+/// iOS cannot wake JS in the background to fetch a fresh quote.
+private func loadQuotes() -> [StoredQuote] {
+  guard let defaults = UserDefaults(suiteName: kAppGroupId) else { return [] }
+
+  if
+    let raw = defaults.string(forKey: "mq_quotes"),
+    let data = raw.data(using: .utf8),
+    let decoded = try? JSONDecoder().decode([StoredQuote].self, from: data),
+    !decoded.isEmpty
+  {
+    return Array(decoded.prefix(kMaxEntries))
+  }
+
+  // Fallback: the single-quote keys written by the legacy updateWidget path.
+  // Keeps a version-mismatched build showing a real quote instead of going blank.
+  if let text = defaults.string(forKey: "mq_quote_text"), !text.isEmpty {
+    return [StoredQuote(text: text, author: defaults.string(forKey: "mq_quote_author") ?? "", id: nil)]
+  }
+
+  return []
+}
+
+/// Minutes between rotations, written by the app from its refresh-frequency
+/// setting. Floored at 15 — WidgetKit will not honour anything tighter.
+private func loadRotateMinutes() -> Int {
+  let stored = UserDefaults(suiteName: kAppGroupId)?.integer(forKey: "mq_rotate_minutes") ?? 0
+  return stored > 0 ? max(15, stored) : 60
+}
+
+/// Non-appearance bits the app owns: which widget variant to draw and the
+/// streak count it shows.
+private struct Badge {
+  let widgetType: String
+  let streakCount: Int
+}
+
+private func loadBadge() -> Badge {
+  let defaults = UserDefaults(suiteName: kAppGroupId)
+  return Badge(
+    widgetType: defaults?.string(forKey: "mq_widget_type") ?? "basic",
+    streakCount: defaults?.integer(forKey: "mq_streak_count") ?? 0
+  )
+}
+
 // MARK: - Timeline provider
 
-struct QuoteProvider: TimelineProvider {
+struct QuoteProvider: AppIntentTimelineProvider {
 
   func placeholder(in context: Context) -> QuoteEntry {
     QuoteEntry(
       date: Date(),
+      index: 0,
       quoteText: "Be yourself; everyone else is already taken.",
       quoteAuthor: "Oscar Wilde",
       showAuthor: true,
       widgetType: "basic",
       streakCount: 7,
       themeName: "minimal",
-      textSize: "medium"
+      textSize: "large"
     )
   }
 
-  func getSnapshot(in context: Context, completion: @escaping (QuoteEntry) -> Void) {
-    completion(context.isPreview ? placeholder(in: context) : loadEntry())
+  func snapshot(for configuration: QuoteWidgetIntent, in context: Context) async -> QuoteEntry {
+    if context.isPreview { return placeholder(in: context) }
+    let appearance = resolveAppearance(configuration)
+    let quotes = loadQuotes()
+    return entry(at: 0, date: Date(), quote: quotes.first, appearance: appearance, badge: loadBadge())
   }
 
-  func getTimeline(in context: Context, completion: @escaping (Timeline<QuoteEntry>) -> Void) {
-    let entry = loadEntry()
-    // Refresh every 30 min — the RN background task will write fresher data
-    // before this fires, so the widget shows the task-updated quote.
-    let nextUpdate = Calendar.current.date(byAdding: .minute, value: 30, to: Date())!
-    completion(Timeline(entries: [entry], policy: .after(nextUpdate)))
+  func timeline(for configuration: QuoteWidgetIntent, in context: Context) async -> Timeline<QuoteEntry> {
+    let appearance = resolveAppearance(configuration)
+    let quotes = loadQuotes()
+    let minutes = loadRotateMinutes()
+    // Read once, not once per entry — a full queue builds ~48 entries.
+    let badge = loadBadge()
+    let now = Date()
+
+    kLog.info("timeline requested: \(quotes.count, privacy: .public) quote(s), rotate every \(minutes, privacy: .public) min, theme \(appearance.themeName, privacy: .public)")
+
+    guard !quotes.isEmpty else {
+      // Nothing in the App Group yet — show the fallback and retry soon rather
+      // than rendering an empty card.
+      let retry = now.addingTimeInterval(15 * 60)
+      return Timeline(
+        entries: [entry(at: 0, date: now, quote: nil, appearance: appearance, badge: badge)],
+        policy: .after(retry)
+      )
+    }
+
+    let entries = quotes.enumerated().map { offset, quote in
+      entry(
+        at: offset,
+        date: now.addingTimeInterval(TimeInterval(offset * minutes * 60)),
+        quote: quote,
+        appearance: appearance,
+        badge: badge
+      )
+    }
+
+    return Timeline(entries: entries, policy: .atEnd)
   }
 
-  private func loadEntry() -> QuoteEntry {
-    let d = UserDefaults(suiteName: kAppGroupId)
-    return QuoteEntry(
-      date: Date(),
-      quoteText:   d?.string(forKey: "mq_quote_text")   ?? "The journey of a thousand miles begins with a single step.",
-      quoteAuthor: d?.string(forKey: "mq_quote_author") ?? "",
-      showAuthor:  d?.bool(forKey: "mq_show_author")    ?? false,
-      widgetType:  d?.string(forKey: "mq_widget_type")  ?? "basic",
-      streakCount: d?.integer(forKey: "mq_streak_count") ?? 0,
-      themeName:   d?.string(forKey: "mq_theme_name")   ?? "minimal",
-      textSize:    d?.string(forKey: "mq_text_size")    ?? "medium"
+  private func entry(
+    at index: Int,
+    date: Date,
+    quote: StoredQuote?,
+    appearance: Appearance,
+    badge: Badge
+  ) -> QuoteEntry {
+    QuoteEntry(
+      date: date,
+      index: index,
+      quoteText: quote?.text ?? kFallbackText,
+      quoteAuthor: quote?.author ?? "",
+      showAuthor: appearance.showAuthor,
+      widgetType: badge.widgetType,
+      streakCount: badge.streakCount,
+      themeName: appearance.themeName,
+      textSize: appearance.textSize
     )
   }
+}
+
+// MARK: - Deep link
+//
+// A tap opens quotable://widget-open?src=ios&i=<index>. The index is resolved
+// against the same queue mirrored into AsyncStorage, so the app shows exactly
+// the quote that was on the widget face. See app/widget-open.tsx.
+
+private func tapURL(for entry: QuoteEntry) -> URL? {
+  URL(string: "quotable://widget-open?src=ios&i=\(entry.index)")
 }
 
 // MARK: - Theme colours (mirrors constants/themes.ts subset)
@@ -140,7 +359,7 @@ struct QuoteWidgetView: View {
     }
   }
 
-  // Home screen widget (systemSmall/systemMedium/systemLarge) — unchanged.
+  // Home screen widget (systemSmall/systemMedium/systemLarge).
   private var homeScreenBody: some View {
     ZStack(alignment: .bottomLeading) {
       colors.background
@@ -198,6 +417,7 @@ struct QuoteWidgetView: View {
         .padding(.bottom, 12)
       }
     }
+    .widgetURL(tapURL(for: entry))
     .containerBackground(for: .widget) {
       colors.background
     }
@@ -232,6 +452,7 @@ private struct AccessoryCircularView: View {
         .padding(5)
     }
     .widgetAccentable()
+    .widgetURL(tapURL(for: entry))
     .containerBackground(.clear, for: .widget)
   }
 }
@@ -267,6 +488,7 @@ private struct AccessoryRectangularView: View {
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
+    .widgetURL(tapURL(for: entry))
     .containerBackground(.clear, for: .widget)
   }
 }
@@ -274,6 +496,7 @@ private struct AccessoryRectangularView: View {
 private struct AccessoryInlineView: View {
   let entry: QuoteEntry
 
+  // accessoryInline cannot carry a tap target — the system owns the tap.
   var body: some View {
     Label(entry.quoteText, systemImage: "quote.opening")
   }
@@ -292,7 +515,7 @@ struct QuotesWidget: Widget {
   let kind = "QuotesWidget"
 
   var body: some WidgetConfiguration {
-    StaticConfiguration(kind: kind, provider: QuoteProvider()) { entry in
+    AppIntentConfiguration(kind: kind, intent: QuoteWidgetIntent.self, provider: QuoteProvider()) { entry in
       QuoteWidgetView(entry: entry)
     }
     .configurationDisplayName("Quotes")
@@ -323,38 +546,38 @@ extension Color {
 #Preview("Small – Basic", as: .systemSmall) {
   QuotesWidget()
 } timeline: {
-  QuoteEntry(date: .now, quoteText: "No one can make you feel inferior without your consent.", quoteAuthor: "Eleanor Roosevelt", showAuthor: false, widgetType: "basic", streakCount: 0, themeName: "minimal", textSize: "medium")
+  QuoteEntry(date: .now, index: 0, quoteText: "No one can make you feel inferior without your consent.", quoteAuthor: "Eleanor Roosevelt", showAuthor: false, widgetType: "basic", streakCount: 0, themeName: "minimal", textSize: "medium")
 }
 
 #Preview("Medium – Streak", as: .systemMedium) {
   QuotesWidget()
 } timeline: {
-  QuoteEntry(date: .now, quoteText: "Live in the moment but prepare for your future.", quoteAuthor: "Unknown", showAuthor: true, widgetType: "streak", streakCount: 12, themeName: "minimal", textSize: "medium")
+  QuoteEntry(date: .now, index: 0, quoteText: "Live in the moment but prepare for your future.", quoteAuthor: "Unknown", showAuthor: true, widgetType: "streak", streakCount: 12, themeName: "minimal", textSize: "medium")
 }
 
 #Preview("Large – Custom", as: .systemLarge) {
   QuotesWidget()
 } timeline: {
-  QuoteEntry(date: .now, quoteText: "The secret of getting ahead is getting started.", quoteAuthor: "Mark Twain", showAuthor: true, widgetType: "custom", streakCount: 0, themeName: "ember", textSize: "large")
+  QuoteEntry(date: .now, index: 0, quoteText: "The secret of getting ahead is getting started.", quoteAuthor: "Mark Twain", showAuthor: true, widgetType: "custom", streakCount: 0, themeName: "ember", textSize: "large")
 }
 
 #Preview("Lock Screen – Circular", as: .accessoryCircular) {
   QuotesWidget()
 } timeline: {
-  QuoteEntry(date: .now, quoteText: "No one can make you feel inferior without your consent.", quoteAuthor: "Eleanor Roosevelt", showAuthor: false, widgetType: "basic", streakCount: 0, themeName: "minimal", textSize: "medium")
-  QuoteEntry(date: .now, quoteText: "Live in the moment but prepare for your future.", quoteAuthor: "Unknown", showAuthor: true, widgetType: "streak", streakCount: 12, themeName: "minimal", textSize: "medium")
+  QuoteEntry(date: .now, index: 0, quoteText: "No one can make you feel inferior without your consent.", quoteAuthor: "Eleanor Roosevelt", showAuthor: false, widgetType: "basic", streakCount: 0, themeName: "minimal", textSize: "medium")
+  QuoteEntry(date: .now, index: 1, quoteText: "Live in the moment but prepare for your future.", quoteAuthor: "Unknown", showAuthor: true, widgetType: "streak", streakCount: 12, themeName: "minimal", textSize: "medium")
 }
 
 #Preview("Lock Screen – Rectangular", as: .accessoryRectangular) {
   QuotesWidget()
 } timeline: {
-  QuoteEntry(date: .now, quoteText: "The secret of getting ahead is getting started.", quoteAuthor: "Mark Twain", showAuthor: true, widgetType: "basic", streakCount: 0, themeName: "minimal", textSize: "medium")
-  QuoteEntry(date: .now, quoteText: "Live in the moment but prepare for your future.", quoteAuthor: "Unknown", showAuthor: true, widgetType: "streak", streakCount: 12, themeName: "minimal", textSize: "medium")
+  QuoteEntry(date: .now, index: 0, quoteText: "The secret of getting ahead is getting started.", quoteAuthor: "Mark Twain", showAuthor: true, widgetType: "basic", streakCount: 0, themeName: "minimal", textSize: "medium")
+  QuoteEntry(date: .now, index: 1, quoteText: "Live in the moment but prepare for your future.", quoteAuthor: "Unknown", showAuthor: true, widgetType: "streak", streakCount: 12, themeName: "minimal", textSize: "medium")
 }
 
 #Preview("Lock Screen – Inline", as: .accessoryInline) {
   QuotesWidget()
 } timeline: {
-  QuoteEntry(date: .now, quoteText: "The secret of getting ahead is getting started.", quoteAuthor: "Mark Twain", showAuthor: true, widgetType: "basic", streakCount: 0, themeName: "minimal", textSize: "medium")
-  QuoteEntry(date: .now, quoteText: "Live in the moment but prepare for your future.", quoteAuthor: "Unknown", showAuthor: true, widgetType: "streak", streakCount: 12, themeName: "minimal", textSize: "medium")
+  QuoteEntry(date: .now, index: 0, quoteText: "The secret of getting ahead is getting started.", quoteAuthor: "Mark Twain", showAuthor: true, widgetType: "basic", streakCount: 0, themeName: "minimal", textSize: "medium")
+  QuoteEntry(date: .now, index: 1, quoteText: "Live in the moment but prepare for your future.", quoteAuthor: "Unknown", showAuthor: true, widgetType: "streak", streakCount: 12, themeName: "minimal", textSize: "medium")
 }

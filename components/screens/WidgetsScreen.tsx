@@ -11,6 +11,7 @@ import {
   AppState,
   TextInput,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -29,7 +30,8 @@ import {
 } from '../../store/useWidgetStore';
 import { THEMES } from '../../constants/themes';
 import { fetchQuotesByCategory, fetchMultipleRandomQuotes } from '../../lib/quotesApi';
-import { WidgetBridge, ActiveWidget } from '../../modules/widget-bridge';
+import { WidgetBridge, ActiveWidget, IOS_WIDGET_CONFIG_ID } from '../../modules/widget-bridge';
+import { refreshIOSWidget, setIOSWidgetConfig } from '../../lib/iosWidget';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFavoritesStore } from '../../store/useFavoritesStore';
 import { useUserQuotesStore } from '../../store/useUserQuotesStore';
@@ -396,6 +398,134 @@ const emptyStyles = StyleSheet.create({
   addBtnText: { fontSize: 16, fontWeight: '700', color: '#1A1208' },
 });
 
+// ── iOS panel ─────────────────────────────────────────────────────────────────
+//
+// iOS gives the app no widget ids and no way to enumerate placed widgets, so
+// there is no list to render and no per-instance editor. All iOS widgets share
+// one config and the app only owns the *data* side of it — which quotes, how
+// often they rotate. Appearance (theme, text size, author) is configured in
+// Apple's own Edit Widget panel, which reads the AppIntent declared in
+// targets/quotes-widget/QuotesWidget.swift.
+
+const IOS_ADD_STEPS = [
+  'Long-press an empty spot on your home screen',
+  'Tap the + button, then search for "Quotes"',
+  'Pick a size and drag it into place',
+];
+
+function IOSWidgetPanel({
+  theme,
+  config,
+  onOpenPicker,
+  onRefresh,
+  refreshing,
+}: {
+  theme: ReturnType<typeof useTheme>;
+  config: ReturnType<typeof defaultInstanceConfig>;
+  onOpenPicker: (picker: 'interval' | 'quoteType') => void;
+  onRefresh: () => void;
+  refreshing: boolean;
+}) {
+  const cached = config.cachedQuote;
+
+  return (
+    <ScrollView contentContainerStyle={iosStyles.content} showsVerticalScrollIndicator={false}>
+      <View style={[iosStyles.preview, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        <MaterialCommunityIcons name="format-quote-open" size={20} color={theme.text} style={{ opacity: 0.25 }} />
+        <Text
+          style={[iosStyles.previewQuote, { color: theme.text, fontFamily: theme.quoteFontFamily }]}
+          numberOfLines={4}
+        >
+          {cached?.text ?? 'Your widget will show a quote here once it refreshes.'}
+        </Text>
+        {!!cached?.author && (
+          <Text style={[iosStyles.previewAuthor, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+            {`- ${cached.author}`}
+          </Text>
+        )}
+      </View>
+
+      <View style={[styles.settingsCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        <SettingsRow
+          icon="tag-outline"
+          label="Quote category"
+          value={QUOTE_TYPE_LABELS[config.quoteType]}
+          onPress={() => onOpenPicker('quoteType')}
+          theme={theme}
+        />
+        <SettingsRow
+          icon="refresh"
+          label="Update interval"
+          value={REFRESH_FREQUENCY_LABELS[config.updateInterval]}
+          onPress={() => onOpenPicker('interval')}
+          theme={theme}
+          isLast
+        />
+      </View>
+
+      <View style={[iosStyles.hintCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        <MaterialCommunityIcons name="palette-outline" size={18} color={theme.gold} />
+        <Text style={[iosStyles.hintText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+          For theme, text size and author, long-press the widget on your home screen and tap Edit Widget.
+        </Text>
+      </View>
+
+      <View style={[emptyStyles.stepsCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        {IOS_ADD_STEPS.map((step, i) => (
+          <View key={i} style={emptyStyles.stepRow}>
+            <View style={[emptyStyles.stepBadge, { backgroundColor: theme.gold + '22' }]}>
+              <Text style={[emptyStyles.stepNum, { color: theme.gold, fontFamily: theme.uiFontFamily }]}>{i + 1}</Text>
+            </View>
+            <Text style={[emptyStyles.stepText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>{step}</Text>
+          </View>
+        ))}
+      </View>
+
+      <TouchableOpacity
+        style={[iosStyles.refreshBtn, { backgroundColor: theme.gold }]}
+        onPress={onRefresh}
+        activeOpacity={0.82}
+        disabled={refreshing}
+      >
+        <MaterialCommunityIcons name="refresh" size={18} color="#1A1208" />
+        <Text style={[emptyStyles.addBtnText, { fontFamily: theme.uiFontFamily }]}>
+          {refreshing ? 'Refreshing…' : 'Refresh now'}
+        </Text>
+      </TouchableOpacity>
+    </ScrollView>
+  );
+}
+
+const iosStyles = StyleSheet.create({
+  content: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 120, gap: 12 },
+  preview: {
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 20,
+    gap: 8,
+  },
+  previewQuote: { fontSize: 17, lineHeight: 25 },
+  previewAuthor: { fontSize: 13, textAlign: 'right' },
+  hintCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 16,
+  },
+  hintText: { flex: 1, fontSize: 13, lineHeight: 19 },
+  refreshBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 15,
+    borderRadius: 28,
+    marginTop: 4,
+  },
+});
+
 // ── Main screen ───────────────────────────────────────────────────────────────
 
 type ActivePicker = 'interval' | 'quoteType' | 'textSize' | 'theme' | null;
@@ -431,6 +561,30 @@ export default function WidgetsScreen({ onClose, onBack, onContinue }: { onClose
   // Editor state
   const [activePicker, setActivePicker] = useState<ActivePicker>(null);
 
+  // iOS: one shared config, no per-instance editor. See IOSWidgetPanel.
+  const isIOS = Platform.OS === 'ios';
+  const [iosRefreshing, setIosRefreshing] = useState(false);
+  const iosConfig = widgetConfigs[IOS_WIDGET_CONFIG_ID] ?? defaultInstanceConfig('basic');
+
+  const handleIOSRefresh = useCallback(async () => {
+    setIosRefreshing(true);
+    try {
+      await refreshIOSWidget({ force: true });
+    } finally {
+      setIosRefreshing(false);
+    }
+  }, []);
+
+  // Any data-side change rewrites the queue immediately so the widget doesn't
+  // keep rotating through quotes from the old source.
+  const updateIOSConfig = useCallback(
+    (updates: Partial<ReturnType<typeof defaultInstanceConfig>>) => {
+      setIOSWidgetConfig(updates);
+      refreshIOSWidget({ force: true }).catch(() => {});
+    },
+    [],
+  );
+
   // Derive editor config — in BottomSheet mode use local state; in route mode use route params.
   const editorId = onClose ? localEditorId : routeWidgetId;
   const editorType = onClose ? localEditorType : routeWidgetType;
@@ -450,6 +604,14 @@ export default function WidgetsScreen({ onClose, onBack, onContinue }: { onClose
   // ── Load active widgets list ───────────────────────────────────────────────
 
   const loadActiveWidgets = useCallback(async () => {
+    // iOS can't enumerate placed widgets — getActiveWidgets() always returns []
+    // there, which would strand every iOS user on the "No widgets yet" empty
+    // state and, worse, prune the shared iOS config as "no longer placed".
+    if (Platform.OS === 'ios') {
+      setLoadingList(false);
+      return;
+    }
+
     setLoadingList(true);
     const list = await WidgetBridge.getActiveWidgets();
     setActiveWidgets(list);
@@ -608,6 +770,69 @@ export default function WidgetsScreen({ onClose, onBack, onContinue }: { onClose
 
   const openPaywall = () =>
     modal ? modal.openSheet('features') : router.push('/subscriptions');
+
+  // ── Render: iOS ────────────────────────────────────────────────────────────
+
+  if (isIOS) {
+    return (
+      <View style={{ flex: 1, backgroundColor: theme.background }}>
+        <SafeAreaView style={styles.safe} edges={['bottom']}>
+          <View style={styles.header}>
+            <TouchableOpacity onPress={back} style={[styles.backBtn, { backgroundColor: theme.surface }]} activeOpacity={0.7}>
+              <MaterialCommunityIcons name="arrow-left" size={22} color={theme.textMuted} />
+            </TouchableOpacity>
+            <Text style={[styles.headerTitle, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
+              Widgets
+            </Text>
+            <TouchableOpacity onPress={handleIOSRefresh} style={styles.backBtn} activeOpacity={0.7}>
+              <MaterialCommunityIcons name="refresh" size={20} color={theme.textMuted} />
+            </TouchableOpacity>
+          </View>
+
+          <IOSWidgetPanel
+            theme={theme}
+            config={iosConfig}
+            refreshing={iosRefreshing}
+            onRefresh={handleIOSRefresh}
+            onOpenPicker={(picker) => { if (isPro) { setActivePicker(picker); } else { openPaywall(); } }}
+          />
+
+          {onContinue && (
+            <View style={[styles.saveBtnWrapper, { backgroundColor: theme.background }]}>
+              <TouchableOpacity
+                style={[styles.saveBtn, { backgroundColor: theme.gold }]}
+                onPress={onContinue}
+                activeOpacity={0.82}
+              >
+                <Text style={[styles.saveBtnText, { fontFamily: theme.uiFontFamily, color: '#1A1208' }]}>
+                  Continue
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </SafeAreaView>
+
+        <PickerModal
+          visible={activePicker === 'quoteType'}
+          title="Quote Category"
+          options={quoteTypeOptions}
+          selected={iosConfig.quoteType}
+          onSelect={(v) => updateIOSConfig({ quoteType: v })}
+          onClose={() => setActivePicker(null)}
+          theme={theme}
+        />
+        <PickerModal
+          visible={activePicker === 'interval'}
+          title="Update Interval"
+          options={intervalOptions}
+          selected={iosConfig.updateInterval}
+          onSelect={(v) => updateIOSConfig({ updateInterval: v })}
+          onClose={() => setActivePicker(null)}
+          theme={theme}
+        />
+      </View>
+    );
+  }
 
   // ── Render: editor ─────────────────────────────────────────────────────────
 

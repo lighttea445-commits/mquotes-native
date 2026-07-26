@@ -47,15 +47,17 @@ import {
   Raleway_400Regular,
   Raleway_600SemiBold,
 } from '@expo-google-fonts/raleway';
-import { View, ActivityIndicator, Text, ScrollView, Pressable } from 'react-native';
+import { View, ActivityIndicator, Text, ScrollView, Pressable, Platform, AppState } from 'react-native';
 import type { ErrorBoundaryProps } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAppStore } from '../store/useAppStore';
 import { useTheme } from '../hooks/useTheme';
 import { registerWidgetRefreshTask } from '../tasks/widgetRefreshTask';
-import { WidgetBridge } from '../modules/widget-bridge';
+import { WidgetBridge, IOS_WIDGET_QUEUE_KEY } from '../modules/widget-bridge';
+import { refreshIOSWidget } from '../lib/iosWidget';
 import { useDeepLinkStore } from '../store/useDeepLinkStore';
-import type { WidgetInstanceConfig } from '../store/useWidgetStore';
+import { useWidgetStore, type WidgetInstanceConfig } from '../store/useWidgetStore';
+import type { WidgetQuote } from '../lib/widgetQuotes';
 
 // Required for scheduled notifications to appear in the foreground and for the
 // OS to know what to do when a notification fires (alert + sound, no badge).
@@ -228,6 +230,31 @@ function RootLayoutInner() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ── iOS widget queue top-up ─────────────────────────────────────────────
+  //
+  // iOS can't wake JS in the background, so the widget rotates through a queue
+  // the app pre-writes. Top it up on launch and on every return to foreground;
+  // refreshIOSWidget() no-ops when the existing queue is still fresh and on
+  // non-iOS platforms (Android has registerWidgetRefreshTask above).
+  useEffect(() => {
+    if (Platform.OS !== 'ios') return;
+
+    const topUp = () => { refreshIOSWidget().catch(() => {}); };
+
+    let unsubHydration: (() => void) | undefined;
+    if (useWidgetStore.persist.hasHydrated()) {
+      topUp();
+    } else {
+      unsubHydration = useWidgetStore.persist.onFinishHydration(topUp);
+    }
+
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') topUp();
+    });
+    return () => { sub.remove(); unsubHydration?.(); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <>
       <StatusBar style={theme.isDark ? 'light' : 'dark'} />
@@ -312,6 +339,26 @@ export default function RootLayout() {
           const eq = part.indexOf('=');
           if (eq === -1) continue;
           params[part.slice(0, eq)] = decodeURIComponent(part.slice(eq + 1));
+        }
+
+        // iOS: quotable://widget-open?src=ios&i=<index>. There are no widget
+        // ids on iOS — the index points into the queue the app wrote, mirrored
+        // to AsyncStorage by WidgetBridge.updateIOSQueue().
+        if (params['src'] === 'ios') {
+          const raw = await AsyncStorage.getItem(IOS_WIDGET_QUEUE_KEY);
+          if (!raw) return;
+          const queue = JSON.parse(raw) as WidgetQuote[];
+          if (!Array.isArray(queue) || queue.length === 0) return;
+          const index = Number.parseInt(params['i'] ?? '0', 10);
+          const quote = queue[Number.isNaN(index) ? 0 : Math.min(Math.max(index, 0), queue.length - 1)];
+          if (quote?.text) {
+            useDeepLinkStore.getState().setPendingQuote({
+              id:     quote.id ?? '',
+              text:   quote.text,
+              author: quote.author ?? '',
+            });
+          }
+          return;
         }
 
         const widgetId = params['widgetId'];

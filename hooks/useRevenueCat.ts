@@ -1,5 +1,5 @@
 import { useEffect, useReducer } from 'react';
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import Purchases, { CustomerInfo, PurchasesOfferings } from 'react-native-purchases';
 import { initializeRevenueCat, ENTITLEMENT_PRO } from '../lib/revenuecat';
 
@@ -26,6 +26,14 @@ export function getForcePro(): boolean | null {
   return _forcePro;
 }
 
+/**
+ * Non-hook read of the same value useRevenueCat() returns, for code that runs
+ * outside React (e.g. writing the Pro flag into the iOS widget's App Group).
+ */
+export function getIsPro(): boolean {
+  return _forcePro !== null ? _forcePro : _state.isPro;
+}
+
 // ── Module-level singleton ──────────────────────────────────────────────────
 // All hook instances share one state so a purchase immediately propagates
 // to every screen without needing a React context or prop drilling.
@@ -47,8 +55,20 @@ function notify() {
 }
 
 function patch(update: Partial<RevenueCatState>) {
+  const wasPro = getIsPro();
   _state = { ..._state, ...update };
   notify();
+
+  // The iOS widget's theme / text size / author are picked in Apple's Edit
+  // Widget panel, which knows nothing about entitlements — the widget reads a
+  // Pro flag out of the App Group instead. Rewrite it as soon as entitlement
+  // state flips so an upgrade takes effect without the user re-editing.
+  const isPro = getIsPro();
+  if (Platform.OS === 'ios' && isPro !== wasPro) {
+    import('../lib/iosWidget')
+      .then((m) => m.setIOSWidgetPro(isPro))
+      .catch(() => {});
+  }
 }
 
 // Escape hatch: skips every RevenueCat native call at startup. Left in place
