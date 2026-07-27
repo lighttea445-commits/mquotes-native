@@ -96,22 +96,20 @@ struct QuoteWidgetIntent: WidgetConfigurationIntent {
 
 // MARK: - Shared-container reads
 
-/// Resolved appearance. Text size and author are Pro features in the app, and
-/// Apple's Edit Widget panel has no way to know about entitlements — so the
-/// gate has to live here, in the render path. Free users can pick anything; the
-/// widget renders defaults until `mq_is_pro` is true. Theme is not part of this
-/// — the widget defers to the system palette and background on iOS.
+/// Resolved appearance, taken straight from Apple's Edit Widget panel.
+///
+/// These used to be gated on `mq_is_pro`. The panel has no way to know about
+/// entitlements and cannot hide or disable an option per-user, so a free user
+/// would flip a switch and the render path would silently discard it. Both
+/// settings are layout rather than colour, so unlike themes they work in every
+/// rendering mode — the gate was the only thing stopping them.
 private struct Appearance {
   let textSize: String
   let showAuthor: Bool
-
-  static let free = Appearance(textSize: "large", showAuthor: false)
 }
 
 private func resolveAppearance(_ configuration: QuoteWidgetIntent) -> Appearance {
-  let defaults = UserDefaults(suiteName: kAppGroupId)
-  guard defaults?.bool(forKey: "mq_is_pro") == true else { return .free }
-  return Appearance(
+  Appearance(
     textSize: configuration.textSize.rawValue,
     showAuthor: configuration.showAuthor
   )
