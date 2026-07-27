@@ -5,6 +5,7 @@ import {
   StyleSheet,
   ScrollView,
   Pressable,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -42,11 +43,16 @@ const FEATURES = [
     title: 'Explore all categories',
     subtitle: 'Unlock the full library: philosophy, science, freedom & more',
   },
-  {
-    icon: 'view-grid-outline' as const,
-    title: 'Widget editor',
-    subtitle: 'Customize your home screen widget — category, refresh rate & text size',
-  },
+  // Android only. On iOS the widget's appearance is configured in Apple's Edit
+  // Widget panel, which cannot be gated per-entitlement, so those settings are
+  // free there — advertising them as Pro would be inaccurate.
+  ...(Platform.OS === 'ios'
+    ? []
+    : [{
+        icon: 'view-grid-outline' as const,
+        title: 'Widget editor',
+        subtitle: 'Customize your home screen widget — category, refresh rate & text size',
+      }]),
 ];
 
 interface Props {

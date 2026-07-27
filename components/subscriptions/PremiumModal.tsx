@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Animated,
   ScrollView,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -19,7 +20,12 @@ const BENEFITS = [
   { icon: 'palette-outline', label: 'All Themes Unlocked', desc: 'Every color theme and visual style' },
   { icon: 'shape-outline', label: 'All Topics Unlocked', desc: 'Access every quote category' },
   { icon: 'pencil-outline', label: 'Write Your Own Quotes', desc: 'Add personal quotes to your collection' },
-  { icon: 'view-grid-outline', label: 'Widget Editor', desc: 'Customize widget category, refresh rate & text size' },
+  // Android only. On iOS the widget's appearance is configured in Apple's Edit
+  // Widget panel, which cannot be gated per-entitlement, so those settings are
+  // free there — advertising them as Pro would be inaccurate.
+  ...(Platform.OS === 'ios'
+    ? []
+    : [{ icon: 'view-grid-outline', label: 'Widget Editor', desc: 'Customize widget category, refresh rate & text size' }]),
 ];
 
 interface PremiumModalProps {
