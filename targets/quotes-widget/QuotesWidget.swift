@@ -29,7 +29,6 @@ struct QuoteEntry: TimelineEntry {
   let quoteText: String
   let quoteAuthor: String
   let showAuthor: Bool
-  let widgetType: String   // "basic" | "custom" | "streak"
   let textSize: String     // "small" | "medium" | "large"
 }
 
@@ -148,13 +147,6 @@ private func loadRotateMinutes() -> Int {
   return stored > 0 ? max(15, stored) : 60
 }
 
-/// Which widget variant to draw — the one non-appearance bit the app owns.
-/// Only "basic" changes rendering now (it shows the quotation mark); the value
-/// is kept because the app still writes it and Android still uses it.
-private func loadWidgetType() -> String {
-  UserDefaults(suiteName: kAppGroupId)?.string(forKey: "mq_widget_type") ?? "basic"
-}
-
 // MARK: - Timeline provider
 
 struct QuoteProvider: AppIntentTimelineProvider {
@@ -166,7 +158,6 @@ struct QuoteProvider: AppIntentTimelineProvider {
       quoteText: "Be yourself; everyone else is already taken.",
       quoteAuthor: "Oscar Wilde",
       showAuthor: true,
-      widgetType: "basic",
       textSize: "large"
     )
   }
@@ -175,15 +166,13 @@ struct QuoteProvider: AppIntentTimelineProvider {
     if context.isPreview { return placeholder(in: context) }
     let appearance = resolveAppearance(configuration)
     let quotes = loadQuotes()
-    return entry(at: 0, date: Date(), quote: quotes.first, appearance: appearance, widgetType: loadWidgetType())
+    return entry(at: 0, date: Date(), quote: quotes.first, appearance: appearance)
   }
 
   func timeline(for configuration: QuoteWidgetIntent, in context: Context) async -> Timeline<QuoteEntry> {
     let appearance = resolveAppearance(configuration)
     let quotes = loadQuotes()
     let minutes = loadRotateMinutes()
-    // Read once, not once per entry — a full queue builds ~48 entries.
-    let widgetType = loadWidgetType()
     let now = Date()
 
     kLog.info("timeline requested: \(quotes.count, privacy: .public) quote(s), rotate every \(minutes, privacy: .public) min, text size \(appearance.textSize, privacy: .public)")
@@ -193,7 +182,7 @@ struct QuoteProvider: AppIntentTimelineProvider {
       // than rendering an empty card.
       let retry = now.addingTimeInterval(15 * 60)
       return Timeline(
-        entries: [entry(at: 0, date: now, quote: nil, appearance: appearance, widgetType: widgetType)],
+        entries: [entry(at: 0, date: now, quote: nil, appearance: appearance)],
         policy: .after(retry)
       )
     }
@@ -203,8 +192,7 @@ struct QuoteProvider: AppIntentTimelineProvider {
         at: offset,
         date: now.addingTimeInterval(TimeInterval(offset * minutes * 60)),
         quote: quote,
-        appearance: appearance,
-        widgetType: widgetType
+        appearance: appearance
       )
     }
 
@@ -215,8 +203,7 @@ struct QuoteProvider: AppIntentTimelineProvider {
     at index: Int,
     date: Date,
     quote: StoredQuote?,
-    appearance: Appearance,
-    widgetType: String
+    appearance: Appearance
   ) -> QuoteEntry {
     QuoteEntry(
       date: date,
@@ -224,7 +211,6 @@ struct QuoteProvider: AppIntentTimelineProvider {
       quoteText: quote?.text ?? kFallbackText,
       quoteAuthor: quote?.author ?? "",
       showAuthor: appearance.showAuthor,
-      widgetType: widgetType,
       textSize: appearance.textSize
     )
   }
@@ -300,22 +286,6 @@ struct QuoteWidgetView: View {
     // .containerBackground() alone. Drawing it as content as well made the
     // widget render as a solid pale card in accented mode (see isFullColor).
     VStack(alignment: .center, spacing: 0) {
-      // Quotation mark (basic widget only)
-      if entry.widgetType == "basic" && family != .systemSmall {
-        Text("\u{201C}")
-          .font(.custom("Georgia", size: 26))
-          .foregroundColor(isFullColor ? Color.primary : nil)
-          // Alpha, not a faded colour: accented mode discards foreground
-          // colours but honours the alpha channel to modulate tint strength,
-          // so this is the only way the mark stays subtle when tinted.
-          .opacity(0.25)
-          // Keep its ideal height; an unbounded quote below would otherwise
-          // compress it, since that text now claims space first.
-          .fixedSize(horizontal: false, vertical: true)
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .padding(.bottom, -8)
-      }
-
       Spacer(minLength: 0)
 
       Text(entry.quoteText)
@@ -461,34 +431,34 @@ struct QuotesWidget: Widget {
 
 // MARK: - Preview
 
-#Preview("Small – Basic", as: .systemSmall) {
+#Preview("Small – No author", as: .systemSmall) {
   QuotesWidget()
 } timeline: {
-  QuoteEntry(date: .now, index: 0, quoteText: "No one can make you feel inferior without your consent.", quoteAuthor: "Eleanor Roosevelt", showAuthor: false, widgetType: "basic", textSize: "medium")
+  QuoteEntry(date: .now, index: 0, quoteText: "No one can make you feel inferior without your consent.", quoteAuthor: "Eleanor Roosevelt", showAuthor: false, textSize: "medium")
 }
 
-#Preview("Medium – No quote mark", as: .systemMedium) {
+#Preview("Medium – With author", as: .systemMedium) {
   QuotesWidget()
 } timeline: {
-  QuoteEntry(date: .now, index: 0, quoteText: "Live in the moment but prepare for your future.", quoteAuthor: "Unknown", showAuthor: true, widgetType: "streak", textSize: "medium")
+  QuoteEntry(date: .now, index: 0, quoteText: "Live in the moment but prepare for your future.", quoteAuthor: "Unknown", showAuthor: true, textSize: "medium")
 }
 
-#Preview("Large – Custom", as: .systemLarge) {
+#Preview("Large – Large text", as: .systemLarge) {
   QuotesWidget()
 } timeline: {
-  QuoteEntry(date: .now, index: 0, quoteText: "The secret of getting ahead is getting started.", quoteAuthor: "Mark Twain", showAuthor: true, widgetType: "custom", textSize: "large")
+  QuoteEntry(date: .now, index: 0, quoteText: "The secret of getting ahead is getting started.", quoteAuthor: "Mark Twain", showAuthor: true, textSize: "large")
 }
 
 #Preview("Lock Screen – Rectangular", as: .accessoryRectangular) {
   QuotesWidget()
 } timeline: {
-  QuoteEntry(date: .now, index: 0, quoteText: "The secret of getting ahead is getting started.", quoteAuthor: "Mark Twain", showAuthor: true, widgetType: "basic", textSize: "medium")
-  QuoteEntry(date: .now, index: 1, quoteText: "Live in the moment but prepare for your future.", quoteAuthor: "Unknown", showAuthor: true, widgetType: "streak", textSize: "medium")
+  QuoteEntry(date: .now, index: 0, quoteText: "The secret of getting ahead is getting started.", quoteAuthor: "Mark Twain", showAuthor: true, textSize: "medium")
+  QuoteEntry(date: .now, index: 1, quoteText: "Live in the moment but prepare for your future.", quoteAuthor: "Unknown", showAuthor: true, textSize: "medium")
 }
 
 #Preview("Lock Screen – Inline", as: .accessoryInline) {
   QuotesWidget()
 } timeline: {
-  QuoteEntry(date: .now, index: 0, quoteText: "The secret of getting ahead is getting started.", quoteAuthor: "Mark Twain", showAuthor: true, widgetType: "basic", textSize: "medium")
-  QuoteEntry(date: .now, index: 1, quoteText: "Live in the moment but prepare for your future.", quoteAuthor: "Unknown", showAuthor: true, widgetType: "streak", textSize: "medium")
+  QuoteEntry(date: .now, index: 0, quoteText: "The secret of getting ahead is getting started.", quoteAuthor: "Mark Twain", showAuthor: true, textSize: "medium")
+  QuoteEntry(date: .now, index: 1, quoteText: "Live in the moment but prepare for your future.", quoteAuthor: "Unknown", showAuthor: true, textSize: "medium")
 }
