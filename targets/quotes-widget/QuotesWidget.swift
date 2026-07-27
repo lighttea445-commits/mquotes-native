@@ -67,7 +67,7 @@ private struct StoredQuote: Decodable {
 // colours entirely in accented rendering (a Tinted or Clear Home Screen), so a
 // theme picked here would silently do nothing for those users — and the Edit
 // Widget panel cannot be gated on a Pro entitlement to warn them. The widget
-// renders one fixed palette instead; see kWidgetColors.
+// uses the system's own colours and material instead.
 
 enum WidgetTextSizeOption: String, AppEnum {
   case small, medium, large
@@ -102,7 +102,7 @@ struct QuoteWidgetIntent: WidgetConfigurationIntent {
 /// Apple's Edit Widget panel has no way to know about entitlements — so the
 /// gate has to live here, in the render path. Free users can pick anything; the
 /// widget renders defaults until `mq_is_pro` is true. Theme is not part of this
-/// — the widget has one fixed palette on iOS.
+/// — the widget defers to the system palette and background on iOS.
 private struct Appearance {
   let textSize: String
   let showAuthor: Bool
@@ -251,32 +251,12 @@ private func tapURL(for entry: QuoteEntry) -> URL? {
   URL(string: "quotable://widget-open?src=ios&i=\(entry.index)")
 }
 
-// MARK: - Widget colours
-
-private struct ThemeColors {
-  let background: Color
-  let text: Color
-  let textMuted: Color
-  let gold: Color
-}
-
-/// The widget's single palette. Themes are not offered on iOS — see the note
-/// above WidgetTextSizeOption. Values mirror the app's `minimal` theme.
-private let kWidgetColors = ThemeColors(
-  background: Color(hex: "#0D0D0D"),
-  text:       Color(hex: "#E8E0D0"),
-  textMuted:  Color(hex: "#6B6560"),
-  gold:       Color(hex: "#B8975A")
-)
-
 // MARK: - Widget view
 
 struct QuoteWidgetView: View {
   let entry: QuoteEntry
   @Environment(\.widgetFamily) var family
   @Environment(\.widgetRenderingMode) var renderingMode
-
-  private var colors: ThemeColors { kWidgetColors }
 
   /// True only when the system draws the widget in full colour.
   ///
@@ -339,7 +319,7 @@ struct QuoteWidgetView: View {
         if entry.widgetType == "basic" && family != .systemSmall {
           Text("\u{201C}")
             .font(.custom("Georgia", size: 26))
-            .foregroundColor(isFullColor ? colors.text : nil)
+            .foregroundColor(isFullColor ? Color.primary : nil)
             // Alpha, not a faded colour: accented mode discards foreground
             // colours but honours the alpha channel to modulate tint strength,
             // so this is the only way the mark stays subtle when tinted.
@@ -352,7 +332,7 @@ struct QuoteWidgetView: View {
 
         Text(entry.quoteText)
           .font(.custom("Georgia", size: quoteFontSize))
-          .foregroundColor(isFullColor ? colors.text : nil)
+          .foregroundColor(isFullColor ? Color.primary : nil)
           .multilineTextAlignment(.center)
           .lineLimit(quoteLineLimit)
           .minimumScaleFactor(0.75)
@@ -365,10 +345,10 @@ struct QuoteWidgetView: View {
           Spacer(minLength: 4)
           Text("- \(entry.quoteAuthor)")
             .font(.system(size: 11, weight: .regular))
-            .foregroundColor(isFullColor ? colors.textMuted : nil)
-            // textMuted already carries the de-emphasis in full colour; when
-            // tinted the colour is dropped, so fall back to alpha to keep the
-            // author from competing with the quote. Matches the accessory
+            .foregroundColor(isFullColor ? Color.secondary : nil)
+            // Color.secondary already carries the de-emphasis in full colour;
+            // when tinted the colour is dropped, so fall back to alpha to keep
+            // the author from competing with the quote. Matches the accessory
             // rectangular view, which already does this.
             .opacity(isFullColor ? 1 : 0.7)
             .lineLimit(1)
@@ -397,7 +377,7 @@ struct QuoteWidgetView: View {
           Text("\(entry.streakCount)")
             .font(.custom("Georgia", size: family == .systemSmall ? 14 : 18))
             .bold()
-            .foregroundColor(isFullColor ? colors.text : nil)
+            .foregroundColor(isFullColor ? Color.primary : nil)
         }
         .padding(.horizontal, 14)
         .padding(.bottom, 12)
@@ -408,16 +388,18 @@ struct QuoteWidgetView: View {
     // against the text.
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .widgetURL(tapURL(for: entry))
-    .containerBackground(for: .widget) {
-      colors.background
-    }
+    // Clear, so the system's own widget material shows through — iOS 26 draws a
+    // Liquid Glass container behind every home screen widget, and an opaque fill
+    // here simply paints over it. Matches the accessory views, which have always
+    // deferred to the system background.
+    .containerBackground(.clear, for: .widget)
   }
 }
 
 // MARK: - Lock screen (accessory) views
 //
 // Accessory families render on the system's own translucent/monochrome
-// background, so no colors.background fills, gradients, or theme colors
+// background, so no background fills, gradients, or theme colors
 // are used here — the system applies its own tint via .widgetAccentable().
 
 private struct AccessoryRectangularView: View {
