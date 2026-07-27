@@ -30,7 +30,6 @@ struct QuoteEntry: TimelineEntry {
   let quoteAuthor: String
   let showAuthor: Bool
   let widgetType: String   // "basic" | "custom" | "streak"
-  let streakCount: Int
   let textSize: String     // "small" | "medium" | "large"
 }
 
@@ -149,19 +148,11 @@ private func loadRotateMinutes() -> Int {
   return stored > 0 ? max(15, stored) : 60
 }
 
-/// Non-appearance bits the app owns: which widget variant to draw and the
-/// streak count it shows.
-private struct Badge {
-  let widgetType: String
-  let streakCount: Int
-}
-
-private func loadBadge() -> Badge {
-  let defaults = UserDefaults(suiteName: kAppGroupId)
-  return Badge(
-    widgetType: defaults?.string(forKey: "mq_widget_type") ?? "basic",
-    streakCount: defaults?.integer(forKey: "mq_streak_count") ?? 0
-  )
+/// Which widget variant to draw — the one non-appearance bit the app owns.
+/// Only "basic" changes rendering now (it shows the quotation mark); the value
+/// is kept because the app still writes it and Android still uses it.
+private func loadWidgetType() -> String {
+  UserDefaults(suiteName: kAppGroupId)?.string(forKey: "mq_widget_type") ?? "basic"
 }
 
 // MARK: - Timeline provider
@@ -176,7 +167,6 @@ struct QuoteProvider: AppIntentTimelineProvider {
       quoteAuthor: "Oscar Wilde",
       showAuthor: true,
       widgetType: "basic",
-      streakCount: 7,
       textSize: "large"
     )
   }
@@ -185,7 +175,7 @@ struct QuoteProvider: AppIntentTimelineProvider {
     if context.isPreview { return placeholder(in: context) }
     let appearance = resolveAppearance(configuration)
     let quotes = loadQuotes()
-    return entry(at: 0, date: Date(), quote: quotes.first, appearance: appearance, badge: loadBadge())
+    return entry(at: 0, date: Date(), quote: quotes.first, appearance: appearance, widgetType: loadWidgetType())
   }
 
   func timeline(for configuration: QuoteWidgetIntent, in context: Context) async -> Timeline<QuoteEntry> {
@@ -193,7 +183,7 @@ struct QuoteProvider: AppIntentTimelineProvider {
     let quotes = loadQuotes()
     let minutes = loadRotateMinutes()
     // Read once, not once per entry — a full queue builds ~48 entries.
-    let badge = loadBadge()
+    let widgetType = loadWidgetType()
     let now = Date()
 
     kLog.info("timeline requested: \(quotes.count, privacy: .public) quote(s), rotate every \(minutes, privacy: .public) min, text size \(appearance.textSize, privacy: .public)")
@@ -203,7 +193,7 @@ struct QuoteProvider: AppIntentTimelineProvider {
       // than rendering an empty card.
       let retry = now.addingTimeInterval(15 * 60)
       return Timeline(
-        entries: [entry(at: 0, date: now, quote: nil, appearance: appearance, badge: badge)],
+        entries: [entry(at: 0, date: now, quote: nil, appearance: appearance, widgetType: widgetType)],
         policy: .after(retry)
       )
     }
@@ -214,7 +204,7 @@ struct QuoteProvider: AppIntentTimelineProvider {
         date: now.addingTimeInterval(TimeInterval(offset * minutes * 60)),
         quote: quote,
         appearance: appearance,
-        badge: badge
+        widgetType: widgetType
       )
     }
 
@@ -226,7 +216,7 @@ struct QuoteProvider: AppIntentTimelineProvider {
     date: Date,
     quote: StoredQuote?,
     appearance: Appearance,
-    badge: Badge
+    widgetType: String
   ) -> QuoteEntry {
     QuoteEntry(
       date: date,
@@ -234,8 +224,7 @@ struct QuoteProvider: AppIntentTimelineProvider {
       quoteText: quote?.text ?? kFallbackText,
       quoteAuthor: quote?.author ?? "",
       showAuthor: appearance.showAuthor,
-      widgetType: badge.widgetType,
-      streakCount: badge.streakCount,
+      widgetType: widgetType,
       textSize: appearance.textSize
     )
   }
@@ -310,96 +299,64 @@ struct QuoteWidgetView: View {
     // No background fill here on purpose — the background belongs to
     // .containerBackground() alone. Drawing it as content as well made the
     // widget render as a solid pale card in accented mode (see isFullColor).
-    ZStack(alignment: .bottomLeading) {
-      VStack(alignment: .center, spacing: 0) {
-        // Quotation mark (basic widget only)
-        if entry.widgetType == "basic" && family != .systemSmall {
-          Text("\u{201C}")
-            .font(.custom("Georgia", size: 26))
-            .foregroundColor(isFullColor ? Color.primary : nil)
-            // Alpha, not a faded colour: accented mode discards foreground
-            // colours but honours the alpha channel to modulate tint strength,
-            // so this is the only way the mark stays subtle when tinted.
-            .opacity(0.25)
-            // Keep its ideal height; an unbounded quote below would otherwise
-            // compress it, since that text now claims space first.
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.bottom, -8)
-        }
-
-        Spacer(minLength: 0)
-
-        Text(entry.quoteText)
-          .font(.custom("Georgia", size: quoteFontSize))
+    VStack(alignment: .center, spacing: 0) {
+      // Quotation mark (basic widget only)
+      if entry.widgetType == "basic" && family != .systemSmall {
+        Text("\u{201C}")
+          .font(.custom("Georgia", size: 26))
           .foregroundColor(isFullColor ? Color.primary : nil)
-          .multilineTextAlignment(.center)
-          // No line limit — the quote must be shown in full, so it wraps freely
-          // and shrinks to fit rather than truncating with an ellipsis.
-          .lineLimit(nil)
-          .minimumScaleFactor(minQuoteScale)
-          // Claim space before the surrounding Spacers do. Without this the
-          // Spacers can compress the text box and force scaling far earlier
-          // than necessary, or clip it outright.
-          .layoutPriority(1)
-          // In accented mode this puts the quote in the accent group, which the
-          // system draws at full strength; ungrouped content is dimmed.
-          .widgetAccentable()
-
-        if entry.showAuthor && !entry.quoteAuthor.isEmpty {
-          Spacer(minLength: 4)
-          Text("- \(entry.quoteAuthor)")
-            .font(.system(size: 11, weight: .regular))
-            .foregroundColor(isFullColor ? Color.secondary : nil)
-            // Color.secondary already carries the de-emphasis in full colour;
-            // when tinted the colour is dropped, so fall back to alpha to keep
-            // the author from competing with the quote. Matches the accessory
-            // rectangular view, which already does this.
-            .opacity(isFullColor ? 1 : 0.7)
-            .lineLimit(1)
-            // The quote has layoutPriority(1) and is now unbounded, so without
-            // this the author — a Pro feature — gets compressed to nothing on a
-            // long quote. One line is cheap; the quote scales into what's left.
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: .infinity, alignment: .trailing)
-        }
-
-        Spacer(minLength: 0)
+          // Alpha, not a faded colour: accented mode discards foreground
+          // colours but honours the alpha channel to modulate tint strength,
+          // so this is the only way the mark stays subtle when tinted.
+          .opacity(0.25)
+          // Keep its ideal height; an unbounded quote below would otherwise
+          // compress it, since that text now claims space first.
+          .fixedSize(horizontal: false, vertical: true)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .padding(.bottom, -8)
       }
-      .padding(family == .systemSmall ? 12 : 16)
-      // The streak badge below is a ZStack overlay pinned to the bottom. Now
-      // that the quote is unbounded it will fill the whole card, so reserve
-      // room for the badge or it draws on top of the last line. The old 3-4
-      // line cap was what kept them apart.
-      .padding(.bottom, entry.widgetType == "streak" ? (family == .systemSmall ? 22 : 26) : 0)
 
-      // Streak badge (streak widget only)
-      if entry.widgetType == "streak" {
-        HStack(spacing: 5) {
-          // The gradient is meaningless once the system recolours the view, so
-          // it is only applied in full colour.
-          Image(systemName: "flame.fill")
-            .font(.system(size: family == .systemSmall ? 13 : 16))
-            .foregroundStyle(
-              isFullColor
-                ? AnyShapeStyle(LinearGradient(
-                    colors: [Color(hex: "#a855f7"), Color(hex: "#ec4899")],
-                    startPoint: .top, endPoint: .bottom
-                  ))
-                : AnyShapeStyle(.foreground)
-            )
-          Text("\(entry.streakCount)")
-            .font(.custom("Georgia", size: family == .systemSmall ? 14 : 18))
-            .bold()
-            .foregroundColor(isFullColor ? Color.primary : nil)
-        }
-        .padding(.horizontal, 14)
-        .padding(.bottom, 12)
+      Spacer(minLength: 0)
+
+      Text(entry.quoteText)
+        .font(.custom("Georgia", size: quoteFontSize))
+        .foregroundColor(isFullColor ? Color.primary : nil)
+        .multilineTextAlignment(.center)
+        // No line limit — the quote must be shown in full, so it wraps freely
+        // and shrinks to fit rather than truncating with an ellipsis.
+        .lineLimit(nil)
+        .minimumScaleFactor(minQuoteScale)
+        // Claim space before the surrounding Spacers do. Without this the
+        // Spacers can compress the text box and force scaling far earlier
+        // than necessary, or clip it outright.
+        .layoutPriority(1)
+        // In accented mode this puts the quote in the accent group, which the
+        // system draws at full strength; ungrouped content is dimmed.
+        .widgetAccentable()
+
+      if entry.showAuthor && !entry.quoteAuthor.isEmpty {
+        Spacer(minLength: 4)
+        Text("- \(entry.quoteAuthor)")
+          .font(.system(size: 11, weight: .regular))
+          .foregroundColor(isFullColor ? Color.secondary : nil)
+          // Color.secondary already carries the de-emphasis in full colour;
+          // when tinted the colour is dropped, so fall back to alpha to keep
+          // the author from competing with the quote. Matches the accessory
+          // rectangular view, which already does this.
+          .opacity(isFullColor ? 1 : 0.7)
+          .lineLimit(1)
+          // The quote has layoutPriority(1) and is now unbounded, so without
+          // this the author — a Pro feature — gets compressed to nothing on a
+          // long quote. One line is cheap; the quote scales into what's left.
+          .fixedSize(horizontal: false, vertical: true)
+          .frame(maxWidth: .infinity, alignment: .trailing)
       }
+
+      Spacer(minLength: 0)
     }
-    // The removed background fill was also what stretched the ZStack to the
-    // full container; without it the bottom-leading streak badge would ride up
-    // against the text.
+    .padding(family == .systemSmall ? 12 : 16)
+    // Stretch to the full container, so the quote centres on the card rather
+    // than collapsing to its own height.
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .widgetURL(tapURL(for: entry))
     // Clear, so the system's own widget material shows through — iOS 26 draws a
@@ -502,48 +459,36 @@ struct QuotesWidget: Widget {
 
 // MARK: - Helpers
 
-extension Color {
-  init(hex: String) {
-    let h = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
-    var n: UInt64 = 0
-    Scanner(string: h).scanHexInt64(&n)
-    let r = Double((n >> 16) & 0xFF) / 255
-    let g = Double((n >> 8)  & 0xFF) / 255
-    let b = Double(n         & 0xFF) / 255
-    self.init(red: r, green: g, blue: b)
-  }
-}
-
 // MARK: - Preview
 
 #Preview("Small – Basic", as: .systemSmall) {
   QuotesWidget()
 } timeline: {
-  QuoteEntry(date: .now, index: 0, quoteText: "No one can make you feel inferior without your consent.", quoteAuthor: "Eleanor Roosevelt", showAuthor: false, widgetType: "basic", streakCount: 0, textSize: "medium")
+  QuoteEntry(date: .now, index: 0, quoteText: "No one can make you feel inferior without your consent.", quoteAuthor: "Eleanor Roosevelt", showAuthor: false, widgetType: "basic", textSize: "medium")
 }
 
-#Preview("Medium – Streak", as: .systemMedium) {
+#Preview("Medium – No quote mark", as: .systemMedium) {
   QuotesWidget()
 } timeline: {
-  QuoteEntry(date: .now, index: 0, quoteText: "Live in the moment but prepare for your future.", quoteAuthor: "Unknown", showAuthor: true, widgetType: "streak", streakCount: 12, textSize: "medium")
+  QuoteEntry(date: .now, index: 0, quoteText: "Live in the moment but prepare for your future.", quoteAuthor: "Unknown", showAuthor: true, widgetType: "streak", textSize: "medium")
 }
 
 #Preview("Large – Custom", as: .systemLarge) {
   QuotesWidget()
 } timeline: {
-  QuoteEntry(date: .now, index: 0, quoteText: "The secret of getting ahead is getting started.", quoteAuthor: "Mark Twain", showAuthor: true, widgetType: "custom", streakCount: 0, textSize: "large")
+  QuoteEntry(date: .now, index: 0, quoteText: "The secret of getting ahead is getting started.", quoteAuthor: "Mark Twain", showAuthor: true, widgetType: "custom", textSize: "large")
 }
 
 #Preview("Lock Screen – Rectangular", as: .accessoryRectangular) {
   QuotesWidget()
 } timeline: {
-  QuoteEntry(date: .now, index: 0, quoteText: "The secret of getting ahead is getting started.", quoteAuthor: "Mark Twain", showAuthor: true, widgetType: "basic", streakCount: 0, textSize: "medium")
-  QuoteEntry(date: .now, index: 1, quoteText: "Live in the moment but prepare for your future.", quoteAuthor: "Unknown", showAuthor: true, widgetType: "streak", streakCount: 12, textSize: "medium")
+  QuoteEntry(date: .now, index: 0, quoteText: "The secret of getting ahead is getting started.", quoteAuthor: "Mark Twain", showAuthor: true, widgetType: "basic", textSize: "medium")
+  QuoteEntry(date: .now, index: 1, quoteText: "Live in the moment but prepare for your future.", quoteAuthor: "Unknown", showAuthor: true, widgetType: "streak", textSize: "medium")
 }
 
 #Preview("Lock Screen – Inline", as: .accessoryInline) {
   QuotesWidget()
 } timeline: {
-  QuoteEntry(date: .now, index: 0, quoteText: "The secret of getting ahead is getting started.", quoteAuthor: "Mark Twain", showAuthor: true, widgetType: "basic", streakCount: 0, textSize: "medium")
-  QuoteEntry(date: .now, index: 1, quoteText: "Live in the moment but prepare for your future.", quoteAuthor: "Unknown", showAuthor: true, widgetType: "streak", streakCount: 12, textSize: "medium")
+  QuoteEntry(date: .now, index: 0, quoteText: "The secret of getting ahead is getting started.", quoteAuthor: "Mark Twain", showAuthor: true, widgetType: "basic", textSize: "medium")
+  QuoteEntry(date: .now, index: 1, quoteText: "Live in the moment but prepare for your future.", quoteAuthor: "Unknown", showAuthor: true, widgetType: "streak", textSize: "medium")
 }
