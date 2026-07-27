@@ -364,8 +364,6 @@ struct QuoteWidgetView: View {
 
   var body: some View {
     switch family {
-    case .accessoryCircular:
-      AccessoryCircularView(entry: entry)
     case .accessoryRectangular:
       AccessoryRectangularView(entry: entry)
     case .accessoryInline:
@@ -467,33 +465,6 @@ struct QuoteWidgetView: View {
 // background, so no colors.background fills, gradients, or theme colors
 // are used here — the system applies its own tint via .widgetAccentable().
 
-private struct AccessoryCircularView: View {
-  let entry: QuoteEntry
-
-  private var fontSize: CGFloat {
-    switch entry.textSize {
-    case "small": return 8
-    case "large": return 10
-    default:      return 9
-    }
-  }
-
-  var body: some View {
-    ZStack {
-      AccessoryWidgetBackground()
-      Text(entry.quoteText)
-        .font(.system(size: fontSize))
-        .lineLimit(4)
-        .multilineTextAlignment(.center)
-        .minimumScaleFactor(0.6)
-        .padding(5)
-    }
-    .widgetAccentable()
-    .widgetURL(tapURL(for: entry))
-    .containerBackground(.clear, for: .widget)
-  }
-}
-
 private struct AccessoryRectangularView: View {
   let entry: QuoteEntry
 
@@ -559,7 +530,11 @@ struct QuotesWidget: Widget {
     .description("Display an inspiring quote on your home screen or lock screen.")
     .supportedFamilies([
       .systemSmall, .systemMedium, .systemLarge,
-      .accessoryCircular, .accessoryRectangular, .accessoryInline,
+      // .accessoryCircular is deliberately absent. The area below the clock
+      // accepts both circular and rectangular widgets, so declaring both makes
+      // iOS list Quotable twice in that picker. Rectangular is the one that can
+      // actually hold a quote.
+      .accessoryRectangular, .accessoryInline,
     ])
   }
 }
@@ -596,13 +571,6 @@ extension Color {
   QuotesWidget()
 } timeline: {
   QuoteEntry(date: .now, index: 0, quoteText: "The secret of getting ahead is getting started.", quoteAuthor: "Mark Twain", showAuthor: true, widgetType: "custom", streakCount: 0, themeName: "ember", textSize: "large")
-}
-
-#Preview("Lock Screen – Circular", as: .accessoryCircular) {
-  QuotesWidget()
-} timeline: {
-  QuoteEntry(date: .now, index: 0, quoteText: "No one can make you feel inferior without your consent.", quoteAuthor: "Eleanor Roosevelt", showAuthor: false, widgetType: "basic", streakCount: 0, themeName: "minimal", textSize: "medium")
-  QuoteEntry(date: .now, index: 1, quoteText: "Live in the moment but prepare for your future.", quoteAuthor: "Unknown", showAuthor: true, widgetType: "streak", streakCount: 12, themeName: "minimal", textSize: "medium")
 }
 
 #Preview("Lock Screen – Rectangular", as: .accessoryRectangular) {
