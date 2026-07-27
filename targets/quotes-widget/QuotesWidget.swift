@@ -31,7 +31,6 @@ struct QuoteEntry: TimelineEntry {
   let showAuthor: Bool
   let widgetType: String   // "basic" | "custom" | "streak"
   let streakCount: Int
-  let themeName: String
   let textSize: String     // "small" | "medium" | "large"
 }
 
@@ -64,34 +63,11 @@ private struct StoredQuote: Decodable {
 // so it cannot drive per-instance appearance itself. The app still owns the
 // quote *data* (source and cadence) via the App Group.
 
-enum WidgetThemeOption: String, AppEnum {
-  case minimal, galaxy, orbit, tempest, seashore, apex, ember, daybreak
-  case crescent, shore, dusk, blush, woodland, botanical, lunar, alpine, obsidian
-  case roseSky = "rose-sky"
-
-  static var typeDisplayRepresentation: TypeDisplayRepresentation { "Theme" }
-
-  static var caseDisplayRepresentations: [WidgetThemeOption: DisplayRepresentation] {[
-    .minimal:   "Minimal",
-    .galaxy:    "Galaxy",
-    .orbit:     "Orbit",
-    .tempest:   "Tempest",
-    .seashore:  "Seashore",
-    .apex:      "Apex",
-    .ember:     "Ember",
-    .daybreak:  "Daybreak",
-    .crescent:  "Crescent",
-    .shore:     "Shore",
-    .roseSky:   "Rose Sky",
-    .dusk:      "Dusk",
-    .blush:     "Blush",
-    .woodland:  "Woodland",
-    .botanical: "Botanical",
-    .lunar:     "Lunar",
-    .alpine:    "Alpine",
-    .obsidian:  "Obsidian",
-  ]}
-}
+// Themes are deliberately not offered on iOS. The system discards widget
+// colours entirely in accented rendering (a Tinted or Clear Home Screen), so a
+// theme picked here would silently do nothing for those users — and the Edit
+// Widget panel cannot be gated on a Pro entitlement to warn them. The widget
+// renders one fixed palette instead; see kWidgetColors.
 
 enum WidgetTextSizeOption: String, AppEnum {
   case small, medium, large
@@ -111,9 +87,6 @@ struct QuoteWidgetIntent: WidgetConfigurationIntent {
     IntentDescription("Choose how the quote on your home screen looks.")
   }
 
-  @Parameter(title: "Theme", default: .minimal)
-  var theme: WidgetThemeOption
-
   @Parameter(title: "Text Size", default: .large)
   var textSize: WidgetTextSizeOption
 
@@ -125,23 +98,22 @@ struct QuoteWidgetIntent: WidgetConfigurationIntent {
 
 // MARK: - Shared-container reads
 
-/// Resolved appearance. Theme, text size and author are Pro features in the
-/// app, and Apple's Edit Widget panel has no way to know about entitlements —
-/// so the gate has to live here, in the render path. Free users can pick
-/// anything; the widget renders defaults until `mq_is_pro` is true.
+/// Resolved appearance. Text size and author are Pro features in the app, and
+/// Apple's Edit Widget panel has no way to know about entitlements — so the
+/// gate has to live here, in the render path. Free users can pick anything; the
+/// widget renders defaults until `mq_is_pro` is true. Theme is not part of this
+/// — the widget has one fixed palette on iOS.
 private struct Appearance {
-  let themeName: String
   let textSize: String
   let showAuthor: Bool
 
-  static let free = Appearance(themeName: "minimal", textSize: "large", showAuthor: false)
+  static let free = Appearance(textSize: "large", showAuthor: false)
 }
 
 private func resolveAppearance(_ configuration: QuoteWidgetIntent) -> Appearance {
   let defaults = UserDefaults(suiteName: kAppGroupId)
   guard defaults?.bool(forKey: "mq_is_pro") == true else { return .free }
   return Appearance(
-    themeName: configuration.theme.rawValue,
     textSize: configuration.textSize.rawValue,
     showAuthor: configuration.showAuthor
   )
@@ -205,7 +177,6 @@ struct QuoteProvider: AppIntentTimelineProvider {
       showAuthor: true,
       widgetType: "basic",
       streakCount: 7,
-      themeName: "minimal",
       textSize: "large"
     )
   }
@@ -225,7 +196,7 @@ struct QuoteProvider: AppIntentTimelineProvider {
     let badge = loadBadge()
     let now = Date()
 
-    kLog.info("timeline requested: \(quotes.count, privacy: .public) quote(s), rotate every \(minutes, privacy: .public) min, theme \(appearance.themeName, privacy: .public)")
+    kLog.info("timeline requested: \(quotes.count, privacy: .public) quote(s), rotate every \(minutes, privacy: .public) min, text size \(appearance.textSize, privacy: .public)")
 
     guard !quotes.isEmpty else {
       // Nothing in the App Group yet — show the fallback and retry soon rather
@@ -265,7 +236,6 @@ struct QuoteProvider: AppIntentTimelineProvider {
       showAuthor: appearance.showAuthor,
       widgetType: badge.widgetType,
       streakCount: badge.streakCount,
-      themeName: appearance.themeName,
       textSize: appearance.textSize
     )
   }
@@ -281,7 +251,7 @@ private func tapURL(for entry: QuoteEntry) -> URL? {
   URL(string: "quotable://widget-open?src=ios&i=\(entry.index)")
 }
 
-// MARK: - Theme colours (mirrors constants/themes.ts subset)
+// MARK: - Widget colours
 
 private struct ThemeColors {
   let background: Color
@@ -290,29 +260,14 @@ private struct ThemeColors {
   let gold: Color
 }
 
-private func resolveTheme(_ name: String) -> ThemeColors {
-  switch name {
-  case "minimal":     return .init(background: Color(hex:"#0D0D0D"), text: Color(hex:"#E8E0D0"), textMuted: Color(hex:"#6B6560"), gold: Color(hex:"#B8975A"))
-  case "galaxy":      return .init(background: Color(hex:"#030408"), text: Color(hex:"#d8d0f8"), textMuted: Color(hex:"#6050b8"), gold: Color(hex:"#c09050"))
-  case "orbit":       return .init(background: Color(hex:"#010306"), text: Color(hex:"#b8d8f8"), textMuted: Color(hex:"#2068c8"), gold: Color(hex:"#40b8ff"))
-  case "tempest":     return .init(background: Color(hex:"#05080f"), text: Color(hex:"#d0d8f0"), textMuted: Color(hex:"#3858a8"), gold: Color(hex:"#6898f8"))
-  case "seashore":    return .init(background: Color(hex:"#0e0804"), text: Color(hex:"#fce8c8"), textMuted: Color(hex:"#b89060"), gold: Color(hex:"#c89038"))
-  case "apex":        return .init(background: Color(hex:"#060606"), text: Color(hex:"#f0f0f0"), textMuted: Color(hex:"#787878"), gold: Color(hex:"#d8d8d8"))
-  case "ember":       return .init(background: Color(hex:"#120400"), text: Color(hex:"#ffe8d0"), textMuted: Color(hex:"#ff9060"), gold: Color(hex:"#ff9040"))
-  case "daybreak":    return .init(background: Color(hex:"#160804"), text: Color(hex:"#fde4cc"), textMuted: Color(hex:"#c87848"), gold: Color(hex:"#e89050"))
-  case "crescent":    return .init(background: Color(hex:"#060c10"), text: Color(hex:"#d0e8f0"), textMuted: Color(hex:"#408898"), gold: Color(hex:"#70c8d8"))
-  case "shore":       return .init(background: Color(hex:"#0c1520"), text: Color(hex:"#e8f4f8"), textMuted: Color(hex:"#80a8c0"), gold: Color(hex:"#B8975A"))
-  case "rose-sky":    return .init(background: Color(hex:"#140810"), text: Color(hex:"#fce4ec"), textMuted: Color(hex:"#d080a8"), gold: Color(hex:"#e8a0c0"))
-  case "dusk":        return .init(background: Color(hex:"#0e0818"), text: Color(hex:"#f0d8ff"), textMuted: Color(hex:"#a870d0"), gold: Color(hex:"#c090e0"))
-  case "blush":       return .init(background: Color(hex:"#180c16"), text: Color(hex:"#fce0ee"), textMuted: Color(hex:"#c878a8"), gold: Color(hex:"#f0a8d0"))
-  case "woodland":    return .init(background: Color(hex:"#060d08"), text: Color(hex:"#cce8c0"), textMuted: Color(hex:"#427838"), gold: Color(hex:"#68c058"))
-  case "botanical":   return .init(background: Color(hex:"#050c06"), text: Color(hex:"#d0f0d4"), textMuted: Color(hex:"#389048"), gold: Color(hex:"#50e068"))
-  case "lunar":       return .init(background: Color(hex:"#080910"), text: Color(hex:"#e4e8ec"), textMuted: Color(hex:"#606878"), gold: Color(hex:"#b0c0d4"))
-  case "alpine":      return .init(background: Color(hex:"#07101a"), text: Color(hex:"#d8e8f4"), textMuted: Color(hex:"#5080b0"), gold: Color(hex:"#78b0e0"))
-  case "obsidian":    return .init(background: Color(hex:"#070707"), text: Color(hex:"#e0e0e0"), textMuted: Color(hex:"#606060"), gold: Color(hex:"#b0b0b0"))
-  default:            return .init(background: Color(hex:"#0D0D0D"), text: Color(hex:"#E8E0D0"), textMuted: Color(hex:"#6B6560"), gold: Color(hex:"#B8975A"))
-  }
-}
+/// The widget's single palette. Themes are not offered on iOS — see the note
+/// above WidgetTextSizeOption. Values mirror the app's `minimal` theme.
+private let kWidgetColors = ThemeColors(
+  background: Color(hex: "#0D0D0D"),
+  text:       Color(hex: "#E8E0D0"),
+  textMuted:  Color(hex: "#6B6560"),
+  gold:       Color(hex: "#B8975A")
+)
 
 // MARK: - Widget view
 
@@ -321,7 +276,7 @@ struct QuoteWidgetView: View {
   @Environment(\.widgetFamily) var family
   @Environment(\.widgetRenderingMode) var renderingMode
 
-  private var colors: ThemeColors { resolveTheme(entry.themeName) }
+  private var colors: ThemeColors { kWidgetColors }
 
   /// True only when the system draws the widget in full colour.
   ///
@@ -558,31 +513,31 @@ extension Color {
 #Preview("Small – Basic", as: .systemSmall) {
   QuotesWidget()
 } timeline: {
-  QuoteEntry(date: .now, index: 0, quoteText: "No one can make you feel inferior without your consent.", quoteAuthor: "Eleanor Roosevelt", showAuthor: false, widgetType: "basic", streakCount: 0, themeName: "minimal", textSize: "medium")
+  QuoteEntry(date: .now, index: 0, quoteText: "No one can make you feel inferior without your consent.", quoteAuthor: "Eleanor Roosevelt", showAuthor: false, widgetType: "basic", streakCount: 0, textSize: "medium")
 }
 
 #Preview("Medium – Streak", as: .systemMedium) {
   QuotesWidget()
 } timeline: {
-  QuoteEntry(date: .now, index: 0, quoteText: "Live in the moment but prepare for your future.", quoteAuthor: "Unknown", showAuthor: true, widgetType: "streak", streakCount: 12, themeName: "minimal", textSize: "medium")
+  QuoteEntry(date: .now, index: 0, quoteText: "Live in the moment but prepare for your future.", quoteAuthor: "Unknown", showAuthor: true, widgetType: "streak", streakCount: 12, textSize: "medium")
 }
 
 #Preview("Large – Custom", as: .systemLarge) {
   QuotesWidget()
 } timeline: {
-  QuoteEntry(date: .now, index: 0, quoteText: "The secret of getting ahead is getting started.", quoteAuthor: "Mark Twain", showAuthor: true, widgetType: "custom", streakCount: 0, themeName: "ember", textSize: "large")
+  QuoteEntry(date: .now, index: 0, quoteText: "The secret of getting ahead is getting started.", quoteAuthor: "Mark Twain", showAuthor: true, widgetType: "custom", streakCount: 0, textSize: "large")
 }
 
 #Preview("Lock Screen – Rectangular", as: .accessoryRectangular) {
   QuotesWidget()
 } timeline: {
-  QuoteEntry(date: .now, index: 0, quoteText: "The secret of getting ahead is getting started.", quoteAuthor: "Mark Twain", showAuthor: true, widgetType: "basic", streakCount: 0, themeName: "minimal", textSize: "medium")
-  QuoteEntry(date: .now, index: 1, quoteText: "Live in the moment but prepare for your future.", quoteAuthor: "Unknown", showAuthor: true, widgetType: "streak", streakCount: 12, themeName: "minimal", textSize: "medium")
+  QuoteEntry(date: .now, index: 0, quoteText: "The secret of getting ahead is getting started.", quoteAuthor: "Mark Twain", showAuthor: true, widgetType: "basic", streakCount: 0, textSize: "medium")
+  QuoteEntry(date: .now, index: 1, quoteText: "Live in the moment but prepare for your future.", quoteAuthor: "Unknown", showAuthor: true, widgetType: "streak", streakCount: 12, textSize: "medium")
 }
 
 #Preview("Lock Screen – Inline", as: .accessoryInline) {
   QuotesWidget()
 } timeline: {
-  QuoteEntry(date: .now, index: 0, quoteText: "The secret of getting ahead is getting started.", quoteAuthor: "Mark Twain", showAuthor: true, widgetType: "basic", streakCount: 0, themeName: "minimal", textSize: "medium")
-  QuoteEntry(date: .now, index: 1, quoteText: "Live in the moment but prepare for your future.", quoteAuthor: "Unknown", showAuthor: true, widgetType: "streak", streakCount: 12, themeName: "minimal", textSize: "medium")
+  QuoteEntry(date: .now, index: 0, quoteText: "The secret of getting ahead is getting started.", quoteAuthor: "Mark Twain", showAuthor: true, widgetType: "basic", streakCount: 0, textSize: "medium")
+  QuoteEntry(date: .now, index: 1, quoteText: "Live in the moment but prepare for your future.", quoteAuthor: "Unknown", showAuthor: true, widgetType: "streak", streakCount: 12, textSize: "medium")
 }

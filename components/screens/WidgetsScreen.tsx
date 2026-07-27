@@ -466,7 +466,7 @@ function IOSWidgetPanel({
       <View style={[iosStyles.hintCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
         <MaterialCommunityIcons name="palette-outline" size={18} color={theme.gold} />
         <Text style={[iosStyles.hintText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-          For theme, text size and author, long-press the widget on your home screen and tap Edit Widget.
+          For text size and author, long-press the widget on your home screen and tap Edit Widget.
         </Text>
       </View>
 
