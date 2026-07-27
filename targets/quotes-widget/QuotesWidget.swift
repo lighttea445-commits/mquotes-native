@@ -56,10 +56,14 @@ private struct StoredQuote: Decodable {
 
 // MARK: - Widget configuration intent
 //
-// Appearance is configured in Apple's own "Edit Widget" panel (long-press the
-// widget on the home screen), not in the app — iOS gives the app no widget ids,
-// so it cannot drive per-instance appearance itself. The app still owns the
-// quote *data* (source and cadence) via the App Group.
+// Everything the user can configure lives in Apple's own "Edit Widget" panel
+// (long-press the widget on the home screen), not in the app — iOS gives the
+// app no widget ids, so it cannot drive per-instance settings itself. The app
+// only supplies the quotes, via the App Group.
+//
+// The quote *source* is the one thing still fixed in the app. Offering it here
+// would mean pre-writing a queue for every category the user might pick, since
+// the extension cannot fetch.
 
 // Themes are deliberately not offered on iOS. The system discards widget
 // colours entirely in accented rendering (a Tinted or Clear Home Screen), so a
@@ -79,11 +83,41 @@ enum WidgetTextSizeOption: String, AppEnum {
   ]}
 }
 
+/// How often the widget advances to the next quote in the queue.
+///
+/// A fixed set, so it needs no dynamic options provider — unlike the quote
+/// source, which would require the app to pre-write a bucket per category.
+/// Values mirror REFRESH_FREQUENCY_MINUTES in store/useWidgetStore.ts.
+enum WidgetIntervalOption: String, AppEnum {
+  case hourly, twiceDaily, daily
+
+  /// Minutes between timeline entries. WidgetKit ignores anything under 15,
+  /// which none of these approach.
+  var minutes: Int {
+    switch self {
+    case .hourly:     return 60
+    case .twiceDaily: return 720
+    case .daily:      return 1440
+    }
+  }
+
+  static var typeDisplayRepresentation: TypeDisplayRepresentation { "Update Interval" }
+
+  static var caseDisplayRepresentations: [WidgetIntervalOption: DisplayRepresentation] {[
+    .hourly:     "Every hour",
+    .twiceDaily: "Twice a day",
+    .daily:      "Once a day",
+  ]}
+}
+
 struct QuoteWidgetIntent: WidgetConfigurationIntent {
   static var title: LocalizedStringResource { "Quote Widget" }
   static var description: IntentDescription {
-    IntentDescription("Choose how the quote on your home screen looks.")
+    IntentDescription("Choose how often the quote changes and how it looks.")
   }
+
+  @Parameter(title: "Update Interval", default: .hourly)
+  var updateInterval: WidgetIntervalOption
 
   @Parameter(title: "Text Size", default: .large)
   var textSize: WidgetTextSizeOption
@@ -138,13 +172,6 @@ private func loadQuotes() -> [StoredQuote] {
   return []
 }
 
-/// Minutes between rotations, written by the app from its refresh-frequency
-/// setting. Floored at 15 — WidgetKit will not honour anything tighter.
-private func loadRotateMinutes() -> Int {
-  let stored = UserDefaults(suiteName: kAppGroupId)?.integer(forKey: "mq_rotate_minutes") ?? 0
-  return stored > 0 ? max(15, stored) : 60
-}
-
 // MARK: - Timeline provider
 
 struct QuoteProvider: AppIntentTimelineProvider {
@@ -170,7 +197,7 @@ struct QuoteProvider: AppIntentTimelineProvider {
   func timeline(for configuration: QuoteWidgetIntent, in context: Context) async -> Timeline<QuoteEntry> {
     let appearance = resolveAppearance(configuration)
     let quotes = loadQuotes()
-    let minutes = loadRotateMinutes()
+    let minutes = configuration.updateInterval.minutes
     let now = Date()
 
     kLog.info("timeline requested: \(quotes.count, privacy: .public) quote(s), rotate every \(minutes, privacy: .public) min, text size \(appearance.textSize, privacy: .public)")
