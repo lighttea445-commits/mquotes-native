@@ -319,8 +319,24 @@ private func resolveTheme(_ name: String) -> ThemeColors {
 struct QuoteWidgetView: View {
   let entry: QuoteEntry
   @Environment(\.widgetFamily) var family
+  @Environment(\.widgetRenderingMode) var renderingMode
 
   private var colors: ThemeColors { resolveTheme(entry.themeName) }
+
+  /// True only when the system draws the widget in full colour.
+  ///
+  /// A Tinted or Clear Home Screen (iOS 18+, and the default look of several
+  /// iOS 26 appearance options) renders widgets in `.accented`: the system
+  /// flattens the hierarchy into an accent group and a default group and
+  /// recolours every view in each group to a single colour. Explicit
+  /// foreground colours are discarded. Anything drawn as *content* — including
+  /// a full-bleed background rectangle — is recoloured too, so it ends up the
+  /// same shade as the text and washes it out into a solid pale card.
+  ///
+  /// The container background is the one thing the system correctly drops in
+  /// that mode, which is why it must be the *only* place the background is
+  /// drawn. See `homeScreenBody`.
+  private var isFullColor: Bool { renderingMode == .fullColor }
 
   private var quoteFontSize: CGFloat {
     let base: CGFloat
@@ -361,15 +377,16 @@ struct QuoteWidgetView: View {
 
   // Home screen widget (systemSmall/systemMedium/systemLarge).
   private var homeScreenBody: some View {
+    // No background fill here on purpose — the background belongs to
+    // .containerBackground() alone. Drawing it as content as well made the
+    // widget render as a solid pale card in accented mode (see isFullColor).
     ZStack(alignment: .bottomLeading) {
-      colors.background
-
       VStack(alignment: .center, spacing: 0) {
         // Quotation mark (basic widget only)
         if entry.widgetType == "basic" && family != .systemSmall {
           Text("\u{201C}")
             .font(.custom("Georgia", size: 26))
-            .foregroundColor(colors.text.opacity(0.25))
+            .foregroundColor(isFullColor ? colors.text.opacity(0.25) : nil)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.bottom, -8)
         }
@@ -378,17 +395,20 @@ struct QuoteWidgetView: View {
 
         Text(entry.quoteText)
           .font(.custom("Georgia", size: quoteFontSize))
-          .foregroundColor(colors.text)
+          .foregroundColor(isFullColor ? colors.text : nil)
           .multilineTextAlignment(.center)
           .lineLimit(quoteLineLimit)
           .minimumScaleFactor(0.75)
           .fixedSize(horizontal: false, vertical: false)
+          // In accented mode this puts the quote in the accent group, which the
+          // system draws at full strength; ungrouped content is dimmed.
+          .widgetAccentable()
 
         if entry.showAuthor && !entry.quoteAuthor.isEmpty {
           Spacer(minLength: 4)
           Text("- \(entry.quoteAuthor)")
             .font(.system(size: 11, weight: .regular))
-            .foregroundColor(colors.textMuted)
+            .foregroundColor(isFullColor ? colors.textMuted : nil)
             .lineLimit(1)
             .frame(maxWidth: .infinity, alignment: .trailing)
         }
@@ -400,23 +420,31 @@ struct QuoteWidgetView: View {
       // Streak badge (streak widget only)
       if entry.widgetType == "streak" {
         HStack(spacing: 5) {
+          // The gradient is meaningless once the system recolours the view, so
+          // it is only applied in full colour.
           Image(systemName: "flame.fill")
             .font(.system(size: family == .systemSmall ? 13 : 16))
             .foregroundStyle(
-              LinearGradient(
-                colors: [Color(hex: "#a855f7"), Color(hex: "#ec4899")],
-                startPoint: .top, endPoint: .bottom
-              )
+              isFullColor
+                ? AnyShapeStyle(LinearGradient(
+                    colors: [Color(hex: "#a855f7"), Color(hex: "#ec4899")],
+                    startPoint: .top, endPoint: .bottom
+                  ))
+                : AnyShapeStyle(.foreground)
             )
           Text("\(entry.streakCount)")
             .font(.custom("Georgia", size: family == .systemSmall ? 14 : 18))
             .bold()
-            .foregroundColor(colors.text)
+            .foregroundColor(isFullColor ? colors.text : nil)
         }
         .padding(.horizontal, 14)
         .padding(.bottom, 12)
       }
     }
+    // The removed background fill was also what stretched the ZStack to the
+    // full container; without it the bottom-leading streak badge would ride up
+    // against the text.
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
     .widgetURL(tapURL(for: entry))
     .containerBackground(for: .widget) {
       colors.background
