@@ -321,6 +321,9 @@ struct QuoteWidgetView: View {
             // colours but honours the alpha channel to modulate tint strength,
             // so this is the only way the mark stays subtle when tinted.
             .opacity(0.25)
+            // Keep its ideal height; an unbounded quote below would otherwise
+            // compress it, since that text now claims space first.
+            .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.bottom, -8)
         }
@@ -354,12 +357,21 @@ struct QuoteWidgetView: View {
             // rectangular view, which already does this.
             .opacity(isFullColor ? 1 : 0.7)
             .lineLimit(1)
+            // The quote has layoutPriority(1) and is now unbounded, so without
+            // this the author — a Pro feature — gets compressed to nothing on a
+            // long quote. One line is cheap; the quote scales into what's left.
+            .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .trailing)
         }
 
         Spacer(minLength: 0)
       }
       .padding(family == .systemSmall ? 12 : 16)
+      // The streak badge below is a ZStack overlay pinned to the bottom. Now
+      // that the quote is unbounded it will fill the whole card, so reserve
+      // room for the badge or it draws on top of the last line. The old 3-4
+      // line cap was what kept them apart.
+      .padding(.bottom, entry.widgetType == "streak" ? (family == .systemSmall ? 22 : 26) : 0)
 
       // Streak badge (streak widget only)
       if entry.widgetType == "streak" {
@@ -439,6 +451,9 @@ private struct AccessoryRectangularView: View {
           .font(.system(size: authorFontSize))
           .lineLimit(1)
           .opacity(0.7)
+          // As on the home screen: the quote claims space first, so pin the
+          // author's height or a long quote squeezes it out.
+          .fixedSize(horizontal: false, vertical: true)
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
