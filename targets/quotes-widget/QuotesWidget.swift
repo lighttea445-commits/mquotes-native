@@ -398,9 +398,10 @@ struct QuoteWidgetView: View {
 
 // MARK: - Lock screen (accessory) views
 //
-// Accessory families render on the system's own translucent/monochrome
-// background, so no background fills, gradients, or theme colors
-// are used here — the system applies its own tint via .widgetAccentable().
+// Accessory families render on the system's own translucent background and are
+// recoloured by it, so nothing here sets a fill, gradient or explicit colour —
+// same principle the home screen body now follows. De-emphasis is expressed as
+// alpha, which survives recolouring; a faded colour would not.
 
 private struct AccessoryRectangularView: View {
   let entry: QuoteEntry
@@ -425,6 +426,11 @@ private struct AccessoryRectangularView: View {
         .font(.system(size: quoteFontSize))
         .lineLimit(quoteLineLimit)
         .minimumScaleFactor(0.85)
+        // Parity with the home screen body: put the quote in the accent group
+        // so it is drawn at full strength wherever the system tints rather than
+        // just desaturates. This was the only .widgetAccentable() in the
+        // section until the circular view was removed.
+        .widgetAccentable()
       if entry.showAuthor && !entry.quoteAuthor.isEmpty {
         Text("— \(entry.quoteAuthor)")
           .font(.system(size: authorFontSize))
