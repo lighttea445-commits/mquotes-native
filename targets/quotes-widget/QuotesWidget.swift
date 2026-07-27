@@ -386,7 +386,11 @@ struct QuoteWidgetView: View {
         if entry.widgetType == "basic" && family != .systemSmall {
           Text("\u{201C}")
             .font(.custom("Georgia", size: 26))
-            .foregroundColor(isFullColor ? colors.text.opacity(0.25) : nil)
+            .foregroundColor(isFullColor ? colors.text : nil)
+            // Alpha, not a faded colour: accented mode discards foreground
+            // colours but honours the alpha channel to modulate tint strength,
+            // so this is the only way the mark stays subtle when tinted.
+            .opacity(0.25)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.bottom, -8)
         }
@@ -409,6 +413,11 @@ struct QuoteWidgetView: View {
           Text("- \(entry.quoteAuthor)")
             .font(.system(size: 11, weight: .regular))
             .foregroundColor(isFullColor ? colors.textMuted : nil)
+            // textMuted already carries the de-emphasis in full colour; when
+            // tinted the colour is dropped, so fall back to alpha to keep the
+            // author from competing with the quote. Matches the accessory
+            // rectangular view, which already does this.
+            .opacity(isFullColor ? 1 : 0.7)
             .lineLimit(1)
             .frame(maxWidth: .infinity, alignment: .trailing)
         }
