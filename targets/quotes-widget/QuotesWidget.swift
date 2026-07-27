@@ -283,18 +283,15 @@ struct QuoteWidgetView: View {
     return base
   }
 
-  /// Maximum lines the quote text may occupy. Chosen to ensure the text +
-  /// optional author line fits inside the widget without clipping.
-  private var quoteLineLimit: Int {
-    switch family {
-    case .systemSmall:
-      // Small widget: tighter limit so author line never gets pushed out.
-      return entry.textSize == "large" ? 3 : 4
-    case .systemMedium:
-      return 4
-    default:
-      return 8
-    }
+  /// How far the quote may shrink before it would rather clip.
+  ///
+  /// The whole quote must always be readable, so there is no line limit and the
+  /// text scales down to fit instead. `quoteFontSize` is therefore a starting
+  /// point, not a fixed size — a long quote at "Large" will render smaller than
+  /// a short one. A floor this low is only reached by unusually long quotes on
+  /// the small family; it exists so nothing is ever truncated.
+  private var minQuoteScale: CGFloat {
+    family == .systemSmall ? 0.30 : 0.40
   }
 
   var body: some View {
@@ -334,9 +331,14 @@ struct QuoteWidgetView: View {
           .font(.custom("Georgia", size: quoteFontSize))
           .foregroundColor(isFullColor ? Color.primary : nil)
           .multilineTextAlignment(.center)
-          .lineLimit(quoteLineLimit)
-          .minimumScaleFactor(0.75)
-          .fixedSize(horizontal: false, vertical: false)
+          // No line limit — the quote must be shown in full, so it wraps freely
+          // and shrinks to fit rather than truncating with an ellipsis.
+          .lineLimit(nil)
+          .minimumScaleFactor(minQuoteScale)
+          // Claim space before the surrounding Spacers do. Without this the
+          // Spacers can compress the text box and force scaling far earlier
+          // than necessary, or clip it outright.
+          .layoutPriority(1)
           // In accented mode this puts the quote in the accent group, which the
           // system draws at full strength; ungrouped content is dimmed.
           .widgetAccentable()
@@ -416,16 +418,17 @@ private struct AccessoryRectangularView: View {
 
   private var authorFontSize: CGFloat { quoteFontSize - 2 }
 
-  private var quoteLineLimit: Int {
-    entry.showAuthor && !entry.quoteAuthor.isEmpty ? 2 : 3
-  }
-
   var body: some View {
     VStack(alignment: .leading, spacing: 2) {
       Text(entry.quoteText)
         .font(.system(size: quoteFontSize))
-        .lineLimit(quoteLineLimit)
-        .minimumScaleFactor(0.85)
+        // Same rule as the home screen: show the whole quote, shrink instead of
+        // truncating. The floor is higher here because the lock screen rectangle
+        // is roughly 160x72pt — below this the text stops being readable at all,
+        // and a very long quote will still be small.
+        .lineLimit(nil)
+        .minimumScaleFactor(0.5)
+        .layoutPriority(1)
         // Parity with the home screen body: put the quote in the accent group
         // so it is drawn at full strength wherever the system tints rather than
         // just desaturates. This was the only .widgetAccentable() in the
