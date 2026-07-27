@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -140,14 +140,20 @@ export default function ProfileScreen({ onClose }: { onClose?: () => void }) {
               <MaterialCommunityIcons name="chevron-right" size={18} color={theme.textMuted} />
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border }]}
-              onPress={() => modal ? modal.openSheet('widgets') : router.push('/widgets')}
-            >
-              <MaterialCommunityIcons name="view-grid-plus-outline" size={20} color={theme.gold} />
-              <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>Widgets</Text>
-              <MaterialCommunityIcons name="chevron-right" size={18} color={theme.textMuted} />
-            </TouchableOpacity>
+            {/* Android only. iOS widgets are configured entirely in Apple's
+                Edit Widget panel, so the in-app screen has nothing left to own.
+                The queue itself is still topped up from app/_layout.tsx, which
+                does not depend on this screen. */}
+            {Platform.OS !== 'ios' && (
+              <TouchableOpacity
+                style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border }]}
+                onPress={() => modal ? modal.openSheet('widgets') : router.push('/widgets')}
+              >
+                <MaterialCommunityIcons name="view-grid-plus-outline" size={20} color={theme.gold} />
+                <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>Widgets</Text>
+                <MaterialCommunityIcons name="chevron-right" size={18} color={theme.textMuted} />
+              </TouchableOpacity>
+            )}
 
             <TouchableOpacity
               style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border }]}
