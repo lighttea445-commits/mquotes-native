@@ -70,4 +70,4 @@ All modals open as inline `BottomSheet` components managed by `ModalContext` in 
 
 ## Git Workflow
 
-After every code edit: increment `versionCode` by 1 in `android/app/build.gradle`, stage the changed files, commit with a concise message, and push to GitHub (`git push origin main`). No exceptions.
+After every code edit: stage all changes, commit with a concise message, and push to GitHub (`git push origin main`). No exceptions.
