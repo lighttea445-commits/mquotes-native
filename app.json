@@ -18,7 +18,7 @@
       "newArchEnabled": true,
       "bundleIdentifier": "com.kovoapps.quotable",
       "appleTeamId": "HF7548K866",
-      "buildNumber": "27",
+      "buildNumber": "28",
       "entitlements": {
         "com.apple.security.application-groups": [
           "group.com.mquotes.shared"
@@ -34,8 +34,8 @@
         "backgroundColor": "#0a0a0a"
       },
       "newArchEnabled": true,
-      "package": "com.eriksen_dawson.quotable",
-      "versionCode": 131,
+      "package": "com.kovoapps.quotable",
+      "versionCode": 1,
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "permissions": [

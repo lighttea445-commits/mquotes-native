@@ -43,6 +43,10 @@ export default function SettingsScreen({ onClose, onBack }: { onClose?: () => vo
   const close = onClose ?? (() => router.back());
   const back = onBack ?? close;
 
+  // Play subscriptions aren't live under com.kovoapps.quotable yet, so the
+  // deeplink would land on an empty page — the row stays inert on Android.
+  const canManageSubscription = Platform.OS === 'ios';
+
   const handleNameBlur = () => {
     const trimmed = nameValue.trim();
     if (trimmed !== preferences.name) {
@@ -169,17 +173,21 @@ export default function SettingsScreen({ onClose, onBack }: { onClose?: () => vo
             </Text>
             <TouchableOpacity
               style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border }]}
-              onPress={() => Linking.openURL(
-              Platform.OS === 'ios'
-                ? 'https://apps.apple.com/account/subscriptions'
-                : 'https://play.google.com/store/account/subscriptions?package=com.eriksen_dawson.quotable'
-            )}
+              disabled={!canManageSubscription}
+              accessibilityState={{ disabled: !canManageSubscription }}
+              onPress={() => Linking.openURL('https://apps.apple.com/account/subscriptions')}
             >
-              <MaterialCommunityIcons name="crown-outline" size={20} color={theme.gold} />
-              <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
+              <MaterialCommunityIcons
+                name="crown-outline"
+                size={20}
+                color={canManageSubscription ? theme.gold : theme.textMuted}
+              />
+              <Text style={[styles.menuText, { color: canManageSubscription ? theme.text : theme.textMuted, fontFamily: theme.uiFontFamily }]}>
                 Manage Subscription
               </Text>
-              <MaterialCommunityIcons name="chevron-right" size={18} color={theme.textMuted} />
+              {canManageSubscription && (
+                <MaterialCommunityIcons name="chevron-right" size={18} color={theme.textMuted} />
+              )}
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border, marginTop: 8 }]}
