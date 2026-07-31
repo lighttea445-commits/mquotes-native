@@ -42,7 +42,7 @@ export function StreakCard({ streakCount, weekData, onShare }: StreakCardProps) 
                     styles.dayLabel,
                     {
                       color: isToday ? theme.text : theme.textMuted,
-                      fontFamily: isToday ? 'Inter_600SemiBold' : 'Inter_400Regular',
+                      fontFamily: isToday ? 'Peachi-Bold' : 'Peachi-Regular',
                     },
                   ]}
                 >

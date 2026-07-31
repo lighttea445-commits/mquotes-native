@@ -311,6 +311,13 @@ export default function RootLayout() {
     Raleway_300Light,
     Raleway_400Regular,
     Raleway_600SemiBold,
+    // Peachi — local OTFs, keyed by the names used in constants/fonts.ts
+    'Peachi-Thin': require('../assets/fonts/Peachi-Thin.otf'),
+    'Peachi-Light': require('../assets/fonts/Peachi-Light.otf'),
+    'Peachi-Regular': require('../assets/fonts/Peachi-Regular.otf'),
+    'Peachi-Medium': require('../assets/fonts/Peachi-Medium.otf'),
+    'Peachi-Bold': require('../assets/fonts/Peachi-Bold.otf'),
+    'Peachi-Black': require('../assets/fonts/Peachi-Black.otf'),
   });
 
   // ── Widget tap deep-link handler (Linking fallback) ───────────────────────

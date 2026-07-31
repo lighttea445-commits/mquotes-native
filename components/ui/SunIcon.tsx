@@ -54,7 +54,7 @@ export function SunIcon({ day, size = 64, color = '#B8975A' }: SunIconProps) {
         fontSize={size * 0.26}
         fontWeight="700"
         fill={color}
-        fontFamily="PlayfairDisplay_700Bold"
+        fontFamily="Peachi-Bold"
       >
         {day}
       </SvgText>

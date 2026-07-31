@@ -59,7 +59,7 @@ export default function HistoryScreen({ onClose, onBack }: { onClose?: () => voi
             <Text style={[styles.gateTitle, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
               History is Pro
             </Text>
-            <Text style={[styles.gateBody, { color: theme.textMuted, fontFamily: 'Inter_500Medium' }]}>
+            <Text style={[styles.gateBody, { color: theme.textMuted, fontFamily: 'Peachi-Medium' }]}>
               Upgrade to Quotable Pro to browse every quote you've ever read.
             </Text>
             <TouchableOpacity
@@ -68,7 +68,7 @@ export default function HistoryScreen({ onClose, onBack }: { onClose?: () => voi
               activeOpacity={0.85}
             >
               <MaterialCommunityIcons name="crown" size={16} color="#1A1208" />
-              <Text style={[styles.unlockBtnText, { color: '#1A1208', fontFamily: 'Inter_600SemiBold' }]}>
+              <Text style={[styles.unlockBtnText, { color: '#1A1208', fontFamily: 'Peachi-Bold' }]}>
                 Unlock Pro
               </Text>
             </TouchableOpacity>

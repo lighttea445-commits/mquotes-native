@@ -75,7 +75,7 @@ export default function ThemesScreen({ onClose }: { onClose?: () => void }) {
         {!isPro && (
           <View style={[styles.proBanner, { backgroundColor: 'rgba(184,151,90,0.10)', borderColor: 'rgba(184,151,90,0.25)' }]}>
             <MaterialCommunityIcons name="crown" size={14} color="#B8975A" />
-            <Text style={[styles.proBannerText, { color: '#B8975A', fontFamily: 'Inter_500Medium' }]}>
+            <Text style={[styles.proBannerText, { color: '#B8975A', fontFamily: 'Peachi-Medium' }]}>
               Unlock all themes
             </Text>
           </View>
@@ -194,14 +194,14 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 32,
-    fontFamily: 'PlayfairDisplay_700Bold',
+    fontFamily: 'Peachi-Bold',
     textAlign: 'center',
     marginTop: 4,
     marginBottom: 8,
   },
   forYouLabel: {
     fontSize: 16,
-    fontFamily: 'Inter_600SemiBold',
+    fontFamily: 'Peachi-Bold',
     marginBottom: 12,
     paddingHorizontal: SIDE_PADDING,
   },

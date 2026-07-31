@@ -55,7 +55,7 @@ function SpecialTile({
       activeOpacity={0.75}
     >
       <View style={styles.tileContent}>
-        <Text style={[styles.tileLabel, { color: theme.text, fontFamily: 'Inter_500Medium' }]}>
+        <Text style={[styles.tileLabel, { color: theme.text, fontFamily: 'Peachi-Medium' }]}>
           {label}
         </Text>
         {subtitle !== undefined && (
@@ -108,7 +108,7 @@ function CategoryPillRow({
       <View style={[styles.iconSquare, { backgroundColor: GOLD_ICON_BG }]}>
         <MaterialCommunityIcons name={icon as any} size={18} color={theme.gold} />
       </View>
-      <Text style={[styles.pillLabel, { color: theme.text, fontFamily: 'Inter_500Medium' }]}>
+      <Text style={[styles.pillLabel, { color: theme.text, fontFamily: 'Peachi-Medium' }]}>
         {name}
       </Text>
       {locked
@@ -237,7 +237,7 @@ export default function CategoriesScreen({ onClose }: { onClose?: () => void }) 
             {!isPro && (
               <View style={[styles.proBadge, { backgroundColor: 'rgba(184,151,90,0.12)' }]}>
                 <MaterialCommunityIcons name="crown" size={11} color="#B8975A" />
-                <Text style={[styles.proBadgeText, { color: '#B8975A', fontFamily: 'Inter_600SemiBold' }]}>Premium</Text>
+                <Text style={[styles.proBadgeText, { color: '#B8975A', fontFamily: 'Peachi-Bold' }]}>Premium</Text>
               </View>
             )}
           </View>
@@ -296,7 +296,7 @@ const styles = StyleSheet.create({
   },
   pageTitle: {
     fontSize: 32,
-    fontFamily: 'PlayfairDisplay_700Bold',
+    fontFamily: 'Peachi-Bold',
     marginTop: 16,
     marginBottom: 20,
     textAlign: 'center',
@@ -348,7 +348,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 22,
-    fontFamily: 'PlayfairDisplay_700Bold',
+    fontFamily: 'Peachi-Bold',
     marginBottom: 12,
   },
   sectionHeader: {
