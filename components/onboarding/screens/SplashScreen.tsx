@@ -3,7 +3,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../../hooks/useTheme';
 import { ContinueButton } from '../ContinueButton';
-import { SplashArt } from '../art/SplashArt';
+import { AppMark } from '../art/AppMark';
 import { ReviewCarousel, type Review } from '../ReviewCarousel';
 import { OB } from '../tokens';
 
@@ -38,10 +38,18 @@ export function SplashScreen({ next }: Props) {
     <View style={[sp.root, { backgroundColor: theme.background }]}>
       <SafeAreaView style={sp.safe} edges={['top', 'bottom']}>
         <View style={sp.artWrap}>
-          {/* Swap for your logo if you'd rather lead with the mark:
-              <Image source={require('../../../assets/icon.png')}
-                     style={{ width: 160, height: 160 }} resizeMode="contain" /> */}
-          <SplashArt size={270} color={theme.gold} />
+          <AppMark size={150} color={theme.text}>
+            {/* Swap this for your logo:
+                <Image source={require('../../../assets/icon.png')}
+                       style={{ width: '100%', height: '100%' }} resizeMode="contain" /> */}
+            <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              style={[sp.wordmark, { color: theme.text, fontFamily: theme.quoteFontFamily }]}
+            >
+              Quotable
+            </Text>
+          </AppMark>
         </View>
 
         <View style={sp.mottoWrap}>
@@ -69,6 +77,7 @@ const sp = StyleSheet.create({
   root: { flex: 1 },
   safe: { flex: 1 },
   artWrap: { flex: 1.15, alignItems: 'center', justifyContent: 'flex-end' },
+  wordmark: { fontSize: 20, textAlign: 'center' },
   mottoWrap: { alignItems: 'center', paddingHorizontal: OB.gutter, paddingTop: 34 },
   mottoPrimary: { fontSize: 30, lineHeight: 38, textAlign: 'center' },
   mottoSecondary: { fontSize: 30, lineHeight: 38, textAlign: 'center' },
