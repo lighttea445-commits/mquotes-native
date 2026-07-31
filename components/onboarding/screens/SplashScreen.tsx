@@ -93,10 +93,9 @@ export function SplashScreen({ next }: Props) {
 const sp = StyleSheet.create({
   root: { flex: 1 },
   safe: { flex: 1 },
-  // Top gap is lighter than the tail spacer below, lifting the block a little
-  // over 2% above the optical centre. Proportional, so it holds on any height.
+  // Equal gaps above and below — the block sits on the optical centre.
   artWrap: { flex: 1, alignItems: 'center', justifyContent: 'flex-end' },
-  tailSpacer: { flex: 1.1 },
+  tailSpacer: { flex: 1 },
   // Fixed box so the sparkle viewBox and the wordmark stay in register.
   markBox: { width: 300, height: 120, alignItems: 'center', justifyContent: 'center' },
   wordmark: {
