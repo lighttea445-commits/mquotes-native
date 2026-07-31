@@ -1,39 +1,91 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, StyleSheet, AppState, AppStateStatus } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../../../hooks/useTheme';
+import { getPermissionStatus } from '../../../lib/notifications';
 import { OnboardingHeader } from '../OnboardingHeader';
 import { ContinueButton } from '../ContinueButton';
 import { OB } from '../tokens';
 
 interface Props {
-  /** Resolves true when the OS grants permission. */
-  onAllow: () => Promise<boolean>;
+  /** Re-prompts, or deep-links to system settings once the OS says 'denied'. */
+  onRetry: () => Promise<boolean>;
+  /** Re-reads OS status after returning from settings. */
+  onRecheck: () => Promise<boolean>;
   next: () => void;
   back?: () => void;
   progress?: number;
 }
 
 /**
- * Permission comes after config, so the user is confirming a schedule they
- * already built rather than answering a cold OS prompt.
+ * Recovery screen, shown only when the config step's native prompt was denied
+ * (the orchestrator skips it entirely on a grant).
  *
- * Both outcomes advance — a denial is a valid answer, not a dead end.
+ * Once the OS status is 'denied' it will not prompt again, so the primary
+ * action becomes a deep-link to system settings. Returning to the app
+ * re-checks, and advances automatically if permission was granted there.
  */
-export function NotificationPermissionScreen({ onAllow, next, back, progress }: Props) {
+export function NotificationPermissionScreen({
+  onRetry,
+  onRecheck,
+  next,
+  back,
+  progress,
+}: Props) {
   const theme = useTheme();
   const [asking, setAsking] = useState(false);
+  const [hardDenied, setHardDenied] = useState(false);
 
-  const handleAllow = async () => {
+  // `next` is called from an AppState listener that must not be re-subscribed
+  // on every render; a ref keeps the callback current without re-binding.
+  const nextRef = useRef(next);
+  nextRef.current = next;
+  const recheckRef = useRef(onRecheck);
+  recheckRef.current = onRecheck;
+
+  /**
+   * Android's permission dialog can background the app, so the AppState
+   * listener and the button handler can both decide to advance off the same
+   * grant. Whichever gets there first wins.
+   */
+  const advanced = useRef(false);
+  const advanceOnce = () => {
+    if (advanced.current) return;
+    advanced.current = true;
+    nextRef.current();
+  };
+
+  useEffect(() => {
+    let alive = true;
+    getPermissionStatus().then((s) => alive && setHardDenied(s === 'denied'));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // Picks up permission granted in system settings while the app was backgrounded.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', async (state: AppStateStatus) => {
+      if (state !== 'active') return;
+      const granted = await recheckRef.current();
+      if (granted) advanceOnce();
+      else setHardDenied((await getPermissionStatus()) === 'denied');
+    });
+    return () => sub.remove();
+  }, []);
+
+  const handlePrimary = async () => {
     setAsking(true);
     try {
-      await onAllow();
+      const granted = await onRetry();
+      if (granted) advanceOnce();
     } finally {
       setAsking(false);
-      next();
     }
   };
+
+  const primaryLabel = asking ? 'Asking…' : hardDenied ? 'Open Settings' : 'Allow';
 
   return (
     <View style={[np.root, { backgroundColor: theme.background }]}>
@@ -45,7 +97,9 @@ export function NotificationPermissionScreen({ onAllow, next, back, progress }: 
             Don't miss your daily quotes!
           </Text>
           <Text style={[np.subhead, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-            Allow notifications, it'll have a big impact in your life
+            {hardDenied
+              ? 'Notifications are turned off for Quotable. Enable them in Settings to get your daily quotes.'
+              : "Allow notifications, it'll have a big impact in your life"}
           </Text>
         </View>
 
@@ -60,12 +114,8 @@ export function NotificationPermissionScreen({ onAllow, next, back, progress }: 
         </View>
 
         <View style={np.footer}>
-          <ContinueButton
-            onPress={handleAllow}
-            label={asking ? 'Asking…' : 'Allow'}
-            disabled={asking}
-          />
-          <ContinueButton onPress={next} label="I'm not ready yet" variant="ghost" />
+          <ContinueButton onPress={handlePrimary} label={primaryLabel} disabled={asking} />
+          <ContinueButton onPress={advanceOnce} label="I'm not ready yet" variant="ghost" />
         </View>
       </SafeAreaView>
     </View>

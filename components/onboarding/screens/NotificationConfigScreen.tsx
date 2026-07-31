@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useTheme } from '../../../hooks/useTheme';
 import { useHaptics } from '../../../hooks/useHaptics';
+import { useAppStore } from '../../../store/useAppStore';
 import { OnboardingHeader } from '../OnboardingHeader';
 import { ContinueButton } from '../ContinueButton';
 import { OB, ON_GOLD } from '../tokens';
@@ -27,8 +28,11 @@ export interface NotificationConfig {
 }
 
 interface Props {
-  value: NotificationConfig;
-  onChange: (v: NotificationConfig) => void;
+  /**
+   * Persists the settings and raises the native permission prompt.
+   * Resolves to whether permission was granted.
+   */
+  onSave: (v: NotificationConfig) => Promise<boolean>;
   next: () => void;
   back?: () => void;
   progress?: number;
@@ -49,12 +53,24 @@ function dateToHHMM(d: Date): string {
  * Count slider + delivery window.
  *
  * Deliberately lighter than the in-app `NotificationsScreen`, which is a
- * four-card surface with drill-downs and Pro gating. Settings are handed to the
- * orchestrator and only scheduled once permission is granted on the next step.
+ * four-card surface with drill-downs and Pro gating — but backed by the same
+ * store fields, so what's set here is what the Reminders screen shows later.
+ *
+ * "Allow and Save" raises the native iOS/Android permission prompt.
  */
-export function NotificationConfigScreen({ value, onChange, next, back, progress }: Props) {
+export function NotificationConfigScreen({ onSave, next, back, progress }: Props) {
   const theme = useTheme();
   const haptics = useHaptics();
+  const prefs = useAppStore((s) => s.preferences);
+
+  // Seeded from the user's real settings so re-entering onboarding shows what
+  // they already have rather than resetting to defaults.
+  const [value, setValue] = useState<NotificationConfig>({
+    count: prefs.notificationCount,
+    startTime: prefs.notificationStartTime,
+    endTime: prefs.notificationEndTime,
+  });
+  const [saving, setSaving] = useState(false);
   const [trackWidth, setTrackWidth] = useState(0);
   const [picker, setPicker] = useState<null | 'start' | 'end'>(null);
   const [tempDate, setTempDate] = useState<Date>(new Date());
@@ -64,16 +80,28 @@ export function NotificationConfigScreen({ value, onChange, next, back, progress
   const countRef = useRef(value.count);
   countRef.current = value.count;
 
+  const onChange = setValue;
+
+  const handleSave = useCallback(async () => {
+    setSaving(true);
+    try {
+      await onSave(value);
+    } finally {
+      setSaving(false);
+      next();
+    }
+  }, [onSave, value, next]);
+
   const setCount = useCallback(
     (n: number) => {
       const clamped = Math.max(MIN_COUNT, Math.min(MAX_COUNT, Math.round(n)));
       if (clamped !== countRef.current) {
         countRef.current = clamped;
         haptics.selection();
-        onChange({ ...value, count: clamped });
+        setValue((v) => ({ ...v, count: clamped }));
       }
     },
-    [onChange, value, haptics],
+    [haptics],
   );
 
   const pan = useMemo(
@@ -207,7 +235,11 @@ export function NotificationConfigScreen({ value, onChange, next, back, progress
           </View>
         </View>
 
-        <ContinueButton onPress={next} label="Allow and Save" />
+        <ContinueButton
+          onPress={handleSave}
+          label={saving ? 'Saving…' : 'Allow and Save'}
+          disabled={saving}
+        />
 
         {picker !== null &&
           (Platform.OS === 'ios' ? (

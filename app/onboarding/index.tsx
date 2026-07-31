@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { View, Linking } from 'react-native';
 import { useRouter } from 'expo-router';
 import Animated, {
   useSharedValue,
@@ -12,7 +12,7 @@ import Animated, {
 import { useAppStore } from '../../store/useAppStore';
 import { useTheme } from '../../hooks/useTheme';
 import { useRevenueCat } from '../../hooks/useRevenueCat';
-import { requestPermissions, rescheduleAll } from '../../lib/notifications';
+import { requestPermissions, getPermissionStatus, rescheduleAll } from '../../lib/notifications';
 import { PaywallSheet } from '../../components/subscriptions/PaywallSheet';
 import {
   ONBOARDING_STEPS,
@@ -44,12 +44,6 @@ import { WidgetInstallScreen } from '../../components/onboarding/screens/WidgetI
 /** Every answer collected in the flow, keyed by the store field it lands in. */
 type Answers = Partial<Record<AnswerKey, string | string[] | number | null>>;
 
-const DEFAULT_NOTIF: NotificationConfig = {
-  count: 10,
-  startTime: '09:00',
-  endTime: '22:00',
-};
-
 export default function OnboardingScreen() {
   const router = useRouter();
   const theme = useTheme();
@@ -59,15 +53,41 @@ export default function OnboardingScreen() {
   const [step, setStep] = useState(0);
   const [name, setLocalName] = useState('');
   const [answers, setAnswers] = useState<Answers>({});
-  const [notif, setNotif] = useState<NotificationConfig>(DEFAULT_NOTIF);
   const [themeId, setLocalThemeId] = useState(useAppStore.getState().preferences.theme);
   const [showPaywall, setShowPaywall] = useState(false);
 
-  // Permission result is read at completion, after the user has moved on.
-  const notifGranted = useRef(false);
+  /**
+   * Whether the OS has granted notification permission. Drives whether the
+   * "Don't miss your daily quotes!" fallback screen is shown at all.
+   */
+  const [notifGranted, setNotifGranted] = useState(false);
 
   const screenOpacity = useSharedValue(1);
   const screenStyle = useAnimatedStyle(() => ({ opacity: screenOpacity.value }));
+
+  /**
+   * Steps can be conditionally hidden. The permission screen is the only one
+   * today: it exists to recover from a denial, so granting on the config
+   * screen skips straight past it.
+   */
+  const isVisible = useCallback(
+    (index: number) => {
+      const s = ONBOARDING_STEPS[index];
+      if (!s) return false;
+      if (s.id === 'notification-permission') return !notifGranted;
+      return true;
+    },
+    [notifGranted],
+  );
+
+  const seek = useCallback(
+    (from: number, dir: 1 | -1) => {
+      let i = from + dir;
+      while (i > 0 && i < TOTAL_STEPS - 1 && !isVisible(i)) i += dir;
+      return Math.max(0, Math.min(i, TOTAL_STEPS - 1));
+    },
+    [isVisible],
+  );
 
   const transition = useCallback(
     (fn: () => void) => {
@@ -81,12 +101,12 @@ export default function OnboardingScreen() {
   );
 
   const next = useCallback(
-    () => transition(() => setStep((s) => Math.min(s + 1, TOTAL_STEPS - 1))),
-    [transition],
+    () => transition(() => setStep((s) => seek(s, 1))),
+    [transition, seek],
   );
   const back = useCallback(
-    () => transition(() => setStep((s) => Math.max(s - 1, 0))),
-    [transition],
+    () => transition(() => setStep((s) => seek(s, -1))),
+    [transition, seek],
   );
 
   const setAnswer = useCallback((key: AnswerKey, value: string | string[] | number) => {
@@ -125,38 +145,12 @@ export default function OnboardingScreen() {
       beliefThoughts: answers.beliefThoughts as string | undefined,
       beliefRewire: answers.beliefRewire as string | undefined,
       improveAreas: answers.improveAreas as string[] | undefined,
-      // Notification prefs from the config screen.
-      notificationsEnabled: notifGranted.current,
-      notificationCount: notif.count,
-      notificationStartTime: notif.startTime,
-      notificationEndTime: notif.endTime,
+      // Notification prefs are written and scheduled by the config screen, not
+      // here — they're live in the store from the moment the user saves them.
     });
 
     completeOnboarding();
-
-    if (!notifGranted.current) return;
-
-    const prefs = useAppStore.getState().preferences;
-    try {
-      await rescheduleAll({
-        enabled: true,
-        days: prefs.notificationDays,
-        quotesEnabled: prefs.quotesEnabled,
-        quoteCount: notif.count,
-        startHHMM: notif.startTime,
-        endHHMM: notif.endTime,
-        showAuthor: prefs.notificationShowAuthor,
-        qodEnabled: prefs.qodEnabled,
-        qodTime: prefs.qodTime,
-        reflectEnabled: prefs.reflectEnabled,
-        reflectTime: prefs.reflectTime,
-        streakEnabled: prefs.streakEnabled,
-        streakTime: prefs.streakTime,
-      });
-    } catch {
-      // Scheduling is best-effort — never block finishing onboarding on it.
-    }
-  }, [name, answers, notif, setName, setPreferences, completeOnboarding]);
+  }, [name, answers, setName, setPreferences, completeOnboarding]);
 
   /** Last question screen — commit everything before the offer sequence. */
   const persistedAt = STEP_INDEX['improve'];
@@ -166,11 +160,90 @@ export default function OnboardingScreen() {
     next();
   }, [step, persistedAt, persist, next]);
 
-  const handleAllowNotifications = useCallback(async () => {
-    const granted = await requestPermissions();
-    notifGranted.current = granted;
-    return granted;
+  /**
+   * Schedules from whatever is currently in the store, so the reminders the
+   * user gets always match what the in-app Reminders screen shows.
+   */
+  const scheduleFromStore = useCallback(async () => {
+    const p = useAppStore.getState().preferences;
+    try {
+      await rescheduleAll({
+        enabled: true,
+        days: p.notificationDays,
+        quotesEnabled: p.quotesEnabled,
+        quoteCount: p.notificationCount,
+        startHHMM: p.notificationStartTime,
+        endHHMM: p.notificationEndTime,
+        showAuthor: p.notificationShowAuthor,
+        qodEnabled: p.qodEnabled,
+        qodTime: p.qodTime,
+        reflectEnabled: p.reflectEnabled,
+        reflectTime: p.reflectTime,
+        streakEnabled: p.streakEnabled,
+        streakTime: p.streakTime,
+      });
+    } catch {
+      // Scheduling is best-effort — never block onboarding on it.
+    }
   }, []);
+
+  /**
+   * "Allow and Save" on the config screen: write the settings, raise the
+   * native iOS/Android permission prompt, and schedule if it's granted.
+   *
+   * Settings are saved either way — a denial shouldn't discard the window the
+   * user just configured, and it stays there for when they enable
+   * notifications later from Settings.
+   */
+  const handleSaveNotifications = useCallback(
+    async (cfg: NotificationConfig) => {
+      setPreferences({
+        notificationCount: cfg.count,
+        notificationStartTime: cfg.startTime,
+        notificationEndTime: cfg.endTime,
+      });
+
+      const granted = await requestPermissions();
+      setNotifGranted(granted);
+      setPreferences({ notificationsEnabled: granted });
+
+      if (granted) await scheduleFromStore();
+      return granted;
+    },
+    [setPreferences, scheduleFromStore],
+  );
+
+  /**
+   * Retry from the fallback screen. `requestPermissions` returns false without
+   * prompting once the OS status is 'denied', so a second in-app prompt is
+   * impossible — deep-link to system settings instead.
+   */
+  const handleRetryNotifications = useCallback(async () => {
+    const status = await getPermissionStatus();
+
+    if (status === 'denied') {
+      await Linking.openSettings();
+      return false;
+    }
+
+    const granted = await requestPermissions();
+    setNotifGranted(granted);
+    setPreferences({ notificationsEnabled: granted });
+    if (granted) await scheduleFromStore();
+    return granted;
+  }, [setPreferences, scheduleFromStore]);
+
+  /** Picks up a grant made in system settings after returning to the app. */
+  const handlePermissionRecheck = useCallback(async () => {
+    const status = await getPermissionStatus();
+    const granted = status === 'granted';
+    if (!granted) return false;
+
+    setNotifGranted(true);
+    setPreferences({ notificationsEnabled: true });
+    await scheduleFromStore();
+    return true;
+  }, [setPreferences, scheduleFromStore]);
 
   const handleThemeSelect = useCallback(
     (id: string) => {
@@ -313,8 +386,7 @@ export default function OnboardingScreen() {
       case 'notification-config':
         return (
           <NotificationConfigScreen
-            value={notif}
-            onChange={setNotif}
+            onSave={handleSaveNotifications}
             next={advance}
             back={back}
             progress={progress}
@@ -324,7 +396,8 @@ export default function OnboardingScreen() {
       case 'notification-permission':
         return (
           <NotificationPermissionScreen
-            onAllow={handleAllowNotifications}
+            onRetry={handleRetryNotifications}
+            onRecheck={handlePermissionRecheck}
             next={advance}
             back={back}
             progress={progress}
