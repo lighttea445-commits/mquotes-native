@@ -141,7 +141,7 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
   {
     id: 'what-are-quotes',
     kind: 'statement',
-    text: 'Quotes are short phrases you repeat to yourself',
+    text: 'Discipline starts with what you tell yourself',
   },
 
   {
@@ -163,7 +163,7 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
   {
     id: 'repetition',
     kind: 'statement',
-    text: 'Through daily repetition, you can change your beliefs and your mindset',
+    text: 'Motivation gets you started. Repetition is what makes it stick.',
   },
 
   { id: 'notification-config',     kind: 'bespoke' },
@@ -172,7 +172,7 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
   {
     id: 'lets-see',
     kind: 'statement',
-    text: "Let's see what quotes you need right now…",
+    text: "Let's find what's getting in your way",
   },
 
   // ── Act III — Emotional state ─────────────────────────────────────────────
@@ -211,7 +211,7 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
   {
     id: 'studies-show',
     kind: 'statement',
-    text: 'Studies show daily quotes boost self-confidence, resilience, and overall well-being',
+    text: "Discipline isn't a feeling. It's what you do when the feeling's gone.",
   },
 
   {
@@ -234,7 +234,7 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
   {
     id: 'couple-of-weeks',
     kind: 'statement',
-    text: "You'll see results in a couple of weeks, practicing just a few minutes a day",
+    text: "A few minutes a day. That's how discipline gets built.",
   },
 
   // ── Act IV — Commitment ───────────────────────────────────────────────────
