@@ -22,7 +22,7 @@ import { OB, ON_GOLD } from '../tokens';
 const MIN_COUNT = 0;
 const MAX_COUNT = 20;
 /** Slider knob diameter — also halved to centre it on the fill. */
-const THUMB = 19;
+const THUMB = 18;
 
 export interface NotificationConfig {
   count: number;
@@ -322,28 +322,28 @@ const nc = StyleSheet.create({
   root: { flex: 1 },
   safe: { flex: 1 },
   heads: { paddingHorizontal: OB.gutter, paddingTop: 20, paddingBottom: 28 },
-  headline: { fontSize: 24, lineHeight: 31, textAlign: 'center' },
-  subhead: { fontSize: 13, lineHeight: 18, textAlign: 'center', marginTop: 10 },
+  headline: { fontSize: 23, lineHeight: 30, textAlign: 'center' },
+  subhead: { fontSize: 12, lineHeight: 17, textAlign: 'center', marginTop: 10 },
   scroll: { flex: 1 },
   // Scrolls rather than compressing — three cards plus two buttons overflow a
   // shorter phone, and squeezing them was what read as cramped.
   body: { paddingHorizontal: OB.gutter, paddingBottom: 12, gap: 20 },
   footer: { paddingTop: 8, paddingBottom: 12 },
 
-  preview: { flexDirection: 'row', gap: 14, borderRadius: 17, borderWidth: 1, padding: 18 },
-  avatar: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  preview: { flexDirection: 'row', gap: 14, borderRadius: 16, borderWidth: 1, padding: 18 },
+  avatar: { width: 33, height: 33, borderRadius: 16.5, alignItems: 'center', justifyContent: 'center' },
   avatarText: { fontSize: 15, color: ON_GOLD },
   previewText: { flex: 1 },
   previewApp: { fontSize: 11, fontWeight: '600' },
-  previewBody: { fontSize: 12, lineHeight: 17, marginTop: 4 },
+  previewBody: { fontSize: 11, lineHeight: 16, marginTop: 4 },
 
-  card: { borderRadius: 17, borderWidth: 1, paddingHorizontal: 20, paddingVertical: 18 },
+  card: { borderRadius: 16, borderWidth: 1, paddingHorizontal: 20, paddingVertical: 18 },
   cardRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  cardLabel: { fontSize: 13 },
-  cardValue: { fontSize: 13, fontWeight: '600' },
+  cardLabel: { fontSize: 12 },
+  cardValue: { fontSize: 12, fontWeight: '600' },
   bound: { fontSize: 10 },
 
-  trackHit: { height: 31, justifyContent: 'center', marginVertical: 10 },
+  trackHit: { height: 30, justifyContent: 'center', marginVertical: 10 },
   track: { height: 4, borderRadius: 2, overflow: 'hidden' },
   trackFill: { height: 4, borderRadius: 2 },
   thumb: { position: 'absolute', width: THUMB, height: THUMB, borderRadius: THUMB / 2 },
@@ -355,7 +355,7 @@ const nc = StyleSheet.create({
     paddingVertical: 16,
   },
   timePill: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 10 },
-  timeText: { fontSize: 13, fontWeight: '600' },
+  timeText: { fontSize: 12, fontWeight: '600' },
 
   pickerBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
   pickerSheet: { paddingBottom: 32, borderTopLeftRadius: 24, borderTopRightRadius: 24 },
