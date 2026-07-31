@@ -33,6 +33,8 @@ interface Props {
    * Resolves to whether permission was granted.
    */
   onSave: (v: NotificationConfig) => Promise<boolean>;
+  /** Keeps the settings but asks for nothing — the flow then offers a retry. */
+  onSkip: (v: NotificationConfig) => void;
   next: () => void;
   back?: () => void;
   progress?: number;
@@ -58,7 +60,7 @@ function dateToHHMM(d: Date): string {
  *
  * "Allow and Save" raises the native iOS/Android permission prompt.
  */
-export function NotificationConfigScreen({ onSave, next, back, progress }: Props) {
+export function NotificationConfigScreen({ onSave, onSkip, next, back, progress }: Props) {
   const theme = useTheme();
   const haptics = useHaptics();
   const prefs = useAppStore((s) => s.preferences);
@@ -91,6 +93,11 @@ export function NotificationConfigScreen({ onSave, next, back, progress }: Props
       next();
     }
   }, [onSave, value, next]);
+
+  const handleSkip = useCallback(() => {
+    onSkip(value);
+    next();
+  }, [onSkip, value, next]);
 
   const setCount = useCallback(
     (n: number) => {
@@ -235,11 +242,14 @@ export function NotificationConfigScreen({ onSave, next, back, progress }: Props
           </View>
         </View>
 
-        <ContinueButton
-          onPress={handleSave}
-          label={saving ? 'Saving…' : 'Allow and Save'}
-          disabled={saving}
-        />
+        <View style={nc.footer}>
+          <ContinueButton
+            onPress={handleSave}
+            label={saving ? 'Asking…' : 'Allow'}
+            disabled={saving}
+          />
+          <ContinueButton onPress={handleSkip} label="Skip" variant="ghost" disabled={saving} />
+        </View>
 
         {picker !== null &&
           (Platform.OS === 'ios' ? (
@@ -302,6 +312,7 @@ const nc = StyleSheet.create({
   headline: { fontSize: 28, lineHeight: 36, textAlign: 'center' },
   subhead: { fontSize: 15, lineHeight: 21, textAlign: 'center', marginTop: 10 },
   body: { flex: 1, paddingHorizontal: OB.gutter, gap: 16 },
+  footer: { paddingBottom: 12 },
 
   preview: { flexDirection: 'row', gap: 12, borderRadius: 20, borderWidth: 1, padding: 16 },
   avatar: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },

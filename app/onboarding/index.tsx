@@ -221,6 +221,24 @@ export default function OnboardingScreen() {
   );
 
   /**
+   * "Skip" on the config screen: keep the window the user set up, but raise no
+   * prompt and enable nothing. Leaving notifGranted false means the flow shows
+   * the "Don't miss your daily quotes!" screen next, which is the retry.
+   */
+  const handleSkipNotifications = useCallback(
+    (cfg: NotificationConfig) => {
+      setPreferences({
+        notificationCount: cfg.count,
+        notificationStartTime: cfg.startTime,
+        notificationEndTime: cfg.endTime,
+        notificationsEnabled: false,
+      });
+      notifGranted.current = false;
+    },
+    [setPreferences],
+  );
+
+  /**
    * Retry from the fallback screen. `requestPermissions` returns false without
    * prompting once the OS status is 'denied', so a second in-app prompt is
    * impossible — deep-link to system settings instead.
@@ -387,6 +405,7 @@ export default function OnboardingScreen() {
         return (
           <NotificationConfigScreen
             onSave={handleSaveNotifications}
+            onSkip={handleSkipNotifications}
             next={advance}
             back={back}
             progress={progress}
