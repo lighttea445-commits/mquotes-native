@@ -115,9 +115,15 @@ export default function OnboardingScreen() {
 
   // ── Completion ────────────────────────────────────────────────────────────
 
+  /**
+   * The single exit from onboarding. The chosen theme is applied here rather
+   * than on selection, so picking one doesn't restyle the remaining onboarding
+   * screens — it reveals when the user lands in the app.
+   */
   const finish = useCallback(() => {
+    setTheme(themeId);
     router.replace('/');
-  }, [router]);
+  }, [router, setTheme, themeId]);
 
   /**
    * Persists every answer, then schedules notifications if permission was
@@ -245,14 +251,11 @@ export default function OnboardingScreen() {
     return true;
   }, [setPreferences, scheduleFromStore]);
 
-  const handleThemeSelect = useCallback(
-    (id: string) => {
-      setLocalThemeId(id);
-      // Applied immediately so every later screen renders in the user's choice.
-      setTheme(id);
-    },
-    [setTheme],
-  );
+  /**
+   * Held locally until `finish`. The grid still previews each theme in its own
+   * colours, so the choice is visible without changing the screen around it.
+   */
+  const handleThemeSelect = useCallback((id: string) => setLocalThemeId(id), []);
 
   /**
    * The paywall step has no UI of its own — it raises the RevenueCat sheet.
