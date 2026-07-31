@@ -23,8 +23,9 @@ type Props = { options: OnboardingOption[] } & (
  * Selected rows fill with `goldButton`, so their label and indicator flip to
  * ON_GOLD — a gold-on-gold indicator would be invisible.
  *
- * Renders rows only; the caller owns scrolling and the Continue button. Single
- * mode has no CTA by design (the orchestrator auto-advances on change).
+ * Renders rows only. The caller owns scrolling and the Continue button, and
+ * every question screen has one — selecting never advances on its own, so the
+ * user always sees their choice register before moving on.
  */
 export function OptionList(props: Props) {
   const { options, mode } = props;

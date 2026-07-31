@@ -313,17 +313,13 @@ export default function OnboardingScreen() {
           progress={progress}
           onBack={back}
           onSkip={skip}
+          footer={<ContinueButton onPress={advance} disabled={value === undefined} />}
         >
           <OptionList
             mode="single"
             options={s.options ?? []}
             value={value}
-            onChange={(v) => {
-              setAnswer(key, s.numeric ? Number(v) : v);
-              // Single-select auto-advances — matches the reference and halves
-              // the taps across the ~15 single-choice screens.
-              advance();
-            }}
+            onChange={(v) => setAnswer(key, s.numeric ? Number(v) : v)}
           />
         </OnboardingLayout>
       );
