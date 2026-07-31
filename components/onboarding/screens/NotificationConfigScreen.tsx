@@ -7,6 +7,7 @@ import {
   PanResponder,
   Platform,
   Modal,
+  ScrollView,
   LayoutChangeEvent,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -20,6 +21,8 @@ import { OB, ON_GOLD } from '../tokens';
 
 const MIN_COUNT = 0;
 const MAX_COUNT = 20;
+/** Slider knob diameter — also halved to centre it on the fill. */
+const THUMB = 17;
 
 export interface NotificationConfig {
   count: number;
@@ -58,7 +61,8 @@ function dateToHHMM(d: Date): string {
  * four-card surface with drill-downs and Pro gating — but backed by the same
  * store fields, so what's set here is what the Reminders screen shows later.
  *
- * "Allow and Save" raises the native iOS/Android permission prompt.
+ * "Allow" raises the native iOS/Android permission prompt; "Skip" keeps the
+ * settings and asks for nothing, leaving the retry screen to follow.
  */
 export function NotificationConfigScreen({ onSave, onSkip, next, back, progress }: Props) {
   const theme = useTheme();
@@ -116,6 +120,11 @@ export function NotificationConfigScreen({ onSave, onSkip, next, back, progress 
       PanResponder.create({
         onStartShouldSetPanResponder: () => true,
         onMoveShouldSetPanResponder: () => true,
+        // The track sits inside a ScrollView, which would otherwise claim the
+        // gesture the moment the drag picks up any vertical component.
+        onStartShouldSetPanResponderCapture: () => true,
+        onMoveShouldSetPanResponderCapture: () => true,
+        onPanResponderTerminationRequest: () => false,
         onPanResponderGrant: (e) => {
           if (!widthRef.current) return;
           setCount((e.nativeEvent.locationX / widthRef.current) * MAX_COUNT);
@@ -160,7 +169,11 @@ export function NotificationConfigScreen({ onSave, onSkip, next, back, progress 
           </Text>
         </View>
 
-        <View style={nc.body}>
+        <ScrollView
+          style={nc.scroll}
+          contentContainerStyle={nc.body}
+          showsVerticalScrollIndicator={false}
+        >
           {/* Notification preview */}
           <View style={[nc.preview, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             <View style={[nc.avatar, { backgroundColor: theme.goldButton }]}>
@@ -201,7 +214,7 @@ export function NotificationConfigScreen({ onSave, onSkip, next, back, progress 
               <View
                 style={[
                   nc.thumb,
-                  { left: Math.max(0, fillWidth - 11), backgroundColor: theme.gold },
+                  { left: Math.max(0, fillWidth - THUMB / 2), backgroundColor: theme.gold },
                 ]}
                 pointerEvents="none"
               />
@@ -240,7 +253,7 @@ export function NotificationConfigScreen({ onSave, onSkip, next, back, progress 
               </TouchableOpacity>
             ))}
           </View>
-        </View>
+        </ScrollView>
 
         <View style={nc.footer}>
           <ContinueButton
@@ -308,38 +321,41 @@ export function NotificationConfigScreen({ onSave, onSkip, next, back, progress 
 const nc = StyleSheet.create({
   root: { flex: 1 },
   safe: { flex: 1 },
-  heads: { paddingHorizontal: OB.gutter, paddingTop: 20, paddingBottom: 24 },
-  headline: { fontSize: 28, lineHeight: 36, textAlign: 'center' },
-  subhead: { fontSize: 15, lineHeight: 21, textAlign: 'center', marginTop: 10 },
-  body: { flex: 1, paddingHorizontal: OB.gutter, gap: 16 },
-  footer: { paddingBottom: 12 },
+  heads: { paddingHorizontal: OB.gutter, paddingTop: 20, paddingBottom: 28 },
+  headline: { fontSize: 22, lineHeight: 28, textAlign: 'center' },
+  subhead: { fontSize: 12, lineHeight: 18, textAlign: 'center', marginTop: 10 },
+  scroll: { flex: 1 },
+  // Scrolls rather than compressing — three cards plus two buttons overflow a
+  // shorter phone, and squeezing them was what read as cramped.
+  body: { paddingHorizontal: OB.gutter, paddingBottom: 12, gap: 20 },
+  footer: { paddingTop: 8, paddingBottom: 12 },
 
-  preview: { flexDirection: 'row', gap: 12, borderRadius: 20, borderWidth: 1, padding: 16 },
-  avatar: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-  avatarText: { fontSize: 18, color: ON_GOLD },
+  preview: { flexDirection: 'row', gap: 11, borderRadius: 16, borderWidth: 1, padding: 13 },
+  avatar: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { fontSize: 13, color: ON_GOLD },
   previewText: { flex: 1 },
-  previewApp: { fontSize: 13, fontWeight: '600' },
-  previewBody: { fontSize: 14, lineHeight: 20, marginTop: 4 },
+  previewApp: { fontSize: 11, fontWeight: '600' },
+  previewBody: { fontSize: 11, lineHeight: 16, marginTop: 4 },
 
-  card: { borderRadius: 20, borderWidth: 1, padding: 18 },
+  card: { borderRadius: 16, borderWidth: 1, paddingHorizontal: 16, paddingVertical: 13 },
   cardRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  cardLabel: { fontSize: 15 },
-  cardValue: { fontSize: 15, fontWeight: '600' },
-  bound: { fontSize: 12 },
+  cardLabel: { fontSize: 12 },
+  cardValue: { fontSize: 12, fontWeight: '600' },
+  bound: { fontSize: 10 },
 
-  trackHit: { height: 36, justifyContent: 'center', marginVertical: 6 },
+  trackHit: { height: 30, justifyContent: 'center', marginVertical: 7 },
   track: { height: 4, borderRadius: 2, overflow: 'hidden' },
   trackFill: { height: 4, borderRadius: 2 },
-  thumb: { position: 'absolute', width: 22, height: 22, borderRadius: 11 },
+  thumb: { position: 'absolute', width: THUMB, height: THUMB, borderRadius: THUMB / 2 },
 
   timeRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 14,
+    paddingVertical: 12,
   },
-  timePill: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12 },
-  timeText: { fontSize: 15, fontWeight: '600' },
+  timePill: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 10 },
+  timeText: { fontSize: 12, fontWeight: '600' },
 
   pickerBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
   pickerSheet: { paddingBottom: 32, borderTopLeftRadius: 24, borderTopRightRadius: 24 },
