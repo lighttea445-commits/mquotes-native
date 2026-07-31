@@ -96,7 +96,7 @@ const sp = StyleSheet.create({
   // Tail spacer is lighter than the gap above, settling the block a little
   // below the optical centre. Proportional, so it holds on any height.
   artWrap: { flex: 1, alignItems: 'center', justifyContent: 'flex-end' },
-  tailSpacer: { flex: 0.9 },
+  tailSpacer: { flex: 0.82 },
   // Fixed box so the sparkle viewBox and the wordmark stay in register.
   markBox: { width: 300, height: 120, alignItems: 'center', justifyContent: 'center' },
   wordmark: {
