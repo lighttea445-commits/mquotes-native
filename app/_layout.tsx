@@ -37,6 +37,7 @@ import {
 import {
   EBGaramond_400Regular,
   EBGaramond_700Bold,
+  EBGaramond_800ExtraBold,
 } from '@expo-google-fonts/eb-garamond';
 import {
   Nunito_400Regular,
@@ -303,6 +304,8 @@ export default function RootLayout() {
     DMSerifDisplay_400Regular_Italic,
     EBGaramond_400Regular,
     EBGaramond_700Bold,
+    // Splash wordmark only — see WORDMARK_FONT in SplashScreen.
+    EBGaramond_800ExtraBold,
     Nunito_400Regular,
     Nunito_600SemiBold,
     Raleway_300Light,

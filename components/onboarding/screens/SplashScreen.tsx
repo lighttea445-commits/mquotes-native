@@ -14,14 +14,14 @@ const MOTTO_PRIMARY = 'Evolve your mindset';
 const MOTTO_SECONDARY = 'Unlock discipline';
 
 /**
- * Wordmark face. Any of these are loaded in app/_layout.tsx:
- *   DMSerifDisplay_400Regular_Italic  — highest contrast, calligraphic (shipped)
- *   DMSerifDisplay_400Regular         — same face, upright
- *   EBGaramond_700Bold                — old-style, most ornate
+ * Wordmark face. All of these are loaded in app/_layout.tsx:
+ *   EBGaramond_800ExtraBold           — old-style, hooked terminals (shipped)
+ *   EBGaramond_700Bold                — same face, a shade lighter
+ *   DMSerifDisplay_400Regular_Italic  — highest contrast, calligraphic
  *   PlayfairDisplay_400Regular_Italic — matches the app's heading face
  *   Cormorant_700Bold                 — lightest, most delicate
  */
-const WORDMARK_FONT = 'DMSerifDisplay_400Regular_Italic';
+const WORDMARK_FONT = 'EBGaramond_800ExtraBold';
 
 /**
  * Cross-fades every 4s. One entry renders static; empty hides the block.
