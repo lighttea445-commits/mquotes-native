@@ -45,6 +45,13 @@ export interface UserPreferences {
   showAuthor: boolean;
 }
 
+/**
+ * How many quotes stay stripped back after onboarding. The quote screen shows
+ * only the goal pill, share and favourite until this many have been seen, then
+ * fades the rest of the interface in.
+ */
+export const QUOTES_BEFORE_REVEAL = 3;
+
 export interface StreakData {
   count: number;
   lastVisitDate: string; // ISO date string e.g. "2026-02-19"
@@ -54,6 +61,15 @@ export interface StreakData {
 interface AppState {
   preferences: UserPreferences;
   onboardingComplete: boolean;
+  /**
+   * Quotes seen since finishing onboarding, used to stage the first-run reveal
+   * on the quote screen.
+   *
+   * Undefined means "not a fresh finisher" — anyone who onboarded before this
+   * existed sees the full interface immediately rather than having chrome
+   * hidden from them retroactively.
+   */
+  postOnboardingQuoteViews?: number;
   streak: StreakData;
   showStreakBanner: boolean;
 
@@ -65,6 +81,8 @@ interface AppState {
   completeOnboarding: () => void;
   /** Replays onboarding on next launch without touching any user data. */
   restartOnboarding: () => void;
+  /** Counts a quote toward the first-run reveal. No-op once past the threshold. */
+  noteQuoteViewed: () => void;
   updateStreak: () => void;
   dismissStreakBanner: () => void;
   resetApp: () => void;
@@ -162,9 +180,17 @@ export const useAppStore = create<AppState>()(
           preferences: { ...state.preferences, name: name.slice(0, 50) },
         })),
 
-      completeOnboarding: () => set({ onboardingComplete: true }),
+      // Seeding the counter here is what opts a user into the staged reveal.
+      completeOnboarding: () => set({ onboardingComplete: true, postOnboardingQuoteViews: 0 }),
 
       restartOnboarding: () => set({ onboardingComplete: false }),
+
+      noteQuoteViewed: () => {
+        const seen = get().postOnboardingQuoteViews;
+        // Undefined = not staging; past the threshold = nothing left to reveal.
+        if (seen === undefined || seen > QUOTES_BEFORE_REVEAL) return;
+        set({ postOnboardingQuoteViews: seen + 1 });
+      },
 
       updateStreak: () => {
         const { streak } = get();

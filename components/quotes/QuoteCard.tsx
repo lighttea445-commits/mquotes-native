@@ -27,7 +27,7 @@ import { useRevenueCat } from '../../hooks/useRevenueCat';
 import { useFavoritesStore } from '../../store/useFavoritesStore';
 import { useHistoryStore } from '../../store/useHistoryStore';
 import { useMixStore } from '../../store/useMixStore';
-import { useAppStore } from '../../store/useAppStore';
+import { useAppStore, QUOTES_BEFORE_REVEAL } from '../../store/useAppStore';
 import { ApiQuote, convertApiQuote, fetchMultipleRandomQuotes, fetchQuotesByCategory, inferCategory } from '../../lib/quotesApi';
 import { useUserQuotesStore } from '../../store/useUserQuotesStore';
 import { useDeepLinkStore } from '../../store/useDeepLinkStore';
@@ -87,9 +87,37 @@ export function QuoteCard() {
   const bigHeartScale = useSharedValue(0);
   const bigHeartOpacity = useSharedValue(0);
 
+  // ── First-run reveal ──────────────────────────────────────────────────────
+  //
+  // Straight out of onboarding the screen is stripped to the goal pill, share
+  // and favourite so the core loop is the only thing on offer. Everything else
+  // fades in once QUOTES_BEFORE_REVEAL quotes have been seen.
+  const quoteViews = useAppStore((s) => s.postOnboardingQuoteViews);
+  const noteQuoteViewed = useAppStore((s) => s.noteQuoteViewed);
+  const chromeHidden = quoteViews !== undefined && quoteViews <= QUOTES_BEFORE_REVEAL;
+  const chromeOpacity = useSharedValue(chromeHidden ? 0 : 1);
+
+  useEffect(() => {
+    chromeOpacity.value = withTiming(chromeHidden ? 0 : 1, {
+      duration: 520,
+      easing: Easing.out(Easing.cubic),
+    });
+  }, [chromeHidden, chromeOpacity]);
+
+  const chromeStyle = useAnimatedStyle(() => ({ opacity: chromeOpacity.value }));
+
+  // Counts each distinct quote as it lands, including the first.
+  const countedRef = useRef<string | null>(null);
+
   const currentQuote = buffer[currentIndex] ?? null;
   const converted = currentQuote ? convertApiQuote(currentQuote) : null;
   const favorited = converted ? isFavorite(converted.id) : false;
+
+  useEffect(() => {
+    if (!converted?.id || countedRef.current === converted.id) return;
+    countedRef.current = converted.id;
+    noteQuoteViewed();
+  }, [converted?.id, noteQuoteViewed]);
 
   // Collection pill label + icon
   const activeCategoryName = activeCategory
@@ -492,6 +520,7 @@ export function QuoteCard() {
           </View>
 
           {/* Right: crown icon — gold if Pro, muted if free */}
+          <Animated.View style={chromeStyle} pointerEvents={chromeHidden ? 'none' : 'auto'}>
           <TouchableOpacity
             onPress={() => {
               if (hapticsEnabled) Haptics.selectionAsync();
@@ -507,6 +536,7 @@ export function QuoteCard() {
               color={isPro ? theme.gold : theme.textMuted}
             />
           </TouchableOpacity>
+          </Animated.View>
         </View>
 
         {/* ── QUOTE ONLY — this is what animates ── */}
@@ -545,7 +575,11 @@ export function QuoteCard() {
           </View>
         </Animated.View>
 
-        {/* ── CORNER BUTTONS: fixed — never animate ── */}
+        {/* ── CORNER BUTTONS + Reflect: hidden until the first-run reveal ── */}
+        <Animated.View
+          style={[StyleSheet.absoluteFill, chromeStyle]}
+          pointerEvents={chromeHidden ? 'none' : 'box-none'}
+        >
         <TouchableOpacity
           onPress={() => { if (hapticsEnabled) Haptics.selectionAsync(); modal ? modal.openSheet('categories') : router.push('/categories'); }}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -572,6 +606,7 @@ export function QuoteCard() {
 
         {/* Daily Reflect pill — centered bottom */}
         <DailyReflectPill />
+        </Animated.View>
 
       </View>
   );
