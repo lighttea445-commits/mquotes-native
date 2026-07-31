@@ -15,10 +15,14 @@ interface Props {
 }
 
 /**
- * Full-bleed centered statement — the pacing screens between question blocks.
+ * Full-bleed statement — the pacing screens between question blocks.
+ *
+ * The text sits slightly above the optical centre: the spacer below it is
+ * weighted heavier than the one above, which lifts the block by roughly 5% of
+ * the available height and scales with the screen instead of a fixed offset.
  *
  * The reference has no header on these; back and the progress bar are kept so
- * a 30-screen flow stays navigable and legible.
+ * a long flow stays navigable and legible.
  */
 export function StatementScreen({ text, onNext, onBack, progress, label = 'Continue' }: Props) {
   const theme = useTheme();
@@ -28,10 +32,12 @@ export function StatementScreen({ text, onNext, onBack, progress, label = 'Conti
       <SafeAreaView style={st.safe} edges={['top', 'bottom']}>
         <OnboardingHeader progress={progress} onBack={onBack} />
 
-        <View style={st.center}>
+        <View style={st.body}>
+          <View style={st.spacerTop} />
           <Text style={[st.text, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
             {text}
           </Text>
+          <View style={st.spacerBottom} />
         </View>
 
         <ContinueButton onPress={onNext} label={label} />
@@ -43,6 +49,8 @@ export function StatementScreen({ text, onNext, onBack, progress, label = 'Conti
 const st = StyleSheet.create({
   root: { flex: 1 },
   safe: { flex: 1 },
-  center: { flex: 1, justifyContent: 'center', paddingHorizontal: OB.gutter },
+  body: { flex: 1, paddingHorizontal: OB.gutter },
+  spacerTop: { flex: 1 },
+  spacerBottom: { flex: 1.25 },
   text: { fontSize: 32, lineHeight: 42, textAlign: 'center' },
 });
