@@ -3,8 +3,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../../hooks/useTheme';
 import { ContinueButton } from '../ContinueButton';
-import { AppMark } from '../art/AppMark';
-import { QuoteMark } from '../art/QuoteMark';
+import { QuoteHero } from '../art/QuoteMark';
 import { ReviewCarousel, type Review } from '../ReviewCarousel';
 import { OB } from '../tokens';
 
@@ -39,12 +38,10 @@ export function SplashScreen({ next }: Props) {
     <View style={[sp.root, { backgroundColor: theme.background }]}>
       <SafeAreaView style={sp.safe} edges={['top', 'bottom']}>
         <View style={sp.artWrap}>
-          <AppMark size={150} color={theme.text}>
-            {/* Swap this for your logo:
-                <Image source={require('../../../assets/icon.png')}
-                       style={{ width: '100%', height: '100%' }} resizeMode="contain" /> */}
-            <QuoteMark width={62} color={theme.text} />
-          </AppMark>
+          {/* Swap for your logo if you'd rather lead with the mark:
+              <Image source={require('../../../assets/icon.png')}
+                     style={{ width: 170, height: 170 }} resizeMode="contain" /> */}
+          <QuoteHero width={260} color={theme.text} />
         </View>
 
         <View style={sp.mottoWrap}>
