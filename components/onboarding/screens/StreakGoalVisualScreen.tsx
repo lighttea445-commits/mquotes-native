@@ -8,17 +8,15 @@ import { ContinueButton } from '../ContinueButton';
 import { OB } from '../tokens';
 
 interface Props {
-  /** Goal chosen on the previous step — 3, 7 or 21. */
-  goalDays?: number;
   next: () => void;
   back?: () => void;
   progress?: number;
 }
 
-/** Day 1 of the streak, reflecting the goal the user just picked. */
+/** Day 1 of the streak the user just committed to on the previous step. */
 const DAY_ONE: boolean[] = [true, false, false, false, false, false, false];
 
-export function StreakGoalVisualScreen({ goalDays, next, back, progress }: Props) {
+export function StreakGoalVisualScreen({ next, back, progress }: Props) {
   const theme = useTheme();
 
   return (
@@ -35,9 +33,7 @@ export function StreakGoalVisualScreen({ goalDays, next, back, progress }: Props
             Build a daily quote habit that sticks
           </Text>
           <Text style={[sg.subhead, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-            {goalDays
-              ? `Build a streak, one day at a time — ${goalDays} to go`
-              : 'Build a streak, one day at a time'}
+            Build a streak, one day at a time
           </Text>
         </View>
 

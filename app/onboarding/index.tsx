@@ -405,14 +405,7 @@ export default function OnboardingScreen() {
         );
 
       case 'streak-visual':
-        return (
-          <StreakGoalVisualScreen
-            goalDays={answers.streakGoalDays as number | undefined}
-            next={advance}
-            back={back}
-            progress={progress}
-          />
-        );
+        return <StreakGoalVisualScreen next={advance} back={back} progress={progress} />;
 
       case 'theme':
         return (
