@@ -48,8 +48,7 @@ import {
   Raleway_400Regular,
   Raleway_600SemiBold,
 } from '@expo-google-fonts/raleway';
-import { View, ActivityIndicator, Text, ScrollView, Pressable, Platform, AppState } from 'react-native';
-import type { ErrorBoundaryProps } from 'expo-router';
+import { View, ActivityIndicator, Text, Pressable, Platform, AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAppStore } from '../store/useAppStore';
 import { useTheme } from '../hooks/useTheme';
@@ -449,40 +448,3 @@ export default function RootLayout() {
   );
 }
 
-// ── On-device error display ─────────────────────────────────────────────────
-//
-// Expo Router renders this instead of the tree when a render throws. Without
-// it, an unhandled JS error in a production build shows nothing at all — the
-// blank/black screen we've been chasing — because there is no dev redbox to
-// surface it.
-//
-// This makes the failure readable directly on the phone, which matters because
-// reading iOS device logs requires a Mac.
-export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
-  return (
-    <View style={{ flex: 1, backgroundColor: '#1A0A0A', paddingHorizontal: 20, paddingTop: 72, paddingBottom: 28 }}>
-      <Text style={{ color: '#FF6B6B', fontSize: 20, fontWeight: '700', marginBottom: 4 }}>
-        Startup error
-      </Text>
-      <Text style={{ color: '#8A6A6A', fontSize: 12, marginBottom: 16 }}>
-        Screenshot this and send it over.
-      </Text>
-
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 16 }}>
-        <Text selectable style={{ color: '#FFD7D7', fontSize: 15, fontWeight: '600', marginBottom: 14 }}>
-          {error?.name ? `${error.name}: ` : ''}{error?.message ?? 'Unknown error'}
-        </Text>
-        <Text selectable style={{ color: '#C9A0A0', fontSize: 11, lineHeight: 16 }}>
-          {error?.stack ?? 'No stack trace available.'}
-        </Text>
-      </ScrollView>
-
-      <Pressable
-        onPress={retry}
-        style={{ backgroundColor: '#B8975A', borderRadius: 99, paddingVertical: 16, alignItems: 'center' }}
-      >
-        <Text style={{ color: '#1A1208', fontSize: 16, fontWeight: '600' }}>Retry</Text>
-      </Pressable>
-    </View>
-  );
-}

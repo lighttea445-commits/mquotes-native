@@ -116,11 +116,21 @@ describe('requestPermissions', () => {
     expect(mockRequestPermissions).not.toHaveBeenCalled();
   });
 
-  it('returns false when denied without prompting again', async () => {
-    mockGetPermissions.mockResolvedValueOnce({ status: 'denied' });
+  it('returns false without prompting when hard-denied', async () => {
+    mockGetPermissions.mockResolvedValueOnce({ status: 'denied', canAskAgain: false });
     const { requestPermissions } = require('../../lib/notifications');
     expect(await requestPermissions()).toBe(false);
     expect(mockRequestPermissions).not.toHaveBeenCalled();
+  });
+
+  // Android keeps re-prompting until the user hard-denies. Gating on the
+  // status alone meant one early refusal suppressed the dialog forever.
+  it('still prompts when denied but re-askable', async () => {
+    mockGetPermissions.mockResolvedValueOnce({ status: 'denied', canAskAgain: true });
+    mockRequestPermissions.mockResolvedValueOnce({ status: 'granted' });
+    const { requestPermissions } = require('../../lib/notifications');
+    expect(await requestPermissions()).toBe(true);
+    expect(mockRequestPermissions).toHaveBeenCalled();
   });
 
   it('prompts and returns true when undetermined and user grants', async () => {
