@@ -9,23 +9,23 @@ import { ReviewCarousel, type Review } from '../ReviewCarousel';
 import { OB } from '../tokens';
 
 // ─── Content ────────────────────────────────────────────────────────────────
-// The only things to edit on this screen. Both blocks hide themselves when
-// empty, so the layout stays correct until you have real numbers to show.
+// The only things to edit on this screen.
+//
+// ⚠ PLACEHOLDER VALUES — replace both before release. Invented install counts
+// and reviews breach Play Store policy. Set HEADLINE_STAT to null and REVIEWS
+// to [] to hide those blocks entirely; the layout stays correct either way.
 
-/**
- * Headline stat above the tagline, e.g. '+20 million'.
- *
- * Left null deliberately — the reference claims "+20 million lives changed",
- * and an invented install count is a Play Store policy risk. Set it to a real,
- * verifiable figure and the laurels appear with it.
- */
-const HEADLINE_STAT: string | null = null;
-const STAT_LABEL = 'Lives changed';
+const HEADLINE_STAT: string | null = '+50 thousand';
+const STAT_LABEL = 'Days brightened';
 
 const TAGLINE = 'Transform your mindset with powerful quotes';
 
-/** Real reviews only. The carousel cross-fades between them every 4s. */
-const REVIEWS: Review[] = [];
+/** Cross-fades every 4s. One entry renders static; empty hides the block. */
+const REVIEWS: Review[] = [
+  { text: 'One line in the morning and the whole day lands differently.' },
+  { text: 'The only app on my home screen I actually stop and read.' },
+  { text: 'Beautiful, quiet, and never asks for my attention twice.' },
+];
 
 // ────────────────────────────────────────────────────────────────────────────
 

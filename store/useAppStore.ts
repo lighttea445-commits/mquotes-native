@@ -63,6 +63,8 @@ interface AppState {
   setMood: (moodId: string | null) => void;
   setName: (name: string) => void;
   completeOnboarding: () => void;
+  /** Replays onboarding on next launch without touching any user data. */
+  restartOnboarding: () => void;
   updateStreak: () => void;
   dismissStreakBanner: () => void;
   resetApp: () => void;
@@ -161,6 +163,8 @@ export const useAppStore = create<AppState>()(
         })),
 
       completeOnboarding: () => set({ onboardingComplete: true }),
+
+      restartOnboarding: () => set({ onboardingComplete: false }),
 
       updateStreak: () => {
         const { streak } = get();

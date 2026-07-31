@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Linking } from 'react-native';
 import { useRouter } from 'expo-router';
 import Animated, {
@@ -57,10 +57,14 @@ export default function OnboardingScreen() {
   const [showPaywall, setShowPaywall] = useState(false);
 
   /**
-   * Whether the OS has granted notification permission. Drives whether the
+   * Whether the OS has granted notification permission — drives whether the
    * "Don't miss your daily quotes!" fallback screen is shown at all.
+   *
+   * Held in a ref, not state. The config screen grants permission and calls
+   * `next()` in the same tick, so a state value would still read `false` in
+   * that closure and land on the very screen the grant should skip.
    */
-  const [notifGranted, setNotifGranted] = useState(false);
+  const notifGranted = useRef(false);
 
   const screenOpacity = useSharedValue(1);
   const screenStyle = useAnimatedStyle(() => ({ opacity: screenOpacity.value }));
@@ -70,15 +74,12 @@ export default function OnboardingScreen() {
    * today: it exists to recover from a denial, so granting on the config
    * screen skips straight past it.
    */
-  const isVisible = useCallback(
-    (index: number) => {
-      const s = ONBOARDING_STEPS[index];
-      if (!s) return false;
-      if (s.id === 'notification-permission') return !notifGranted;
-      return true;
-    },
-    [notifGranted],
-  );
+  const isVisible = useCallback((index: number) => {
+    const s = ONBOARDING_STEPS[index];
+    if (!s) return false;
+    if (s.id === 'notification-permission') return !notifGranted.current;
+    return true;
+  }, []);
 
   const seek = useCallback(
     (from: number, dir: 1 | -1) => {
@@ -210,7 +211,7 @@ export default function OnboardingScreen() {
       });
 
       const granted = await requestPermissions();
-      setNotifGranted(granted);
+      notifGranted.current = granted;
       setPreferences({ notificationsEnabled: granted });
 
       if (granted) await scheduleFromStore();
@@ -233,7 +234,7 @@ export default function OnboardingScreen() {
     }
 
     const granted = await requestPermissions();
-    setNotifGranted(granted);
+    notifGranted.current = granted;
     setPreferences({ notificationsEnabled: granted });
     if (granted) await scheduleFromStore();
     return granted;
@@ -245,7 +246,7 @@ export default function OnboardingScreen() {
     const granted = status === 'granted';
     if (!granted) return false;
 
-    setNotifGranted(true);
+    notifGranted.current = true;
     setPreferences({ notificationsEnabled: true });
     await scheduleFromStore();
     return true;

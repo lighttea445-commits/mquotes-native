@@ -1,6 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import Animated, { useSharedValue, useAnimatedStyle, withTiming, runOnJS } from 'react-native-reanimated';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, StyleSheet, Animated } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { useTheme } from '../../hooks/useTheme';
 
@@ -51,24 +50,33 @@ export function StarRow({ count = 5, size = 18 }: { count?: number; size?: numbe
 export function ReviewCarousel({ reviews, interval = 4000, stars = 5 }: Props) {
   const theme = useTheme();
   const [index, setIndex] = useState(0);
-  const opacity = useSharedValue(1);
 
-  const style = useAnimatedStyle(() => ({ opacity: opacity.value }));
+  // RN Animated rather than Reanimated: the cross-fade needs a JS callback
+  // between the two halves, and Reanimated's completion callback is a worklet
+  // — a state updater can't be handed across that boundary.
+  const opacity = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     if (reviews.length < 2) return;
 
     const timer = setInterval(() => {
-      opacity.value = withTiming(0, { duration: 320 }, (finished) => {
+      Animated.timing(opacity, {
+        toValue: 0,
+        duration: 320,
+        useNativeDriver: true,
+      }).start(({ finished }) => {
         if (!finished) return;
-        runOnJS(setIndex)((i: number) => (i + 1) % reviews.length);
-        opacity.value = withTiming(1, { duration: 320 });
+        setIndex((i) => (i + 1) % reviews.length);
+        Animated.timing(opacity, {
+          toValue: 1,
+          duration: 320,
+          useNativeDriver: true,
+        }).start();
       });
     }, interval);
 
     return () => clearInterval(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reviews.length, interval]);
+  }, [reviews.length, interval, opacity]);
 
   if (reviews.length === 0) return null;
 
@@ -78,7 +86,7 @@ export function ReviewCarousel({ reviews, interval = 4000, stars = 5 }: Props) {
     <View style={rc.wrap}>
       <StarRow count={stars} />
 
-      <Animated.View style={[rc.textWrap, style]}>
+      <Animated.View style={[rc.textWrap, { opacity }]}>
         <Text style={[rc.text, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
           {`"${review.text}"`}
         </Text>

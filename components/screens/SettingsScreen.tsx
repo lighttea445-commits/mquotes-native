@@ -30,7 +30,7 @@ export default function SettingsScreen({ onClose, onBack }: { onClose?: () => vo
   const theme = useTheme();
   const router = useRouter();
   const modal = useModal();
-  const { preferences, setName, setPreferences, resetApp } = useAppStore();
+  const { preferences, setName, setPreferences, resetApp, restartOnboarding } = useAppStore();
   const [nameValue, setNameValue] = useState(preferences.name || '');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const clearFavorites = useFavoritesStore((s) => s.clearFavorites);
@@ -204,6 +204,28 @@ export default function SettingsScreen({ onClose, onBack }: { onClose?: () => vo
               <MaterialCommunityIcons name="chevron-right" size={18} color={theme.textMuted} />
             </TouchableOpacity>
           </View>
+
+          {/* Dev tools — stripped from release builds */}
+          {__DEV__ && (
+            <View style={styles.section}>
+              <Text style={[styles.sectionLabel, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+                DEVELOPER
+              </Text>
+              <TouchableOpacity
+                style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border }]}
+                onPress={() => {
+                  restartOnboarding();
+                  router.replace('/onboarding');
+                }}
+              >
+                <MaterialCommunityIcons name="restart" size={20} color={theme.gold} />
+                <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
+                  Replay Onboarding
+                </Text>
+                <MaterialCommunityIcons name="chevron-right" size={18} color={theme.textMuted} />
+              </TouchableOpacity>
+            </View>
+          )}
 
           {/* Danger zone */}
           <View style={styles.section}>
