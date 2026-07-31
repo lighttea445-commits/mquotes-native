@@ -28,9 +28,9 @@ const WORDMARK_FONT = FONTS.display.bold;
  * Play Store policy.
  */
 const REVIEWS: Review[] = [
-  { text: 'One line in the morning and the whole day lands differently.' },
-  { text: 'The only app on my home screen I actually stop and read.' },
-  { text: 'Beautiful, quiet, and never asks for my attention twice.' },
+  { text: "I don't know where I'd be without this app." },
+  { text: 'This app has genuinely changed my life.' },
+  { text: 'This app completely changed how I think.' },
 ];
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -81,6 +81,9 @@ export function SplashScreen({ next }: Props) {
           <ReviewCarousel reviews={REVIEWS} />
         </View>
 
+        {/* Absorbs the slack, so the block above settles above centre. */}
+        <View style={sp.tailSpacer} />
+
         <ContinueButton onPress={next} label="Get started" />
       </SafeAreaView>
     </View>
@@ -90,7 +93,10 @@ export function SplashScreen({ next }: Props) {
 const sp = StyleSheet.create({
   root: { flex: 1 },
   safe: { flex: 1 },
-  artWrap: { flex: 1.15, alignItems: 'center', justifyContent: 'flex-end' },
+  // Top gap is lighter than the tail spacer below, which lifts the whole
+  // block above the optical centre. Proportional, so it holds on any height.
+  artWrap: { flex: 0.85, alignItems: 'center', justifyContent: 'flex-end' },
+  tailSpacer: { flex: 1.25 },
   // Fixed box so the sparkle viewBox and the wordmark stay in register.
   markBox: { width: 300, height: 120, alignItems: 'center', justifyContent: 'center' },
   wordmark: {
@@ -102,5 +108,5 @@ const sp = StyleSheet.create({
   mottoWrap: { alignItems: 'center', paddingHorizontal: OB.gutter, paddingTop: 34 },
   mottoPrimary: { fontSize: 30, lineHeight: 38, textAlign: 'center' },
   mottoSecondary: { fontSize: 30, lineHeight: 38, textAlign: 'center' },
-  reviews: { flex: 1, justifyContent: 'center', paddingHorizontal: OB.gutter },
+  reviews: { paddingTop: 30, paddingHorizontal: OB.gutter },
 });
