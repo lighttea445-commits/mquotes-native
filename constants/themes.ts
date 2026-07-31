@@ -386,6 +386,21 @@ export const THEMES: Theme[] = [
 
 export const DEFAULT_THEME_ID = 'minimal';
 
+/**
+ * The six themes offered during onboarding, before the paywall.
+ *
+ * Picking one here is free. Switching themes later inside the app stays
+ * Pro-gated by `ThemesScreen`.
+ */
+export const ONBOARDING_THEME_IDS = [
+  'minimal',
+  'seashore',
+  'ember',
+  'crescent',
+  'botanical',
+  'lunar',
+] as const;
+
 export function getTheme(id: string): Theme {
   return THEMES.find(t => t.id === id) ?? THEMES[0];
 }

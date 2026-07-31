@@ -29,6 +29,18 @@ export interface UserPreferences {
   age?: string; // age range e.g. "25-34"
   gender?: string; // e.g. "Male", "Female", "Other", "Prefer not to say"
   joyCategories?: string[]; // quote categories the user said bring them joy
+  // ── Onboarding answers (all optional; absent on installs from before the rebuild) ──
+  attributionSource?: string;  // "TikTok" | "Instagram" | … — where they found the app
+  zodiac?: string;             // "Capricorn" … "Sagittarius"
+  habitHelpers?: string[];     // what would help make quotes a daily habit
+  moodReasons?: string[];      // what's driving the current mood
+  habitBarriers?: string[];    // what gets in the way of a self-care habit
+  dailyMinutesGoal?: number;   // 1 | 3 | 10
+  streakGoalDays?: number;     // 3 | 7 | 21
+  beliefVision?: string;       // clear vision of the life they want
+  beliefThoughts?: string;     // thoughts shape reality
+  beliefRewire?: string;       // daily quotes rewire your brain
+  improveAreas?: string[];     // "Personal growth", "Positive thinking", …
   hapticsEnabled: boolean;
   lightMode: boolean;
   showAuthor: boolean;
