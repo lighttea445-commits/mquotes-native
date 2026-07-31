@@ -115,7 +115,6 @@ export default function OnboardingScreen() {
       age: answers.age as string | undefined,
       gender: answers.gender as string | undefined,
       mood: (answers.mood as string | undefined) ?? null,
-      attributionSource: answers.attributionSource as string | undefined,
       zodiac: answers.zodiac as string | undefined,
       habitHelpers: answers.habitHelpers as string[] | undefined,
       moodReasons: answers.moodReasons as string[] | undefined,

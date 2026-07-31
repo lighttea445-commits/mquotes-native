@@ -30,7 +30,6 @@ export interface UserPreferences {
   gender?: string; // e.g. "Male", "Female", "Other", "Prefer not to say"
   joyCategories?: string[]; // quote categories the user said bring them joy
   // ── Onboarding answers (all optional; absent on installs from before the rebuild) ──
-  attributionSource?: string;  // "TikTok" | "Instagram" | … — where they found the app
   zodiac?: string;             // "Capricorn" … "Sagittarius"
   habitHelpers?: string[];     // what would help make quotes a daily habit
   moodReasons?: string[];      // what's driving the current mood

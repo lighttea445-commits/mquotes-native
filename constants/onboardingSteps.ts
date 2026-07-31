@@ -2,7 +2,7 @@ import type { UserPreferences } from '../store/useAppStore';
 import { CATEGORIES } from './categories';
 
 /**
- * The 30-screen onboarding flow.
+ * The onboarding flow.
  *
  * Copy is reproduced from the reference flow with the product noun swapped
  * ("affirmations" → "quotes"). Question intent, answer options and ordering
@@ -18,7 +18,6 @@ export type StepKind = 'statement' | 'single' | 'multi' | 'chips' | 'bespoke';
 /** Keys on UserPreferences that onboarding writes to. */
 export type AnswerKey = Extract<
   keyof UserPreferences,
-  | 'attributionSource'
   | 'age'
   | 'gender'
   | 'zodiac'
@@ -93,23 +92,6 @@ const TOPIC_CHIPS = CATEGORIES.map((c) => ({ value: c.id, label: c.name }));
 export const ONBOARDING_STEPS: OnboardingStep[] = [
   // ── Act I — Identity ──────────────────────────────────────────────────────
   { id: 'splash', kind: 'bespoke' },
-
-  {
-    id: 'attribution',
-    kind: 'single',
-    headline: 'How did you hear about Quotable?',
-    subhead: 'Select an option to continue',
-    dataKey: 'attributionSource',
-    options: [
-      { value: 'TikTok',        label: 'TikTok'        },
-      { value: 'Instagram',     label: 'Instagram'     },
-      { value: 'Facebook',      label: 'Facebook'      },
-      { value: 'Google Play',   label: 'Google Play'   },
-      { value: 'Web search',    label: 'Web search'    },
-      { value: 'Friend/family', label: 'Friend/family' },
-      { value: 'Other',         label: 'Other'         },
-    ],
-  },
 
   { id: 'name', kind: 'bespoke', skippable: true },
 
