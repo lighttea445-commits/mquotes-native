@@ -97,22 +97,6 @@ export function ReviewCarousel({ reviews, interval = 4000, stars = 5 }: Props) {
         ) : null}
       </Animated.View>
 
-      {reviews.length > 1 && (
-        <View style={rc.dots}>
-          {reviews.map((_, i) => (
-            <View
-              key={i}
-              style={[
-                rc.dot,
-                {
-                  backgroundColor: i === index ? theme.gold : theme.textMuted,
-                  opacity: i === index ? 1 : 0.35,
-                },
-              ]}
-            />
-          ))}
-        </View>
-      )}
     </View>
   );
 }
@@ -124,6 +108,4 @@ const rc = StyleSheet.create({
   textWrap: { height: 64, justifyContent: 'center', alignItems: 'center' },
   text: { fontSize: 14, lineHeight: 20, textAlign: 'center', maxWidth: 300 },
   author: { fontSize: 12, marginTop: 6, opacity: 0.8 },
-  dots: { flexDirection: 'row', gap: 6 },
-  dot: { width: 5, height: 5, borderRadius: 2.5 },
 });

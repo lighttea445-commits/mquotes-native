@@ -1,5 +1,5 @@
 import React from 'react';
-import { G, Path } from 'react-native-svg';
+import { Path } from 'react-native-svg';
 
 /**
  * Shared line-art primitives.
@@ -41,30 +41,3 @@ export function Sparkle({ x, y, r = 6, color, opacity = 1 }: SparkleProps) {
   );
 }
 
-interface LeafProps {
-  x: number;
-  y: number;
-  rotate: number;
-  /** Length along the leaf's long axis, in viewBox units. */
-  length?: number;
-  color: string;
-  strokeWidth?: number;
-}
-
-/** Single pointed leaf, drawn from its stem end. */
-export function Leaf({ x, y, rotate, length = 14, color, strokeWidth = STROKE }: LeafProps) {
-  const l = length;
-  const w = l * 0.42;
-  return (
-    <G transform={`translate(${x}, ${y}) rotate(${rotate})`}>
-      <Path
-        d={`M 0 0 C ${l * 0.35} ${-w}, ${l * 0.85} ${-w * 0.75}, ${l} 0
-            C ${l * 0.85} ${w * 0.75}, ${l * 0.35} ${w}, 0 0 Z`}
-        stroke={color}
-        strokeWidth={strokeWidth}
-        strokeLinejoin="round"
-        fill="none"
-      />
-    </G>
-  );
-}
