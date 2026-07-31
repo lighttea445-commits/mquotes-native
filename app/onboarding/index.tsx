@@ -12,7 +12,12 @@ import Animated, {
 import { useAppStore } from '../../store/useAppStore';
 import { useTheme } from '../../hooks/useTheme';
 import { useRevenueCat } from '../../hooks/useRevenueCat';
-import { requestPermissions, getPermissionStatus, rescheduleAll } from '../../lib/notifications';
+import {
+  requestPermissions,
+  getPermissionStatus,
+  canAskForPermissions,
+  rescheduleAll,
+} from '../../lib/notifications';
 import { PaywallSheet } from '../../components/subscriptions/PaywallSheet';
 import {
   ONBOARDING_STEPS,
@@ -244,9 +249,9 @@ export default function OnboardingScreen() {
    * impossible — deep-link to system settings instead.
    */
   const handleRetryNotifications = useCallback(async () => {
-    const status = await getPermissionStatus();
-
-    if (status === 'denied') {
+    // Only hard denial rules out a dialog — a plain 'denied' status may still
+    // be re-askable on Android.
+    if (!(await canAskForPermissions())) {
       await Linking.openSettings();
       return false;
     }

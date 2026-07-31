@@ -2,14 +2,14 @@ import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, AppState, AppStateStatus } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../../hooks/useTheme';
-import { getPermissionStatus } from '../../../lib/notifications';
+import { getPermissionStatus, canAskForPermissions } from '../../../lib/notifications';
 import { OnboardingHeader } from '../OnboardingHeader';
 import { ContinueButton } from '../ContinueButton';
 import { BellMoon } from '../art/BellMoon';
 import { OB } from '../tokens';
 
 interface Props {
-  /** Re-prompts, or deep-links to system settings once the OS says 'denied'. */
+  /** Re-prompts, or deep-links to system settings once the OS is hard-denied. */
   onRetry: () => Promise<boolean>;
   /** Re-reads OS status after returning from settings. */
   onRecheck: () => Promise<boolean>;
@@ -19,12 +19,13 @@ interface Props {
 }
 
 /**
- * Recovery screen, shown only when the config step's native prompt was denied
- * (the orchestrator skips it entirely on a grant).
+ * Recovery screen, shown when the config step didn't end in a grant — either
+ * the prompt was refused or Skip was pressed. A grant skips it entirely.
  *
- * Once the OS status is 'denied' it will not prompt again, so the primary
- * action becomes a deep-link to system settings. Returning to the app
- * re-checks, and advances automatically if permission was granted there.
+ * The primary action only becomes a Settings deep-link once the OS is
+ * hard-denied; a plain 'denied' is still re-askable on Android, so it keeps
+ * offering the dialog. Returning to the app re-checks, and advances
+ * automatically if permission was granted there.
  */
 export function NotificationPermissionScreen({
   onRetry,
@@ -58,7 +59,10 @@ export function NotificationPermissionScreen({
 
   useEffect(() => {
     let alive = true;
-    getPermissionStatus().then((s) => alive && setHardDenied(s === 'denied'));
+    Promise.all([getPermissionStatus(), canAskForPermissions()]).then(([status, canAsk]) => {
+      // Hard denial only: 'denied' with canAskAgain still raises a dialog.
+      if (alive) setHardDenied(status !== 'granted' && !canAsk);
+    });
     return () => {
       alive = false;
     };
@@ -70,7 +74,10 @@ export function NotificationPermissionScreen({
       if (state !== 'active') return;
       const granted = await recheckRef.current();
       if (granted) advanceOnce();
-      else setHardDenied((await getPermissionStatus()) === 'denied');
+      else {
+        const [status, canAsk] = await Promise.all([getPermissionStatus(), canAskForPermissions()]);
+        setHardDenied(status !== 'granted' && !canAsk);
+      }
     });
     return () => sub.remove();
   }, []);

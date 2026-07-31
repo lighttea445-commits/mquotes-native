@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,8 @@ import {
   Platform,
   Modal,
   ScrollView,
+  AppState,
+  Linking,
   LayoutChangeEvent,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -15,6 +17,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { useTheme } from '../../../hooks/useTheme';
 import { useHaptics } from '../../../hooks/useHaptics';
 import { useAppStore } from '../../../store/useAppStore';
+import { canAskForPermissions } from '../../../lib/notifications';
 import { OnboardingHeader } from '../OnboardingHeader';
 import { ContinueButton } from '../ContinueButton';
 import { OB, ON_GOLD } from '../tokens';
@@ -77,6 +80,12 @@ export function NotificationConfigScreen({ onSave, onSkip, next, back, progress 
     endTime: prefs.notificationEndTime,
   });
   const [saving, setSaving] = useState(false);
+  /**
+   * Whether pressing Allow would actually raise a dialog. False once the OS
+   * has been hard-denied, in which case Settings is the only route and the
+   * button has to say so rather than silently doing nothing.
+   */
+  const [canAsk, setCanAsk] = useState(true);
   const [trackWidth, setTrackWidth] = useState(0);
   const [picker, setPicker] = useState<null | 'start' | 'end'>(null);
   const [tempDate, setTempDate] = useState<Date>(new Date());
@@ -88,7 +97,25 @@ export function NotificationConfigScreen({ onSave, onSkip, next, back, progress 
 
   const onChange = setValue;
 
+  // Re-checked on focus so returning from Settings flips the button back.
+  useEffect(() => {
+    let alive = true;
+    const check = () => canAskForPermissions().then((v) => alive && setCanAsk(v));
+    check();
+    const sub = AppState.addEventListener('change', (s) => s === 'active' && check());
+    return () => {
+      alive = false;
+      sub.remove();
+    };
+  }, []);
+
   const handleSave = useCallback(async () => {
+    // Hard-denied: the OS won't show a dialog, so send them where it can be
+    // changed and stay put — they'll come back to this screen.
+    if (!canAsk) {
+      await Linking.openSettings();
+      return;
+    }
     setSaving(true);
     try {
       await onSave(value);
@@ -96,7 +123,7 @@ export function NotificationConfigScreen({ onSave, onSkip, next, back, progress 
       setSaving(false);
       next();
     }
-  }, [onSave, value, next]);
+  }, [canAsk, onSave, value, next]);
 
   const handleSkip = useCallback(() => {
     onSkip(value);
@@ -258,7 +285,7 @@ export function NotificationConfigScreen({ onSave, onSkip, next, back, progress 
         <View style={nc.footer}>
           <ContinueButton
             onPress={handleSave}
-            label={saving ? 'Asking…' : 'Allow'}
+            label={saving ? 'Asking…' : canAsk ? 'Allow' : 'Open Settings'}
             disabled={saving}
           />
           <ContinueButton onPress={handleSkip} label="Skip" variant="ghost" disabled={saving} />

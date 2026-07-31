@@ -28,12 +28,30 @@ export interface RescheduleOptions {
 
 // ── Permission ────────────────────────────────────────────────────────────────
 
+/**
+ * Raises the OS permission dialog when the OS will still show one.
+ *
+ * A `denied` status is not by itself final. Android re-prompts until the user
+ * hard-denies, and only then does `canAskAgain` flip to false; iOS sets it
+ * false after the first refusal, which is its one-shot model. Gating on the
+ * status alone meant a single early denial permanently suppressed the dialog.
+ */
 export async function requestPermissions(): Promise<boolean> {
-  const { status: existing } = await Notifications.getPermissionsAsync();
-  if (existing === 'granted') return true;
-  if (existing === 'denied') return false;
+  const perms = await Notifications.getPermissionsAsync();
+  if (perms.status === 'granted') return true;
+  if (perms.canAskAgain === false) return false;
   const { status } = await Notifications.requestPermissionsAsync();
   return status === 'granted';
+}
+
+/**
+ * Whether asking would actually surface a dialog. False means Settings is the
+ * only route left — either already granted, or hard-denied.
+ */
+export async function canAskForPermissions(): Promise<boolean> {
+  const perms = await Notifications.getPermissionsAsync();
+  if (perms.status === 'granted') return false;
+  return perms.canAskAgain !== false;
 }
 
 export async function getPermissionStatus(): Promise<'granted' | 'denied' | 'undetermined'> {
