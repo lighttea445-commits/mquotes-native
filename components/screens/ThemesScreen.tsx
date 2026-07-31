@@ -15,7 +15,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../../hooks/useTheme';
 import { useRevenueCat } from '../../hooks/useRevenueCat';
 import { useAppStore } from '../../store/useAppStore';
-import { THEMES } from '../../constants/themes';
+import { THEMES, DEFAULT_THEME_ID } from '../../constants/themes';
 import { useModal } from '../../contexts/ModalContext';
 import { analytics } from '../../lib/analytics';
 
@@ -34,8 +34,13 @@ export default function ThemesScreen({ onClose }: { onClose?: () => void }) {
 
   const close = onClose ?? (() => router.back());
 
+  /** Gated for free users — the default theme never is. */
+  const isLocked = (themeId: string) => !isPro && themeId !== DEFAULT_THEME_ID;
+
   const handleSelect = (themeId: string) => {
-    if (!isPro) {
+    // Onboarding lets free users pick from six themes, so without this a free
+    // user who chose one there would have no way back to the default.
+    if (isLocked(themeId)) {
       modal ? modal.openSheet('features') : router.push('/subscriptions');
       return;
     }
@@ -86,6 +91,7 @@ export default function ThemesScreen({ onClose }: { onClose?: () => void }) {
           showsVerticalScrollIndicator={false}
           renderItem={({ item: t }) => {
             const isSelected = preferences.theme === t.id;
+            const locked = isLocked(t.id);
             const aaColor = t.isDark ? '#E8E0D0' : '#1A1208';
             const cardStyle = {
               width: CARD_WIDTH,
@@ -99,6 +105,11 @@ export default function ThemesScreen({ onClose }: { onClose?: () => void }) {
                 onPress={() => handleSelect(t.id)}
                 activeOpacity={0.8}
               >
+                {locked && (
+                  <View style={styles.lockBadge}>
+                    <MaterialCommunityIcons name="crown" size={12} color="#1A1208" />
+                  </View>
+                )}
                 {t.backgroundImage ? (
                   <ImageBackground
                     source={t.backgroundImage}
@@ -168,6 +179,18 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  lockBadge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    zIndex: 1,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#B8975A',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   title: {
     fontSize: 32,
