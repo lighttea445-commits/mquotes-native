@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { FONTS } from '../../constants/fonts';
 import { View, StyleSheet, Text, Pressable, ActivityIndicator, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -119,7 +120,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: '600', fontFamily: FONTS.display.bold
   },
   content: {
     flex: 1,
@@ -137,12 +138,12 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
-    marginBottom: 8,
+    marginBottom: 8, fontFamily: FONTS.ui.bold
   },
   sectionDescription: {
     fontSize: 14,
     marginBottom: 12,
-    lineHeight: 20,
+    lineHeight: 20, fontFamily: FONTS.body.regular
   },
   restoreButton: {
     paddingVertical: 12,
@@ -155,7 +156,7 @@ const styles = StyleSheet.create({
   },
   restoreButtonText: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '600', fontFamily: FONTS.ui.medium
   },
   messageContainer: {
     marginHorizontal: 16,
@@ -170,7 +171,7 @@ const styles = StyleSheet.create({
   successMessage: {
     color: '#22c55e',
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '500', fontFamily: FONTS.ui.regular
   },
   errorContainer: {
     backgroundColor: 'rgba(239, 68, 68, 0.1)',
@@ -178,7 +179,7 @@ const styles = StyleSheet.create({
   errorMessage: {
     color: '#ef4444',
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '500', fontFamily: FONTS.ui.regular
   },
   infoSection: {
     paddingHorizontal: 16,
@@ -188,6 +189,6 @@ const styles = StyleSheet.create({
   },
   infoText: {
     fontSize: 13,
-    lineHeight: 18,
+    lineHeight: 18, fontFamily: FONTS.body.regular
   },
 });

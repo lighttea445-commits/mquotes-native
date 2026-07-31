@@ -7,6 +7,7 @@ import { useTheme } from '../../hooks/useTheme';
 import { useRevenueCat } from '../../hooks/useRevenueCat';
 import { useHistoryStore, HistoryQuote } from '../../store/useHistoryStore';
 import { useModal } from '../../contexts/ModalContext';
+import { FONTS } from '../../constants/fonts';
 
 function HistoryItem({ item, theme }: { item: HistoryQuote; theme: ReturnType<typeof useTheme> }) {
   const date = new Date(item.viewedAt);
@@ -59,7 +60,7 @@ export default function HistoryScreen({ onClose, onBack }: { onClose?: () => voi
             <Text style={[styles.gateTitle, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
               History is Pro
             </Text>
-            <Text style={[styles.gateBody, { color: theme.textMuted, fontFamily: 'Peachi-Medium' }]}>
+            <Text style={[styles.gateBody, { color: theme.textMuted, fontFamily: FONTS.body.regular }]}>
               Upgrade to Quotable Pro to browse every quote you've ever read.
             </Text>
             <TouchableOpacity
@@ -68,7 +69,7 @@ export default function HistoryScreen({ onClose, onBack }: { onClose?: () => voi
               activeOpacity={0.85}
             >
               <MaterialCommunityIcons name="crown" size={16} color="#1A1208" />
-              <Text style={[styles.unlockBtnText, { color: '#1A1208', fontFamily: 'Peachi-Bold' }]}>
+              <Text style={[styles.unlockBtnText, { color: '#1A1208', fontFamily: FONTS.ui.bold }]}>
                 Unlock Pro
               </Text>
             </TouchableOpacity>
@@ -127,7 +128,7 @@ const styles = StyleSheet.create({
   },
   backBtn: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
   title: { fontSize: 22, fontWeight: '700' },
-  clearBtn: { fontSize: 13 },
+  clearBtn: { fontSize: 13, fontFamily: FONTS.ui.regular },
   list: { padding: 16, gap: 12 },
   card: {
     borderRadius: 16,
@@ -138,9 +139,9 @@ const styles = StyleSheet.create({
   quoteText: { fontSize: 15, lineHeight: 23, marginBottom: 10 },
   cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   authorText: { fontSize: 12, letterSpacing: 0.5 },
-  dateText: { fontSize: 11 },
+  dateText: { fontSize: 11, fontFamily: FONTS.ui.regular },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  emptyText: { fontSize: 16 },
+  emptyText: { fontSize: 16, fontFamily: FONTS.ui.regular },
   gate: {
     flex: 1,
     justifyContent: 'center',

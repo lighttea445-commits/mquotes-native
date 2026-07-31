@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../../hooks/useTheme';
 import { SunIcon } from './SunIcon';
+import { FONTS } from '../../constants/fonts';
 
 interface StreakCardProps {
   streakCount: number;
@@ -42,7 +43,7 @@ export function StreakCard({ streakCount, weekData, onShare }: StreakCardProps) 
                     styles.dayLabel,
                     {
                       color: isToday ? theme.text : theme.textMuted,
-                      fontFamily: isToday ? 'Peachi-Bold' : 'Peachi-Regular',
+                      fontFamily: isToday ? FONTS.ui.bold : FONTS.ui.regular,
                     },
                   ]}
                 >

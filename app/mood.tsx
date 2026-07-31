@@ -1,4 +1,5 @@
 import React from 'react';
+import { FONTS } from '../constants/fonts';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -95,5 +96,5 @@ const styles = StyleSheet.create({
   },
   emoji: { fontSize: 36 },
   moodName: { fontSize: 15, fontWeight: '600' },
-  moodDesc: { fontSize: 11, textAlign: 'center' },
+  moodDesc: { fontSize: 11, textAlign: 'center', fontFamily: FONTS.ui.regular },
 });

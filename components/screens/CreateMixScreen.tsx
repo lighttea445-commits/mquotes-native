@@ -17,6 +17,7 @@ import { useFavoritesStore } from '../../store/useFavoritesStore';
 import { useUserQuotesStore } from '../../store/useUserQuotesStore';
 import { CATEGORIES, SPECIAL_CATEGORIES } from '../../constants/categories';
 import { useModal } from '../../contexts/ModalContext';
+import { FONTS } from '../../constants/fonts';
 
 const FREE_MIX_LIMIT = 2;
 
@@ -185,7 +186,7 @@ export default function CreateMixScreen({ onClose }: { onClose?: () => void }) {
                 {localSelected.length}/{FREE_MIX_LIMIT} slots used
               </Text>
               <TouchableOpacity onPress={openPaywall} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Text style={[styles.upgradeLink, { color: '#B8975A', fontFamily: 'Peachi-Medium' }]}>
+                <Text style={[styles.upgradeLink, { color: '#B8975A', fontFamily: FONTS.ui.medium }]}>
                   Unlock unlimited →
                 </Text>
               </TouchableOpacity>
@@ -283,7 +284,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   categoryName: { fontSize: 14, fontWeight: '600' },
-  countText: { fontSize: 11, marginTop: 2 },
+  countText: { fontSize: 11, marginTop: 2, fontFamily: FONTS.ui.regular },
   footer: {
     position: 'absolute',
     bottom: 0,
@@ -308,5 +309,5 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: 'center',
   },
-  saveBtnText: { fontSize: 16, fontWeight: '600', letterSpacing: 0.3 },
+  saveBtnText: { fontSize: 16, fontWeight: '600', letterSpacing: 0.3, fontFamily: FONTS.ui.bold },
 });

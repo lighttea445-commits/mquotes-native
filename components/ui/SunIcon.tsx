@@ -1,4 +1,5 @@
 import React from 'react';
+import { FONTS } from '../../constants/fonts';
 import Svg, { Circle, Line, Text as SvgText } from 'react-native-svg';
 
 interface SunIconProps {
@@ -54,7 +55,7 @@ export function SunIcon({ day, size = 64, color = '#B8975A' }: SunIconProps) {
         fontSize={size * 0.26}
         fontWeight="700"
         fill={color}
-        fontFamily="Peachi-Bold"
+        fontFamily={FONTS.display.bold}
       >
         {day}
       </SvgText>

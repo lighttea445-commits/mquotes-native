@@ -1,4 +1,5 @@
 import React from 'react';
+import { FONTS } from '../constants/fonts';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useRouter, usePathname } from 'expo-router';
 
@@ -40,13 +41,13 @@ const styles = StyleSheet.create({
     color: '#F0ECE4',
     fontSize: 22,
     fontWeight: '700',
-    marginBottom: 8,
+    marginBottom: 8, fontFamily: FONTS.display.bold
   },
   path: {
     color: '#8A8078',
     fontSize: 13,
     marginBottom: 28,
-    textAlign: 'center',
+    textAlign: 'center', fontFamily: FONTS.body.regular
   },
   button: {
     backgroundColor: '#B8975A',
@@ -57,6 +58,6 @@ const styles = StyleSheet.create({
   buttonLabel: {
     color: '#1A1208',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '600', fontFamily: FONTS.ui.medium
   },
 });

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { FONTS } from '../../constants/fonts';
 import { View, StyleSheet, Text, ActivityIndicator, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import RevenueCatUI from 'react-native-purchases-ui';
@@ -106,7 +107,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginTop: 12,
-    fontSize: 16,
+    fontSize: 16, fontFamily: FONTS.ui.regular
   },
   errorContainer: {
     alignItems: 'center',
@@ -116,12 +117,12 @@ const styles = StyleSheet.create({
   errorTitle: {
     fontSize: 18,
     fontWeight: '600',
-    marginBottom: 8,
+    marginBottom: 8, fontFamily: FONTS.ui.bold
   },
   errorMessage: {
     fontSize: 14,
     textAlign: 'center',
-    marginBottom: 16,
+    marginBottom: 16, fontFamily: FONTS.body.regular
   },
   retryButton: {
     paddingHorizontal: 24,
@@ -130,12 +131,12 @@ const styles = StyleSheet.create({
   },
   retryButtonText: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '600', fontFamily: FONTS.ui.medium
   },
   footerText: {
     fontSize: 12,
     textAlign: 'center',
     marginBottom: 16,
-    marginHorizontal: 16,
+    marginHorizontal: 16, fontFamily: FONTS.body.regular
   },
 });

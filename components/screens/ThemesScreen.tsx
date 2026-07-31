@@ -18,6 +18,7 @@ import { useAppStore } from '../../store/useAppStore';
 import { THEMES, DEFAULT_THEME_ID } from '../../constants/themes';
 import { useModal } from '../../contexts/ModalContext';
 import { analytics } from '../../lib/analytics';
+import { FONTS } from '../../constants/fonts';
 
 const SIDE_PADDING = 16;
 const GAP = 8;
@@ -75,7 +76,7 @@ export default function ThemesScreen({ onClose }: { onClose?: () => void }) {
         {!isPro && (
           <View style={[styles.proBanner, { backgroundColor: 'rgba(184,151,90,0.10)', borderColor: 'rgba(184,151,90,0.25)' }]}>
             <MaterialCommunityIcons name="crown" size={14} color="#B8975A" />
-            <Text style={[styles.proBannerText, { color: '#B8975A', fontFamily: 'Peachi-Medium' }]}>
+            <Text style={[styles.proBannerText, { color: '#B8975A', fontFamily: FONTS.ui.medium }]}>
               Unlock all themes
             </Text>
           </View>
@@ -194,14 +195,14 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 32,
-    fontFamily: 'Peachi-Bold',
+    fontFamily: FONTS.display.bold,
     textAlign: 'center',
     marginTop: 4,
     marginBottom: 8,
   },
   forYouLabel: {
     fontSize: 16,
-    fontFamily: 'Peachi-Bold',
+    fontFamily: FONTS.ui.bold,
     marginBottom: 12,
     paddingHorizontal: SIDE_PADDING,
   },

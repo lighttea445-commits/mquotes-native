@@ -18,6 +18,7 @@ import { useUserQuotesStore } from '../../store/useUserQuotesStore';
 import { CATEGORIES, Category } from '../../constants/categories';
 import { useModal } from '../../contexts/ModalContext';
 import { analytics } from '../../lib/analytics';
+import { FONTS } from '../../constants/fonts';
 
 const GOLD_ICON_BG = 'rgba(184,151,90,0.12)';
 
@@ -55,7 +56,7 @@ function SpecialTile({
       activeOpacity={0.75}
     >
       <View style={styles.tileContent}>
-        <Text style={[styles.tileLabel, { color: theme.text, fontFamily: 'Peachi-Medium' }]}>
+        <Text style={[styles.tileLabel, { color: theme.text, fontFamily: FONTS.ui.medium }]}>
           {label}
         </Text>
         {subtitle !== undefined && (
@@ -108,7 +109,7 @@ function CategoryPillRow({
       <View style={[styles.iconSquare, { backgroundColor: GOLD_ICON_BG }]}>
         <MaterialCommunityIcons name={icon as any} size={18} color={theme.gold} />
       </View>
-      <Text style={[styles.pillLabel, { color: theme.text, fontFamily: 'Peachi-Medium' }]}>
+      <Text style={[styles.pillLabel, { color: theme.text, fontFamily: FONTS.ui.medium }]}>
         {name}
       </Text>
       {locked
@@ -237,7 +238,7 @@ export default function CategoriesScreen({ onClose }: { onClose?: () => void }) 
             {!isPro && (
               <View style={[styles.proBadge, { backgroundColor: 'rgba(184,151,90,0.12)' }]}>
                 <MaterialCommunityIcons name="crown" size={11} color="#B8975A" />
-                <Text style={[styles.proBadgeText, { color: '#B8975A', fontFamily: 'Peachi-Bold' }]}>Premium</Text>
+                <Text style={[styles.proBadgeText, { color: '#B8975A', fontFamily: FONTS.ui.bold }]}>Premium</Text>
               </View>
             )}
           </View>
@@ -296,7 +297,7 @@ const styles = StyleSheet.create({
   },
   pageTitle: {
     fontSize: 32,
-    fontFamily: 'Peachi-Bold',
+    fontFamily: FONTS.display.bold,
     marginTop: 16,
     marginBottom: 20,
     textAlign: 'center',
@@ -321,7 +322,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   tileSubtitle: {
-    fontSize: 12,
+    fontSize: 12, fontFamily: FONTS.ui.regular
   },
   tileIcon: {
     alignSelf: 'flex-end',
@@ -348,7 +349,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 22,
-    fontFamily: 'Peachi-Bold',
+    fontFamily: FONTS.display.bold,
     marginBottom: 12,
   },
   sectionHeader: {

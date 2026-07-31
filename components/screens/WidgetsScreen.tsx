@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { FONTS } from '../../constants/fonts';
 import {
   View,
   Text,
@@ -178,7 +179,7 @@ function SettingsRow({
 const rowStyles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 15, gap: 12 },
   label: { flex: 1, fontSize: 15 },
-  value: { fontSize: 13, maxWidth: 160, textAlign: 'right' },
+  value: { fontSize: 13, maxWidth: 160, textAlign: 'right', fontFamily: FONTS.ui.regular },
   separator: { height: StyleSheet.hairlineWidth, marginHorizontal: 16 },
 });
 

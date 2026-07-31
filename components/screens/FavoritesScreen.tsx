@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { FONTS } from '../../constants/fonts';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -125,7 +126,7 @@ const styles = StyleSheet.create({
   clearText: {
     fontSize: 13,
     width: 60,
-    textAlign: 'right',
+    textAlign: 'right', fontFamily: FONTS.ui.regular
   },
   list: {
     padding: 16,

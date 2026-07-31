@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { FONTS } from '../constants/fonts';
 import { View, StyleSheet, Text, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -136,7 +137,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: '600', fontFamily: FONTS.display.bold
   },
   memberCard: {
     flexDirection: 'row',
@@ -189,6 +190,6 @@ const styles = StyleSheet.create({
     borderBottomColor: 'transparent',
   },
   tabText: {
-    fontSize: 14,
+    fontSize: 14, fontFamily: FONTS.ui.medium
   },
 });

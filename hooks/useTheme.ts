@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useAppStore } from '../store/useAppStore';
 import { getTheme, Theme, DEFAULT_THEME_ID } from '../constants/themes';
+import { FONTS } from '../constants/fonts';
 
 const LIGHT_THEME: Theme = {
   id: '_light',
@@ -16,8 +17,9 @@ const LIGHT_THEME: Theme = {
   goldButton: '#C4A35A',
   border: '#DEDAD6',
   navBackground: '#EEECEA',
-  quoteFontFamily: 'PlayfairDisplay_700Bold',
-  uiFontFamily: 'Inter_400Regular',
+  quoteFontFamily: FONTS.display.medium,
+  uiFontFamily: FONTS.ui.regular,
+  bodyFontFamily: FONTS.body.regular,
   backgroundImage: null,
   isDark: false,
 };
