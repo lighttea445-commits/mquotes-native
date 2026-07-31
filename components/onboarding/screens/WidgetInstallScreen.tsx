@@ -57,7 +57,7 @@ export function WidgetInstallScreen({ next, back, progress }: Props) {
           <View style={[wg.phone, { borderColor: theme.border, backgroundColor: theme.surface }]}>
             <View style={[wg.widget, { backgroundColor: theme.surfaceElevated }]}>
               <Text style={[wg.widgetText, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
-                I am enough.
+                Everything is fine.
               </Text>
             </View>
             <View style={wg.appGrid}>
