@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
-import { Sparkle, STROKE } from './primitives';
+import { Sparkle } from './primitives';
 
 interface Props {
   size?: number;
@@ -11,17 +11,23 @@ interface Props {
 }
 
 const VB = 120;
-/** Squareness of the superellipse. 4 is soft, 5 matches an iOS app icon, 8 is nearly a square. */
-const EXPONENT = 5;
+
+/** Half-width of the square. Leaves room for the sparkles outside it. */
+const R = 42;
+/**
+ * Squareness of the superellipse. 4.5 matches the reference mark's proportions
+ * — straight sides with generously rounded corners.
+ */
+const EXPONENT = 4.5;
 
 /**
  * Traces a superellipse — |x/a|^n + |y/a|^n = 1 — as a dense polyline.
  *
  * A rounded rect is an arc butted onto a straight edge, and the curvature jump
- * at that join is exactly what makes it read as a box with clipped corners. A
- * superellipse has continuous curvature the whole way round, which is why app
- * icons use one. At 120 segments the segmentation is well below a pixel at any
- * size this renders at.
+ * at that join is what makes it read as a box with clipped corners. A
+ * superellipse is continuous the whole way round, which is why app icons use
+ * one. At 120 segments the segmentation is well under a pixel at any size this
+ * renders at.
  */
 function superellipsePath(cx: number, cy: number, r: number, n: number, steps = 120): string {
   const pts: string[] = [];
@@ -37,24 +43,23 @@ function superellipsePath(cx: number, cy: number, r: number, n: number, steps = 
 }
 
 /**
- * The app square — a drawn icon frame with sparkles, for the splash.
+ * The app square — icon frame with a large sparkle off the top-left corner and
+ * a small one off the right edge, matching the reference mark.
  *
- * Two concentric superellipses rather than one: the hairline inset reads as
- * deliberate draughtsmanship and gives the mark depth that a single outline
- * doesn't have.
+ * Deliberately axis-aligned. The reference is drawn on a slight rotation; that
+ * tilt is the main thing making it read as a sketch rather than a mark, so it
+ * is not reproduced here.
  */
 export function AppMark({ size = 150, color, children }: Props) {
-  const outer = useMemo(() => superellipsePath(VB / 2, VB / 2, 48, EXPONENT), []);
-  const inner = useMemo(() => superellipsePath(VB / 2, VB / 2, 42, EXPONENT), []);
+  const square = useMemo(() => superellipsePath(VB / 2, VB / 2, R, EXPONENT), []);
 
   return (
     <View style={{ width: size, height: size }}>
       <Svg width={size} height={size} viewBox={`0 0 ${VB} ${VB}`} style={StyleSheet.absoluteFill}>
-        <Path d={outer} stroke={color} strokeWidth={STROKE * 1.6} fill="none" strokeLinejoin="round" />
-        <Path d={inner} stroke={color} strokeWidth={STROKE * 0.7} fill="none" opacity={0.4} />
-        <Sparkle x={11} y={26} r={7.5} color={color} />
-        <Sparkle x={110} y={49} r={5} color={color} opacity={0.85} />
-        <Sparkle x={99} y={104} r={3.5} color={color} opacity={0.6} />
+        <Path d={square} stroke={color} strokeWidth={2.6} fill="none" strokeLinejoin="round" />
+        {/* Off the top-left corner, and off the right edge below centre */}
+        <Sparkle x={9} y={25} r={9} color={color} />
+        <Sparkle x={112} y={62} r={5} color={color} opacity={0.9} />
       </Svg>
 
       <View style={mark.inner} pointerEvents="none">
@@ -69,7 +74,7 @@ const mark = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
-    // Keeps the mark inside the inner hairline on all four sides.
-    padding: '25%',
+    // Keeps the mark clear of the drawn border on all four sides.
+    padding: '27%',
   },
 });

@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../../hooks/useTheme';
 import { ContinueButton } from '../ContinueButton';
 import { AppMark } from '../art/AppMark';
+import { QuoteMark } from '../art/QuoteMark';
 import { ReviewCarousel, type Review } from '../ReviewCarousel';
 import { OB } from '../tokens';
 
@@ -42,13 +43,7 @@ export function SplashScreen({ next }: Props) {
             {/* Swap this for your logo:
                 <Image source={require('../../../assets/icon.png')}
                        style={{ width: '100%', height: '100%' }} resizeMode="contain" /> */}
-            <Text
-              numberOfLines={1}
-              adjustsFontSizeToFit
-              style={[sp.wordmark, { color: theme.text, fontFamily: theme.quoteFontFamily }]}
-            >
-              Quotable
-            </Text>
+            <QuoteMark width={62} color={theme.text} />
           </AppMark>
         </View>
 
@@ -77,7 +72,6 @@ const sp = StyleSheet.create({
   root: { flex: 1 },
   safe: { flex: 1 },
   artWrap: { flex: 1.15, alignItems: 'center', justifyContent: 'flex-end' },
-  wordmark: { fontSize: 20, textAlign: 'center' },
   mottoWrap: { alignItems: 'center', paddingHorizontal: OB.gutter, paddingTop: 34 },
   mottoPrimary: { fontSize: 30, lineHeight: 38, textAlign: 'center' },
   mottoSecondary: { fontSize: 30, lineHeight: 38, textAlign: 'center' },
