@@ -1,25 +1,33 @@
 import React from 'react';
-import { View, Text, StyleSheet, ImageBackground, Dimensions } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../../../hooks/useTheme';
 import { ContinueButton } from '../ContinueButton';
+import { LogoFrame } from '../art/LogoFrame';
+import { Laurel } from '../art/Laurel';
+import { ReviewCarousel, type Review } from '../ReviewCarousel';
 import { OB } from '../tokens';
 
-const { width: SW, height: SH } = Dimensions.get('window');
+// ─── Content ────────────────────────────────────────────────────────────────
+// The only things to edit on this screen. Both blocks hide themselves when
+// empty, so the layout stays correct until you have real numbers to show.
 
 /**
- * Social proof shown above the CTA.
+ * Headline stat above the tagline, e.g. '+20 million'.
  *
- * `installs` is null on purpose — the reference flow claims "+20 million lives
- * changed", and shipping an invented install count or review is a Play Store
- * policy risk. Set these to real, verifiable values to show the block.
+ * Left null deliberately — the reference claims "+20 million lives changed",
+ * and an invented install count is a Play Store policy risk. Set it to a real,
+ * verifiable figure and the laurels appear with it.
  */
-const SOCIAL_PROOF: { installs: string | null; rating: number; testimonial: string | null } = {
-  installs: null,
-  rating: 5,
-  testimonial: null,
-};
+const HEADLINE_STAT: string | null = null;
+const STAT_LABEL = 'Lives changed';
+
+const TAGLINE = 'Transform your mindset with powerful quotes';
+
+/** Real reviews only. The carousel cross-fades between them every 4s. */
+const REVIEWS: Review[] = [];
+
+// ────────────────────────────────────────────────────────────────────────────
 
 interface Props {
   next: () => void;
@@ -28,51 +36,52 @@ interface Props {
 /** Step 1. No header — the reference shows no progress or back on the splash. */
 export function SplashScreen({ next }: Props) {
   const theme = useTheme();
-  const cardW = Math.min(SW - 24, 400);
-  const cardH = Math.min(cardW * 1.45, SH * 0.56);
 
   return (
     <View style={[sp.root, { backgroundColor: theme.background }]}>
       <SafeAreaView style={sp.safe} edges={['top', 'bottom']}>
-        <View style={sp.center}>
-          <View style={[sp.cardWrap, { width: cardW, height: cardH }]}>
-            <ImageBackground
-              source={require('../../../assets/clouds.jpg')}
-              style={sp.img}
-              imageStyle={sp.imgRadius}
-              resizeMode="cover"
+        {/* Mark */}
+        <View style={sp.logoWrap}>
+          <LogoFrame size={140} color={theme.text}>
+            {/* Swap this Text for your logo, e.g.
+                <Image source={require('../../../assets/icon.png')}
+                       style={{ width: '100%', height: '100%' }}
+                       resizeMode="contain" /> */}
+            <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              style={[sp.mark, { color: theme.text, fontFamily: theme.quoteFontFamily }]}
             >
-              <View style={sp.overlay} />
-              <View style={sp.inner}>
-                <Text style={[sp.brand, { fontFamily: theme.quoteFontFamily }]}>Quotable</Text>
-                <Text style={[sp.tagline, { fontFamily: theme.uiFontFamily }]}>
-                  Transform your mindset with powerful quotes
+              Quotable
+            </Text>
+          </LogoFrame>
+        </View>
+
+        {/* Stat between laurels */}
+        <View style={sp.proof}>
+          {HEADLINE_STAT ? (
+            <View style={sp.laurelRow}>
+              <Laurel size={62} color={theme.text} side="left" />
+              <View style={sp.statText}>
+                <Text style={[sp.stat, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
+                  {HEADLINE_STAT}
+                </Text>
+                <Text style={[sp.statLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
+                  {STAT_LABEL}
                 </Text>
               </View>
-            </ImageBackground>
-          </View>
-
-          <View style={sp.proof}>
-            {SOCIAL_PROOF.installs ? (
-              <Text style={[sp.installs, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
-                {SOCIAL_PROOF.installs}
-              </Text>
-            ) : null}
-
-            <View style={sp.stars}>
-              {Array.from({ length: SOCIAL_PROOF.rating }).map((_, i) => (
-                <MaterialCommunityIcons key={i} name="star" size={18} color={theme.gold} />
-              ))}
+              <Laurel size={62} color={theme.text} side="right" />
             </View>
+          ) : null}
 
-            {SOCIAL_PROOF.testimonial ? (
-              <Text
-                style={[sp.testimonial, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}
-              >
-                {`"${SOCIAL_PROOF.testimonial}"`}
-              </Text>
-            ) : null}
-          </View>
+          <Text style={[sp.tagline, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
+            {TAGLINE}
+          </Text>
+        </View>
+
+        {/* Rotating reviews */}
+        <View style={sp.reviews}>
+          <ReviewCarousel reviews={REVIEWS} />
         </View>
 
         <ContinueButton onPress={next} label="Get started" />
@@ -83,17 +92,14 @@ export function SplashScreen({ next }: Props) {
 
 const sp = StyleSheet.create({
   root: { flex: 1 },
-  safe: { flex: 1, width: '100%' },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: OB.gutter },
-  cardWrap: { borderRadius: 24, overflow: 'hidden' },
-  img: { flex: 1 },
-  imgRadius: { borderRadius: 24 },
-  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(26,26,26,0.55)', borderRadius: 24 },
-  inner: { flex: 1, padding: 32, justifyContent: 'flex-end' },
-  brand: { fontSize: 38, color: '#f0ece4', lineHeight: 46 },
-  tagline: { fontSize: 15, color: 'rgba(240,236,228,0.75)', marginTop: 12, lineHeight: 22 },
-  proof: { alignItems: 'center', marginTop: 28, gap: 10 },
-  installs: { fontSize: 26 },
-  stars: { flexDirection: 'row', gap: 4 },
-  testimonial: { fontSize: 14, lineHeight: 20, textAlign: 'center', maxWidth: 300 },
+  safe: { flex: 1 },
+  logoWrap: { flex: 1.1, alignItems: 'center', justifyContent: 'flex-end' },
+  mark: { fontSize: 22, textAlign: 'center' },
+  proof: { alignItems: 'center', paddingHorizontal: OB.gutter, paddingTop: 40, gap: 22 },
+  laurelRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  statText: { alignItems: 'center' },
+  stat: { fontSize: 32, lineHeight: 40 },
+  statLabel: { fontSize: 17, marginTop: 2 },
+  tagline: { fontSize: 19, lineHeight: 27, textAlign: 'center', maxWidth: 320 },
+  reviews: { flex: 1, justifyContent: 'center', paddingHorizontal: OB.gutter },
 });

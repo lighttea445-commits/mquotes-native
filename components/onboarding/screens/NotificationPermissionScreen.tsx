@@ -1,11 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, AppState, AppStateStatus } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../../../hooks/useTheme';
 import { getPermissionStatus } from '../../../lib/notifications';
 import { OnboardingHeader } from '../OnboardingHeader';
 import { ContinueButton } from '../ContinueButton';
+import { BellMoon } from '../art/BellMoon';
 import { OB } from '../tokens';
 
 interface Props {
@@ -104,13 +104,7 @@ export function NotificationPermissionScreen({
         </View>
 
         <View style={np.art}>
-          <MaterialCommunityIcons name="bell-outline" size={112} color={theme.gold} />
-          <MaterialCommunityIcons
-            name="weather-night"
-            size={30}
-            color={theme.textMuted}
-            style={np.moon}
-          />
+          <BellMoon size={230} color={theme.gold} />
         </View>
 
         <View style={np.footer}>
@@ -129,6 +123,5 @@ const np = StyleSheet.create({
   headline: { fontSize: 28, lineHeight: 36, textAlign: 'center' },
   subhead: { fontSize: 15, lineHeight: 21, textAlign: 'center', marginTop: 10 },
   art: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  moon: { position: 'absolute', top: '32%', left: '28%' },
   footer: { paddingBottom: 12 },
 });

@@ -1,10 +1,10 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../../../hooks/useTheme';
 import { OnboardingHeader } from '../OnboardingHeader';
 import { ContinueButton } from '../ContinueButton';
+import { PhoneReminder } from '../art/PhoneReminder';
 import { OB } from '../tokens';
 
 interface Props {
@@ -32,17 +32,7 @@ export function TrialPromiseScreen({ next, back, progress }: Props) {
         </View>
 
         <View style={tp.art}>
-          <View style={[tp.phone, { borderColor: theme.border, backgroundColor: theme.surface }]}>
-            <Text style={[tp.clock, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
-              11:11
-            </Text>
-          </View>
-          <MaterialCommunityIcons
-            name="bell-ring-outline"
-            size={64}
-            color={theme.gold}
-            style={tp.bell}
-          />
+          <PhoneReminder size={250} color={theme.gold} fontFamily={theme.quoteFontFamily} />
         </View>
 
         <ContinueButton onPress={next} label="Try it for free" />
@@ -58,14 +48,4 @@ const tp = StyleSheet.create({
   headline: { fontSize: 28, lineHeight: 36, textAlign: 'center' },
   subhead: { fontSize: 15, lineHeight: 21, textAlign: 'center', marginTop: 10 },
   art: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  phone: {
-    width: 150,
-    height: 250,
-    borderRadius: 28,
-    borderWidth: 2,
-    alignItems: 'center',
-    paddingTop: 40,
-  },
-  clock: { fontSize: 40 },
-  bell: { position: 'absolute', left: '18%', top: '38%' },
 });
