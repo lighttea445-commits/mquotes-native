@@ -38,7 +38,7 @@ export default function HistoryScreen({ onClose, onBack }: { onClose?: () => voi
   const modal = useModal();
 
   const handleUnlock = () => {
-    modal ? modal.openSheet('features') : router.push('/subscriptions');
+    modal ? modal.openSheet('trial') : router.push('/subscriptions');
   };
 
   // Show gate screen for free users (skip during loading to avoid flash)

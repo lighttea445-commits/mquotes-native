@@ -22,7 +22,6 @@ import HistoryScreen from '../components/screens/HistoryScreen';
 import NotificationsScreen from '../components/screens/NotificationsScreen';
 import WidgetsScreen from '../components/screens/WidgetsScreen';
 import FavoritesScreen from '../components/screens/FavoritesScreen';
-import FeaturesScreen from '../components/subscriptions/FeaturesScreen';
 import TrialScreen from '../components/subscriptions/TrialScreen';
 import SettingsScreen from '../components/screens/SettingsScreen';
 import ShareScreen from '../components/screens/ShareScreen';
@@ -174,13 +173,9 @@ function HomeScreenInner() {
         <ShareScreen onClose={closeSheet} />
       </BottomSheet>
 
-      {/* Features (What you'll get) sheet */}
-      <BottomSheet visible={activeSheet === 'features'} onClose={closeSheet} backgroundColor={theme.background}
-        instantClose={previousSheet === 'features'} instantOpen={isSwitching}>
-        <FeaturesScreen onClose={closeSheet} />
-      </BottomSheet>
-
-      {/* Trial info (How your free trial works) sheet */}
+      {/* Paywall step 1 — "How your free trial works". Its CTA raises the
+          RevenueCat paywall (step 2). Every gated action in the app opens
+          this sheet. */}
       <BottomSheet visible={activeSheet === 'trial'} onClose={closeSheet} backgroundColor={theme.background}
         instantClose={previousSheet === 'trial'} instantOpen={isSwitching}>
         <TrialScreen onClose={closeSheet} />

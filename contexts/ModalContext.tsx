@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useRef, useState } from 'react';
 
-export type ModalSheet = 'categories' | 'themes' | 'mix' | 'profile' | 'myquotes' | 'history' | 'notifications' | 'widgets' | 'favorites' | 'features' | 'trial' | 'settings' | 'share' | null;
+export type ModalSheet = 'categories' | 'themes' | 'mix' | 'profile' | 'myquotes' | 'history' | 'notifications' | 'widgets' | 'favorites' | 'trial' | 'settings' | 'share' | null;
 type SheetName = Exclude<ModalSheet, null>;
 
 interface ModalContextValue {

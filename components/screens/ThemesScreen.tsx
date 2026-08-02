@@ -40,7 +40,7 @@ export default function ThemesScreen({ onClose }: { onClose?: () => void }) {
   const isLocked = (themeId: string) => !isPro && themeId !== DEFAULT_THEME_ID;
 
   const openUpsell = () =>
-    modal ? modal.openSheet('features') : router.push('/subscriptions');
+    modal ? modal.openSheet('trial') : router.push('/subscriptions');
 
   const handleSelect = (themeId: string) => {
     // Onboarding lets free users pick from six themes, so without this a free
@@ -80,11 +80,6 @@ export default function ThemesScreen({ onClose }: { onClose?: () => void }) {
           contentContainerStyle={styles.grid}
           columnWrapperStyle={styles.row}
           showsVerticalScrollIndicator={false}
-          ListHeaderComponent={
-            <Text style={[styles.sectionTitle, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
-              For you
-            </Text>
-          }
           renderItem={({ item: t }) => {
             const isSelected = preferences.theme === t.id;
             const locked = isLocked(t.id);
@@ -106,17 +101,11 @@ export default function ThemesScreen({ onClose }: { onClose?: () => void }) {
                   (isSelected ? ', selected' : locked ? ', locked — requires Premium' : '')
                 }
               >
-                {/* Selected wins the badge slot — a free user can arrive here
-                    with a locked theme already applied from onboarding. */}
-                {isSelected ? (
+                {isSelected && (
                   <View style={[styles.badge, { backgroundColor: theme.gold }]}>
                     <Icon name="check" size={13} color={ON_GOLD} />
                   </View>
-                ) : locked ? (
-                  <View style={[styles.badge, { backgroundColor: theme.gold }]}>
-                    <Icon name="crown" size={12} color={ON_GOLD} />
-                  </View>
-                ) : null}
+                )}
 
                 {t.backgroundImage ? (
                   <ImageBackground
@@ -126,7 +115,11 @@ export default function ThemesScreen({ onClose }: { onClose?: () => void }) {
                     resizeMode="cover"
                   >
                     <View style={styles.aaOverlay}>
-                      <Text style={[styles.aaTextImage, { fontFamily: t.quoteFontFamily }]}>Aa</Text>
+                      {/* The preview belongs to the card's own theme, so the
+                          off-white comes from that theme, not the active one. */}
+                      <Text style={[styles.aaTextImage, { color: t.text, fontFamily: t.quoteFontFamily }]}>
+                        Aa
+                      </Text>
                     </View>
                   </ImageBackground>
                 ) : (
@@ -167,10 +160,6 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
   safe: { flex: 1 },
-  sectionTitle: {
-    fontSize: 24,
-    marginBottom: SPACE.lg,
-  },
   grid: {
     paddingHorizontal: GUTTER,
     paddingBottom: 40,
@@ -219,7 +208,6 @@ const styles = StyleSheet.create({
   },
   aaTextImage: {
     fontSize: 22,
-    color: '#FFFFFF',
     textShadowColor: 'rgba(0,0,0,0.7)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,

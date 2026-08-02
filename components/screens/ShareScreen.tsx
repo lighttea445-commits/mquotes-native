@@ -79,7 +79,7 @@ export default function ShareScreen({ onClose }: { onClose?: () => void }) {
     if (!isPro) {
       close();
       setTimeout(() => {
-        modal ? modal.openSheet('features') : undefined;
+        modal ? modal.openSheet('trial') : undefined;
       }, 320);
       return;
     }

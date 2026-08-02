@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useTheme } from '../../hooks/useTheme';
 import { IconButton } from './IconButton';
 import { GUTTER, SPACE, HIT } from './tokens';
+import { FONTS } from '../../constants/fonts';
 
 interface SheetHeaderProps {
   title?: string;
@@ -53,7 +54,7 @@ export function SheetHeader({
 
       {title ? (
         <Text
-          style={[styles.title, { color: theme.text, fontFamily: theme.quoteFontFamily }]}
+          style={[styles.title, { color: theme.text }]}
           numberOfLines={1}
         >
           {title}
@@ -89,6 +90,15 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 28,
+    // Weight is a family name, not a fontWeight — see constants/fonts.ts.
+    fontFamily: FONTS.display.bold,
+    // Peachi carries a lot of ascent/descent. Without an explicit line height
+    // and Android's font padding switched off, the text box is taller than the
+    // glyphs and `alignItems: 'center'` centres the box — leaving the leading
+    // icon visibly off-centre against the title.
+    lineHeight: 34,
+    includeFontPadding: false,
+    textAlignVertical: 'center',
     flexShrink: 1,
   },
   spacer: {

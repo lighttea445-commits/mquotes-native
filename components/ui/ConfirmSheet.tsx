@@ -110,7 +110,7 @@ export function ConfirmSheet({
               <Text
                 style={[
                   styles.btnText,
-                  { color: destructive ? '#fff' : theme.background, fontFamily: theme.uiFontFamily },
+                  { color: destructive ? theme.text : theme.background, fontFamily: theme.uiFontFamily },
                 ]}
               >
                 {confirmLabel}

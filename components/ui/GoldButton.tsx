@@ -23,7 +23,7 @@ export function GoldButton({ label, onPress, disabled, loading, style }: GoldBut
     <TouchableOpacity
       style={[
         styles.button,
-        { backgroundColor: disabled ? theme.gold + '66' : theme.goldButton },
+        { backgroundColor: disabled ? theme.goldButton + '66' : theme.goldButton },
         style,
       ]}
       onPress={onPress}

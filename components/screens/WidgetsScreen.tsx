@@ -770,7 +770,7 @@ export default function WidgetsScreen({ onClose, onBack, onContinue }: { onClose
   // ── Pro-gate helper ────────────────────────────────────────────────────────
 
   const openPaywall = () =>
-    modal ? modal.openSheet('features') : router.push('/subscriptions');
+    modal ? modal.openSheet('trial') : router.push('/subscriptions');
 
   // ── Render: iOS ────────────────────────────────────────────────────────────
 

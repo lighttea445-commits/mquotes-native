@@ -72,7 +72,7 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
   const { preferences, setPreferences } = useAppStore();
 
   const openPaywall = () => {
-    if (modal) modal.openSheet('features');
+    if (modal) modal.openSheet('trial');
     else router.push('/subscriptions');
   };
   const pref = preferences;

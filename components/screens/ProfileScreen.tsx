@@ -70,7 +70,7 @@ export default function ProfileScreen({ onClose }: { onClose?: () => void }) {
     if (isPro) {
       modal ? modal.openSheet('history') : router.push('/history');
     } else {
-      modal ? modal.openSheet('features') : router.push('/history');
+      modal ? modal.openSheet('trial') : router.push('/history');
     }
   };
 

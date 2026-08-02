@@ -173,7 +173,7 @@ export function StreakShareSheet({ visible, streakCount, onClose }: Props) {
                 onPress={() => {
                   if (!isPro) {
                     onClose();
-                    setTimeout(() => { modal?.openSheet('features'); }, 320);
+                    setTimeout(() => { modal?.openSheet('trial'); }, 320);
                     return;
                   }
                   setWatermarkRemoved(v => !v);

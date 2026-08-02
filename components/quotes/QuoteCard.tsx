@@ -531,7 +531,7 @@ export function QuoteCard() {
             onPress={() => {
               if (hapticsEnabled) Haptics.selectionAsync();
               if (isPro) setShowPremiumModal(true);
-              else modal ? modal.openSheet('features') : undefined;
+              else modal ? modal.openSheet('trial') : undefined;
             }}
             style={[styles.crownBtn, { backgroundColor: theme.surface }]}
             accessibilityLabel={isPro ? 'Premium member' : 'Upgrade to premium'}

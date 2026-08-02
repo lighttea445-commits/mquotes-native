@@ -29,7 +29,7 @@ export function ContinueButton({ onPress, label = 'Continue', disabled = false, 
     );
   }
 
-  const bg = variant === 'gold' ? theme.gold : 'rgba(138,128,120,0.30)';
+  const bg = variant === 'gold' ? theme.goldButton : 'rgba(138,128,120,0.30)';
   const color = variant === 'gold' ? ON_GOLD : theme.text;
 
   return (

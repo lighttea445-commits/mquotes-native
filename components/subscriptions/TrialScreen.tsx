@@ -5,8 +5,8 @@ import {
   StyleSheet,
   ScrollView,
   Pressable,
-  Switch,
   Platform,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -15,8 +15,20 @@ import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../../hooks/useTheme';
 import { useModal } from '../../contexts/ModalContext';
+import { useRevenueCat } from '../../hooks/useRevenueCat';
+import { SheetHeader } from '../ui/SheetHeader';
+import { Toggle } from '../ui/Toggle';
+import { FONTS } from '../../constants/fonts';
+import { GUTTER, SPACE, RADIUS, ON_GOLD } from '../ui/tokens';
 
 const TRIAL_REMINDER_KEY = '@trial_reminder_notif_id';
+
+/**
+ * Subscription terms. Both stores require this link on a paywall — paste the
+ * real URL here and the Terms item appears in the footer. Left blank rather
+ * than pointed at a made-up address.
+ */
+const TERMS_URL = '';
 const STEP_HEIGHT = 80;
 const ICON_SIZE = 30;
 const BAR_WIDTH = 10;
@@ -71,6 +83,36 @@ function buildSteps(): Step[] {
   ];
 }
 
+/**
+ * Real price for the current offering, never a hardcoded one — the store can
+ * return a different currency, a regional price, or a changed plan. Returns
+ * null when offerings haven't loaded, in which case the line is omitted
+ * rather than guessed.
+ */
+function priceLineFor(offerings: ReturnType<typeof useRevenueCat>['offerings']): string | null {
+  const packages = offerings?.current?.availablePackages;
+  if (!packages || packages.length === 0) return null;
+
+  const pkg = packages.find(p => p.packageType === 'ANNUAL') ?? packages[0];
+  const price = pkg.product?.priceString;
+  if (!price) return null;
+
+  // The SDK computes the monthly equivalent in the store's own currency and
+  // formatting, which is why it isn't derived by dividing here. Not present on
+  // every product type, hence the guard.
+  const perMonth = (pkg.product as { pricePerMonthString?: string })?.pricePerMonthString;
+  if (pkg.packageType === 'ANNUAL' && perMonth) {
+    return `${perMonth}/month, billed yearly as ${price}/year`;
+  }
+
+  const unit =
+    pkg.packageType === 'ANNUAL' ? '/year' :
+    pkg.packageType === 'MONTHLY' ? '/month' :
+    pkg.packageType === 'WEEKLY' ? '/week' : '';
+
+  return `${price}${unit}`;
+}
+
 async function ensureTrialChannel() {
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('trial-reminder', {
@@ -88,10 +130,12 @@ interface Props {
 export default function TrialScreen({ onClose, onContinue }: Props) {
   const theme = useTheme();
   const modal = useModal();
+  const { offerings } = useRevenueCat();
   const [reminderEnabled, setReminderEnabled] = useState(false);
   const notifIdRef = useRef<string | null>(null);
   const steps = buildSteps();
   const timelineHeight = STEP_HEIGHT * steps.length;
+  const priceLine = priceLineFor(offerings);
 
   // Restore persisted notification ID on mount
   useEffect(() => {
@@ -155,21 +199,14 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        {/* X Close */}
-        <Pressable
-          onPress={onClose}
-          style={[styles.closeBtn, { backgroundColor: theme.surface }]}
-          hitSlop={12}
-        >
-          <Icon name="close" size={20} color={theme.textMuted} />
-        </Pressable>
+        <SheetHeader leading="close" onLeadingPress={onClose} />
 
         <ScrollView
           style={styles.scroll}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >
-          <Text style={[styles.title, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
+          <Text style={[styles.title, { color: theme.text }]}>
             How your free trial works
           </Text>
           <Text style={[styles.subtitle, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
@@ -227,7 +264,7 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
                   <View key={i} style={[styles.step, { height: STEP_HEIGHT }]}>
                     {step.done ? (
                       <>
-                        <Text style={[styles.stepTitleDone, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+                        <Text style={[styles.stepTitleDone, { color: theme.textMuted }]}>
                           {step.title}
                         </Text>
                         <Text style={[styles.stepSubtitle, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
@@ -236,7 +273,7 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
                       </>
                     ) : (
                       <>
-                        <Text style={[styles.stepTitle, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
+                        <Text style={[styles.stepTitle, { color: theme.text }]}>
                           {step.title}
                         </Text>
                         <Text style={[styles.stepSubtitle, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
@@ -258,18 +295,38 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
             <Text style={[styles.toggleLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
               Reminder before trial ends
             </Text>
-            <Switch
+            <Toggle
               value={reminderEnabled}
               onValueChange={handleReminderToggle}
-              trackColor={{ false: theme.border, true: theme.gold }}
-              thumbColor="#FFFFFF"
-              ios_backgroundColor={theme.border}
+              accessibilityLabel="Reminder before trial ends"
             />
           </View>
 
-          <Pressable onPress={handleContinue} style={[styles.ctaButton, { backgroundColor: theme.gold }]}>
-            <Text style={[styles.ctaText, { fontFamily: theme.uiFontFamily }]}>Continue</Text>
+          <Pressable
+            onPress={handleContinue}
+            style={[styles.ctaButton, { backgroundColor: theme.goldButton }]}
+            accessibilityRole="button"
+          >
+            <Text style={[styles.ctaText, { color: ON_GOLD }]}>
+              Try for $0.00
+            </Text>
           </Pressable>
+
+          {/* Omitted entirely when offerings haven't loaded — a price shown
+              here must be the store's real one. */}
+          {priceLine && (
+            <Text style={[styles.priceLine, { color: theme.textMuted, fontFamily: theme.bodyFontFamily }]}>
+              {priceLine}
+            </Text>
+          )}
+
+          {TERMS_URL ? (
+            <Pressable onPress={() => Linking.openURL(TERMS_URL)} hitSlop={8} style={styles.footerItem}>
+              <Text style={[styles.footerText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+                Terms
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
       </SafeAreaView>
     </View>
@@ -279,28 +336,21 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   safe: { flex: 1 },
-  closeBtn: {
-    position: 'absolute',
-    top: 12,
-    left: 20,
-    zIndex: 10,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   scroll: { flex: 1 },
   scrollContent: {
-    paddingTop: 60,
-    paddingHorizontal: 20,
-    paddingBottom: 12,
+    paddingTop: SPACE.sm,
+    paddingHorizontal: GUTTER,
+    paddingBottom: SPACE.md,
   },
+  // fontWeight is inert on Peachi and on the Inter families — every weight
+  // here is a family name (see constants/fonts.ts).
   title: {
-    fontSize: 28,
-    fontWeight: '800',
+    fontSize: 30,
+    fontFamily: FONTS.display.bold,
+    lineHeight: 38,
+    includeFontPadding: false,
     letterSpacing: -0.4,
-    marginBottom: 8,
+    marginBottom: 6,
     textAlign: 'center',
   },
   subtitle: {
@@ -329,13 +379,16 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   stepTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    lineHeight: 20,
+    fontSize: 18,
+    fontFamily: FONTS.display.bold,
+    lineHeight: 24,
+    includeFontPadding: false,
   },
   stepTitleDone: {
-    fontSize: 14,
-    fontWeight: '500',
+    fontSize: 18,
+    fontFamily: FONTS.display.bold,
+    lineHeight: 24,
+    includeFontPadding: false,
     textDecorationLine: 'line-through',
   },
   stepSubtitle: {
@@ -343,23 +396,35 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   bottom: {
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 12,
-    gap: 12,
+    paddingHorizontal: GUTTER,
+    paddingTop: SPACE.sm,
+    paddingBottom: SPACE.md,
+    gap: SPACE.md,
+  },
+  priceLine: {
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: -SPACE.xs,
+  },
+  footerItem: {
+    alignSelf: 'center',
+    paddingVertical: SPACE.xs,
+  },
+  footerText: {
+    fontSize: 13,
+    textAlign: 'center',
   },
   toggleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    borderRadius: 14,
+    borderRadius: RADIUS.pill,
     borderWidth: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingHorizontal: SPACE.lg,
+    paddingVertical: SPACE.sm,
   },
   toggleLabel: {
     fontSize: 15,
-    fontWeight: '500',
   },
   ctaButton: {
     height: 56,
@@ -368,9 +433,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   ctaText: {
-    color: '#0D0D0D',
-    fontSize: 17,
-    fontWeight: '700',
+    fontSize: 19,
+    fontFamily: FONTS.display.bold,
+    lineHeight: 26,
+    includeFontPadding: false,
     letterSpacing: 0.2,
   },
 });
