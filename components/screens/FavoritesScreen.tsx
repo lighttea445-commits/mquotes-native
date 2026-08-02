@@ -1,99 +1,170 @@
-import React, { useState } from 'react';
-import { FONTS } from '../../constants/fonts';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
-import { Icon } from '../ui/Icon';
+import React, { useMemo, useState } from 'react';
+import { View, Text, FlatList, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { useFavoritesStore, FavoriteQuote } from '../../store/useFavoritesStore';
-import { useTheme } from '../../hooks/useTheme';
+import * as Haptics from 'expo-haptics';
+import { SheetHeader } from '../ui/SheetHeader';
+import { IconButton } from '../ui/IconButton';
+import { SearchField } from '../ui/SearchField';
+import { QuoteListCard } from '../ui/QuoteListCard';
 import { ConfirmSheet } from '../ui/ConfirmSheet';
+import { AddToCollectionSheet } from '../collections/AddToCollectionSheet';
+import { GUTTER, SPACE } from '../ui/tokens';
+import { useTheme } from '../../hooks/useTheme';
+import { useAppStore } from '../../store/useAppStore';
+import { useFavoritesStore, FavoriteQuote } from '../../store/useFavoritesStore';
+import { useCollectionsStore } from '../../store/useCollectionsStore';
+import { useShareStore } from '../../store/useShareStore';
+import { useModal } from '../../contexts/ModalContext';
 
-function FavoriteItem({
-  quote,
-  onRemove,
-  theme,
-}: {
-  quote: FavoriteQuote;
-  onRemove: (id: string) => void;
-  theme: ReturnType<typeof useTheme>;
-}) {
-  return (
-    <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-      <Text style={[styles.quoteText, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
-        "{quote.text}"
-      </Text>
-      <Text style={[styles.authorText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-        {quote.author}
-      </Text>
-      <TouchableOpacity
-        onPress={() => onRemove(quote.id)}
-        style={styles.removeBtn}
-        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-      >
-        <Icon name="heart" size={18} color="#ef4444" />
-      </TouchableOpacity>
-    </View>
-  );
-}
+type Order = 'newest' | 'oldest';
 
 export default function FavoritesScreen({ onClose, onBack }: { onClose?: () => void; onBack?: () => void }) {
   const theme = useTheme();
   const router = useRouter();
+  const modal = useModal();
+  const hapticsEnabled = useAppStore((s) => s.preferences.hapticsEnabled);
+  const { favorites, removeFavorite, clearFavorites } = useFavoritesStore();
+  const collections = useCollectionsStore((s) => s.collections);
+  const setShareQuote = useShareStore((s) => s.setQuote);
+
+  /** Ids held by at least one collection, so the bookmark glyph can fill. */
+  const savedIds = useMemo(
+    () => new Set(collections.flatMap(c => c.quotes.map(q => q.id))),
+    [collections],
+  );
+
+  const [query, setQuery] = useState('');
+  const [order, setOrder] = useState<Order>('newest');
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [saving, setSaving] = useState<FavoriteQuote | null>(null);
+
   const close = onClose ?? (() => router.back());
   const back = onBack ?? close;
-  const { favorites, removeFavorite, clearFavorites } = useFavoritesStore();
-  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
-  const handleClearAll = () => setShowClearConfirm(true);
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const matched = q
+      ? favorites.filter(
+          f => f.text.toLowerCase().includes(q) || f.author.toLowerCase().includes(q),
+        )
+      : favorites;
+    // The store already holds newest first, so only the reverse needs sorting.
+    return order === 'newest' ? matched : [...matched].reverse();
+  }, [favorites, query, order]);
+
+  const handleUnfavorite = (quote: FavoriteQuote) => {
+    if (hapticsEnabled) Haptics.selectionAsync();
+    removeFavorite(quote.id);
+  };
+
+  const handleShare = (quote: FavoriteQuote) => {
+    if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setShareQuote(quote.id, quote.text, quote.author);
+    modal ? modal.openSheet('share') : router.push('/share');
+  };
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={[styles.root, { backgroundColor: theme.background }]}>
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={back} style={[styles.backBtn, { backgroundColor: theme.surface }]}>
-            <Icon name="chevron-left" size={22} color={theme.textMuted} />
-          </TouchableOpacity>
-          <Text style={[styles.title, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
-            Favorites
-          </Text>
-          {favorites.length > 0 ? (
-            <TouchableOpacity onPress={handleClearAll}>
-              <Text style={[styles.clearText, { color: theme.textMuted }]}>Clear all</Text>
-            </TouchableOpacity>
-          ) : (
-            <View style={{ width: 60 }} />
-          )}
-        </View>
+        <SheetHeader
+          title="Favorites"
+          leading="back"
+          onLeadingPress={back}
+          right={
+            favorites.length > 1 ? (
+              <IconButton
+                icon="sort-variant"
+                onPress={() => setOrder(o => (o === 'newest' ? 'oldest' : 'newest'))}
+                filled={false}
+                iconSize={22}
+                color={theme.text}
+                accessibilityLabel={
+                  order === 'newest' ? 'Sort by oldest saved first' : 'Sort by newest saved first'
+                }
+              />
+            ) : undefined
+          }
+          actionLabel={favorites.length > 0 ? 'Clear all' : undefined}
+          onActionPress={favorites.length > 0 ? () => setShowClearConfirm(true) : undefined}
+        />
+
+        {favorites.length > 0 && (
+          <View style={styles.search}>
+            <SearchField
+              value={query}
+              onChangeText={setQuery}
+              accessibilityLabel="Search your favorites"
+            />
+          </View>
+        )}
 
         {favorites.length === 0 ? (
           <View style={styles.empty}>
-            <Icon name="heart-outline" size={48} color={theme.textMuted} style={{ marginBottom: 16 }} />
-            <Text style={[styles.emptyText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+            <Text style={[styles.emptyTitle, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
               No favorites yet
             </Text>
-            <Text style={[styles.emptySubtext, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-              Tap the heart on any quote to save it here
+            <Text style={[styles.emptyBody, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+              Tap the heart on any quote to keep it here.
+            </Text>
+          </View>
+        ) : visible.length === 0 ? (
+          <View style={styles.empty}>
+            <Text style={[styles.emptyBody, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+              Nothing matches “{query.trim()}”.
             </Text>
           </View>
         ) : (
           <FlatList
-            data={favorites}
+            style={styles.list}
+            data={visible}
             keyExtractor={item => item.id}
-            renderItem={({ item }) => (
-              <FavoriteItem quote={item} onRemove={removeFavorite} theme={theme} />
-            )}
-            contentContainerStyle={styles.list}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
+            renderItem={({ item }) => (
+              <QuoteListCard
+                text={item.text}
+                date={item.savedAt}
+                actions={[
+                  {
+                    icon: 'heart',
+                    accessibilityLabel: 'Remove from favorites',
+                    color: theme.favorite ?? theme.gold,
+                    onPress: () => handleUnfavorite(item),
+                  },
+                  {
+                    icon: savedIds.has(item.id) ? 'bookmark' : 'bookmark-outline',
+                    accessibilityLabel: 'Add to collection',
+                    color: savedIds.has(item.id) ? theme.gold : theme.textMuted,
+                    onPress: () => setSaving(item),
+                  },
+                  {
+                    icon: 'export-variant',
+                    accessibilityLabel: 'Share',
+                    onPress: () => handleShare(item),
+                  },
+                ]}
+              />
+            )}
           />
         )}
       </SafeAreaView>
 
+      {saving && (
+        <AddToCollectionSheet
+          visible
+          quote={{ id: saving.id, text: saving.text, author: saving.author }}
+          onClose={() => setSaving(null)}
+        />
+      )}
+
       <ConfirmSheet
         visible={showClearConfirm}
         onClose={() => setShowClearConfirm(false)}
-        title="Clear All Favorites"
-        message="Are you sure you want to remove all favorites?"
-        confirmLabel="Clear All"
+        title="Clear all favorites"
+        message="Every quote you have saved here is removed. Quotes kept in a collection stay there."
+        confirmLabel="Clear all"
         destructive
         cancelLabel="Cancel"
         onConfirm={clearFavorites}
@@ -103,71 +174,35 @@ export default function FavoritesScreen({ onClose, onBack }: { onClose?: () => v
 }
 
 const styles = StyleSheet.create({
+  root: { flex: 1 },
   safe: { flex: 1 },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 8,
+  search: {
+    paddingHorizontal: GUTTER,
+    paddingBottom: SPACE.lg,
   },
-  backBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: '700',
-  },
-  clearText: {
-    fontSize: 13,
-    width: 60,
-    textAlign: 'right', fontFamily: FONTS.ui.regular
-  },
-  list: {
-    padding: 16,
-    gap: 12,
-  },
-  card: {
-    borderRadius: 20,
-    padding: 20,
-    borderWidth: 1,
-    marginBottom: 12,
-    position: 'relative',
-  },
-  quoteText: {
-    fontSize: 17,
-    lineHeight: 26,
-    marginBottom: 12,
-    paddingRight: 32,
-  },
-  authorText: {
-    fontSize: 13,
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-  },
-  removeBtn: {
-    position: 'absolute',
-    top: 16,
-    right: 16,
+  // A ScrollView sizes to its content without this, so a short list would not
+  // hold the bottom of the sheet.
+  list: { flex: 1 },
+  listContent: {
+    paddingHorizontal: GUTTER,
+    paddingBottom: SPACE.xl,
   },
   empty: {
     flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
-    padding: 32,
+    justifyContent: 'center',
+    paddingHorizontal: SPACE.xxl,
+    gap: SPACE.sm,
   },
-  emptyText: {
-    fontSize: 18,
-    marginBottom: 8,
-  },
-  emptySubtext: {
-    fontSize: 14,
+  emptyTitle: {
+    fontSize: 22,
+    lineHeight: 30,
+    includeFontPadding: false,
     textAlign: 'center',
-    lineHeight: 20,
+  },
+  emptyBody: {
+    fontSize: 15,
+    lineHeight: 23,
+    textAlign: 'center',
   },
 });

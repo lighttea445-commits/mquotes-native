@@ -93,6 +93,7 @@ const MAP = {
   'shape-outline': 'shape',
   'share-variant': 'share-3',
   shield: 'shield',
+  'sort-variant': 'arrows-sort',
   'star-outline': 'star',
   'tag-outline': 'tag',
   'trash-can-outline': 'trash',

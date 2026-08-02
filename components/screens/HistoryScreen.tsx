@@ -1,77 +1,90 @@
-import React from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
-import { Icon } from '../ui/Icon';
+import React, { useMemo, useState } from 'react';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
+import { Icon } from '../ui/Icon';
+import { SheetHeader } from '../ui/SheetHeader';
+import { QuoteListCard } from '../ui/QuoteListCard';
+import { ConfirmSheet } from '../ui/ConfirmSheet';
+import { AddToCollectionSheet } from '../collections/AddToCollectionSheet';
+import { GUTTER, SPACE, RADIUS, ON_GOLD } from '../ui/tokens';
 import { useTheme } from '../../hooks/useTheme';
+import { useAppStore } from '../../store/useAppStore';
 import { useRevenueCat } from '../../hooks/useRevenueCat';
 import { useHistoryStore, HistoryQuote } from '../../store/useHistoryStore';
+import { useFavoritesStore } from '../../store/useFavoritesStore';
+import { useCollectionsStore } from '../../store/useCollectionsStore';
+import { useShareStore } from '../../store/useShareStore';
 import { useModal } from '../../contexts/ModalContext';
 import { FONTS } from '../../constants/fonts';
 
-function HistoryItem({ item, theme }: { item: HistoryQuote; theme: ReturnType<typeof useTheme> }) {
-  const date = new Date(item.viewedAt);
-  const timeStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-
-  return (
-    <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-      <Text style={[styles.quoteText, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
-        "{item.text.length > 120 ? item.text.slice(0, 120) + '…' : item.text}"
-      </Text>
-      <View style={styles.cardFooter}>
-        <Text style={[styles.authorText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-          {item.author}
-        </Text>
-        <Text style={[styles.dateText, { color: theme.textMuted }]}>{timeStr}</Text>
-      </View>
-    </View>
-  );
-}
+/** Rows revealed per tap of "See older quotes". The store caps history at 100. */
+const PAGE = 20;
 
 export default function HistoryScreen({ onClose, onBack }: { onClose?: () => void; onBack?: () => void }) {
   const theme = useTheme();
   const router = useRouter();
-  const close = onClose ?? (() => router.back());
-  const back = onBack ?? close;
+  const modal = useModal();
+  const hapticsEnabled = useAppStore((s) => s.preferences.hapticsEnabled);
   const { isPro, isLoading } = useRevenueCat();
   const { history, clearHistory } = useHistoryStore();
-  const modal = useModal();
+  const { toggleFavorite, favorites } = useFavoritesStore();
+  const collections = useCollectionsStore((s) => s.collections);
+  const setShareQuote = useShareStore((s) => s.setQuote);
+
+  const [shown, setShown] = useState(PAGE);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [saving, setSaving] = useState<HistoryQuote | null>(null);
+
+  const close = onClose ?? (() => router.back());
+  const back = onBack ?? close;
+
+  const favoriteIds = useMemo(() => new Set(favorites.map(f => f.id)), [favorites]);
+  const savedIds = useMemo(
+    () => new Set(collections.flatMap(c => c.quotes.map(q => q.id))),
+    [collections],
+  );
+
+  const page = history.slice(0, shown);
+  const hasOlder = shown < history.length;
 
   const handleUnlock = () => {
     modal ? modal.openSheet('trial') : router.push('/subscriptions');
   };
 
-  // Show gate screen for free users (skip during loading to avoid flash)
+  const handleShare = (quote: HistoryQuote) => {
+    if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setShareQuote(quote.id, quote.text, quote.author);
+    modal ? modal.openSheet('share') : router.push('/share');
+  };
+
+  // ── Pro gate ──────────────────────────────────────────────────────────────
+  // Skipped while entitlements load, so the gate never flashes for a subscriber.
   if (!isLoading && !isPro) {
     return (
-      <View style={{ flex: 1 }}>
+      <View style={[styles.root, { backgroundColor: theme.background }]}>
         <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-          <View style={styles.header}>
-            <TouchableOpacity onPress={back} style={[styles.backBtn, { backgroundColor: theme.surface }]}>
-              <Icon name="chevron-left" size={22} color={theme.textMuted} />
-            </TouchableOpacity>
-            <Text style={[styles.title, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>History</Text>
-            <View style={{ width: 40 }} />
-          </View>
+          <SheetHeader title="History" leading="back" onLeadingPress={back} />
+
           <View style={styles.gate}>
-            <View style={[styles.gateIconBg, { backgroundColor: 'rgba(184,151,90,0.12)' }]}>
-              <Icon name="crown" size={32} color="#B8975A" />
+            <View style={[styles.gateIcon, { backgroundColor: theme.surface }]}>
+              <Icon name="crown" size={32} color={theme.gold} />
             </View>
-            <Text style={[styles.gateTitle, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
-              History is Pro
+            <Text style={[styles.gateTitle, { color: theme.text }]}>History is Pro</Text>
+            <Text style={[styles.gateBody, { color: theme.textMuted, fontFamily: theme.bodyFontFamily }]}>
+              Upgrade to browse every quote you have read.
             </Text>
-            <Text style={[styles.gateBody, { color: theme.textMuted, fontFamily: FONTS.body.regular }]}>
-              Upgrade to Quotable Pro to browse every quote you've ever read.
-            </Text>
+          </View>
+
+          <View style={styles.footer}>
             <TouchableOpacity
-              style={styles.unlockBtn}
               onPress={handleUnlock}
+              style={[styles.primaryBtn, { backgroundColor: theme.goldButton }]}
               activeOpacity={0.85}
+              accessibilityRole="button"
             >
-              <Icon name="crown" size={16} color="#1A1208" />
-              <Text style={[styles.unlockBtnText, { color: '#1A1208', fontFamily: FONTS.ui.bold }]}>
-                Unlock Pro
-              </Text>
+              <Text style={[styles.primaryText, { color: ON_GOLD }]}>Unlock Pro</Text>
             </TouchableOpacity>
           </View>
         </SafeAreaView>
@@ -80,105 +93,182 @@ export default function HistoryScreen({ onClose, onBack }: { onClose?: () => voi
   }
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={[styles.root, { backgroundColor: theme.background }]}>
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={back} style={[styles.backBtn, { backgroundColor: theme.surface }]}>
-            <Icon name="chevron-left" size={22} color={theme.textMuted} />
-          </TouchableOpacity>
-          <Text style={[styles.title, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
-            History
-          </Text>
-          {history.length > 0 && (
-            <TouchableOpacity onPress={clearHistory}>
-              <Text style={[styles.clearBtn, { color: theme.textMuted }]}>Clear</Text>
-            </TouchableOpacity>
-          )}
-          {history.length === 0 && <View style={{ width: 40 }} />}
-        </View>
+        <SheetHeader
+          title="History"
+          leading="back"
+          onLeadingPress={back}
+          actionLabel={history.length > 0 ? 'Clear' : undefined}
+          onActionPress={history.length > 0 ? () => setShowClearConfirm(true) : undefined}
+        />
 
         {history.length === 0 ? (
           <View style={styles.empty}>
-            <Icon name="clock-outline" size={48} color={theme.textMuted} style={{ marginBottom: 16 }} />
-            <Text style={[styles.emptyText, { color: theme.textMuted }]}>No history yet</Text>
+            <Text style={[styles.emptyTitle, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
+              Nothing here yet
+            </Text>
+            <Text style={[styles.emptyBody, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+              Every quote you read lands here.
+            </Text>
           </View>
         ) : (
           <FlatList
-            data={history}
+            style={styles.list}
+            data={page}
             keyExtractor={item => item.id + item.viewedAt}
-            renderItem={({ item }) => <HistoryItem item={item} theme={theme} />}
-            contentContainerStyle={styles.list}
+            contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
+            renderItem={({ item }) => (
+              <QuoteListCard
+                text={item.text}
+                date={item.viewedAt}
+                actions={[
+                  {
+                    icon: favoriteIds.has(item.id) ? 'heart' : 'heart-outline',
+                    accessibilityLabel: favoriteIds.has(item.id)
+                      ? 'Remove from favorites'
+                      : 'Add to favorites',
+                    color: favoriteIds.has(item.id) ? (theme.favorite ?? theme.gold) : theme.textMuted,
+                    onPress: () => {
+                      if (hapticsEnabled) Haptics.selectionAsync();
+                      toggleFavorite({
+                        id: item.id,
+                        text: item.text,
+                        author: item.author,
+                        category: item.category,
+                      });
+                    },
+                  },
+                  {
+                    icon: savedIds.has(item.id) ? 'bookmark' : 'bookmark-outline',
+                    accessibilityLabel: 'Add to collection',
+                    color: savedIds.has(item.id) ? theme.gold : theme.textMuted,
+                    onPress: () => setSaving(item),
+                  },
+                  {
+                    icon: 'export-variant',
+                    accessibilityLabel: 'Share',
+                    onPress: () => handleShare(item),
+                  },
+                ]}
+              />
+            )}
           />
         )}
+
+        {hasOlder && (
+          <View style={styles.footer}>
+            <TouchableOpacity
+              onPress={() => setShown(n => n + PAGE)}
+              style={[styles.primaryBtn, { backgroundColor: theme.goldButton }]}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+            >
+              <Text style={[styles.primaryText, { color: ON_GOLD }]}>See older quotes</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </SafeAreaView>
+
+      {saving && (
+        <AddToCollectionSheet
+          visible
+          quote={{ id: saving.id, text: saving.text, author: saving.author }}
+          onClose={() => setSaving(null)}
+        />
+      )}
+
+      <ConfirmSheet
+        visible={showClearConfirm}
+        onClose={() => setShowClearConfirm(false)}
+        title="Clear history"
+        message="Your reading history is emptied. Favorites and collections are untouched."
+        confirmLabel="Clear"
+        destructive
+        cancelLabel="Cancel"
+        onConfirm={() => {
+          clearHistory();
+          setShown(PAGE);
+        }}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  root: { flex: 1 },
   safe: { flex: 1 },
-  header: {
-    flexDirection: 'row',
+  // Without flex the list sizes to its content, and a short history would let
+  // the "See older quotes" button float up under the last card.
+  list: { flex: 1 },
+  listContent: {
+    paddingHorizontal: GUTTER,
+    paddingBottom: SPACE.xl,
+  },
+  empty: {
+    flex: 1,
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 8,
+    justifyContent: 'center',
+    paddingHorizontal: SPACE.xxl,
+    gap: SPACE.sm,
   },
-  backBtn: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
-  title: { fontSize: 22, fontWeight: '700' },
-  clearBtn: { fontSize: 13, fontFamily: FONTS.ui.regular },
-  list: { padding: 16, gap: 12 },
-  card: {
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    marginBottom: 10,
+  emptyTitle: {
+    fontSize: 22,
+    lineHeight: 30,
+    includeFontPadding: false,
+    textAlign: 'center',
   },
-  quoteText: { fontSize: 15, lineHeight: 23, marginBottom: 10 },
-  cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  authorText: { fontSize: 12, letterSpacing: 0.5 },
-  dateText: { fontSize: 11, fontFamily: FONTS.ui.regular },
-  empty: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  emptyText: { fontSize: 16, fontFamily: FONTS.ui.regular },
+  emptyBody: {
+    fontSize: 15,
+    lineHeight: 23,
+    textAlign: 'center',
+  },
+
+  // ── Pro gate ──────────────────────────────────────────────────────────────
   gate: {
     flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 40,
-    gap: 14,
+    justifyContent: 'center',
+    paddingHorizontal: SPACE.xxl,
+    gap: SPACE.md,
   },
-  gateIconBg: {
+  gateIcon: {
     width: 72,
     height: 72,
     borderRadius: 36,
-    justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 4,
+    justifyContent: 'center',
+    marginBottom: SPACE.xs,
   },
   gateTitle: {
     fontSize: 24,
-    fontWeight: '700',
+    fontFamily: FONTS.display.bold,
+    lineHeight: 32,
+    includeFontPadding: false,
     textAlign: 'center',
   },
   gateBody: {
-    fontSize: 14,
+    fontSize: 15,
+    lineHeight: 23,
     textAlign: 'center',
-    lineHeight: 22,
   },
-  unlockBtn: {
-    flexDirection: 'row',
+
+  footer: {
+    paddingHorizontal: GUTTER,
+    paddingTop: SPACE.md,
+    paddingBottom: SPACE.sm,
+  },
+  primaryBtn: {
+    height: 58,
+    borderRadius: RADIUS.pill,
     alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 28,
-    paddingVertical: 14,
-    borderRadius: 28,
-    backgroundColor: '#B8975A',
-    marginTop: 8,
+    justifyContent: 'center',
   },
-  unlockBtnText: {
-    fontSize: 16,
-    fontWeight: '600',
+  primaryText: {
+    fontSize: 18,
+    fontFamily: FONTS.display.bold,
+    lineHeight: 25,
+    includeFontPadding: false,
   },
 });

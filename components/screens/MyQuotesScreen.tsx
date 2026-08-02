@@ -1,20 +1,28 @@
-import React, { useState, useRef } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  ScrollView,
+  FlatList,
   TextInput,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Icon } from '../ui/Icon';
-import { useTheme } from '../../hooks/useTheme';
-import { useUserQuotesStore, UserQuote } from '../../store/useUserQuotesStore';
+import * as Haptics from 'expo-haptics';
+import { SheetHeader } from '../ui/SheetHeader';
+import { SearchField } from '../ui/SearchField';
+import { QuoteListCard } from '../ui/QuoteListCard';
 import { ConfirmSheet } from '../ui/ConfirmSheet';
+import { GUTTER, SPACE, RADIUS, ON_GOLD } from '../ui/tokens';
+import { useTheme } from '../../hooks/useTheme';
+import { useAppStore } from '../../store/useAppStore';
+import { useUserQuotesStore, UserQuote } from '../../store/useUserQuotesStore';
+import { useShareStore } from '../../store/useShareStore';
+import { useModal } from '../../contexts/ModalContext';
+import { FONTS } from '../../constants/fonts';
 
 type Mode = 'list' | 'form';
 const MAX_CHARS = 300;
@@ -22,348 +30,284 @@ const MAX_CHARS = 300;
 export default function MyQuotesScreen({ onClose, onBack }: { onClose?: () => void; onBack?: () => void }) {
   const theme = useTheme();
   const router = useRouter();
+  const modal = useModal();
+  const hapticsEnabled = useAppStore((s) => s.preferences.hapticsEnabled);
   const { userQuotes, addQuote, editQuote, removeQuote } = useUserQuotesStore();
+  const setShareQuote = useShareStore((s) => s.setQuote);
 
   const [mode, setMode] = useState<Mode>('list');
-  const [editingQuote, setEditingQuote] = useState<UserQuote | null>(null);
-  const [draftText, setDraftText] = useState('');
+  const [editing, setEditing] = useState<UserQuote | null>(null);
+  const [draft, setDraft] = useState('');
+  const [query, setQuery] = useState('');
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const inputRef = useRef<TextInput>(null);
 
   const close = onClose ?? (() => router.back());
   const back = onBack ?? close;
 
-  const openAdd = () => {
-    setEditingQuote(null);
-    setDraftText('');
-    setMode('form');
-    setTimeout(() => inputRef.current?.focus(), 100);
-  };
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return q ? userQuotes.filter(u => u.text.toLowerCase().includes(q)) : userQuotes;
+  }, [userQuotes, query]);
 
-  const openEdit = (quote: UserQuote) => {
-    setEditingQuote(quote);
-    setDraftText(quote.text);
+  const openForm = (quote: UserQuote | null) => {
+    setEditing(quote);
+    setDraft(quote?.text ?? '');
     setMode('form');
+    // The sheet is still animating in on a cold open; focusing immediately
+    // raises the keyboard before the input has a position on screen.
     setTimeout(() => inputRef.current?.focus(), 100);
   };
 
   const handleSave = () => {
-    const trimmed = draftText.trim();
+    const trimmed = draft.trim();
     if (!trimmed) return;
-    if (editingQuote) {
-      editQuote(editingQuote.id, trimmed, 'Me');
-    } else {
-      addQuote(trimmed, 'Me');
-    }
+    if (hapticsEnabled) Haptics.selectionAsync();
+    if (editing) editQuote(editing.id, trimmed, 'Me');
+    else addQuote(trimmed, 'Me');
     setMode('list');
   };
 
-  const handleDelete = (id: string) => setDeleteId(id);
+  const handleShare = (quote: UserQuote) => {
+    if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setShareQuote(quote.id, quote.text, quote.author);
+    modal ? modal.openSheet('share') : router.push('/share');
+  };
 
-  const canSave = draftText.trim().length > 0 && draftText.trim().length <= MAX_CHARS;
+  const canSave = draft.trim().length > 0;
 
-  return (
-    <KeyboardAvoidingView
-      style={[styles.container, { backgroundColor: theme.background }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      {/* Drag handle — hidden when used inline (BottomSheet has its own) */}
-      {!onClose && (
-        <View style={styles.dragHandle}>
-          <View style={[styles.dragPill, { backgroundColor: theme.border }]} />
-        </View>
-      )}
+  // ── Add / edit ────────────────────────────────────────────────────────────
+  if (mode === 'form') {
+    return (
+      <KeyboardAvoidingView
+        style={[styles.root, { backgroundColor: theme.background }]}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+          <SheetHeader
+            title={editing ? 'Edit quote' : 'Add new'}
+            leading="back"
+            onLeadingPress={() => setMode('list')}
+          />
 
-      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        {mode === 'list' ? (
-          <>
-            {/* ── List header ── */}
-            <View style={styles.header}>
-              <TouchableOpacity onPress={back} style={styles.iconBtn}>
-                <Icon name="chevron-left" size={24} color={theme.textMuted} />
-              </TouchableOpacity>
-              <Text style={[styles.title, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
-                My Quotes
-              </Text>
-              <TouchableOpacity onPress={openAdd} style={styles.iconBtn}>
-                <Icon name="plus" size={24} color={theme.gold} />
-              </TouchableOpacity>
-            </View>
+          <View style={styles.body}>
+            <Text style={[styles.blurb, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
+              Add your own quote. It will only be visible to you.
+            </Text>
 
-            <ScrollView
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.listContent}
+            <TextInput
+              ref={inputRef}
+              style={[
+                styles.input,
+                { color: theme.text, backgroundColor: theme.surface, fontFamily: theme.uiFontFamily },
+              ]}
+              value={draft}
+              onChangeText={setDraft}
+              placeholder="Quote"
+              placeholderTextColor={theme.textMuted}
+              multiline
+              maxLength={MAX_CHARS}
+              textAlignVertical="top"
+              autoCapitalize="sentences"
+            />
+            <Text style={[styles.counter, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+              {draft.length}/{MAX_CHARS}
+            </Text>
+          </View>
+
+          <View style={styles.footer}>
+            <TouchableOpacity
+              onPress={handleSave}
+              disabled={!canSave}
+              style={[
+                styles.primaryBtn,
+                { backgroundColor: canSave ? theme.goldButton : theme.surface },
+              ]}
+              activeOpacity={0.85}
+              accessibilityRole="button"
             >
-              {userQuotes.length === 0 ? (
-                /* ── Empty state ── */
-                <View style={styles.emptyState}>
-                  <Icon name="feather" size={52} color={theme.textMuted} />
-                  <Text style={[styles.emptyTitle, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
-                    Your voice, your wisdom
-                  </Text>
-                  <Text style={[styles.emptyBody, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-                    Write quotes you've crafted or collected.
-                    {'\n'}Enable them in Mix to see them in your feed.
-                  </Text>
-                  <TouchableOpacity
-                    onPress={openAdd}
-                    style={[styles.emptyAddBtn, { backgroundColor: theme.gold }]}
-                    activeOpacity={0.8}
-                  >
-                    <Icon name="plus" size={18} color="#1A1208" />
-                    <Text style={[styles.emptyAddText, { color: '#1A1208', fontFamily: theme.uiFontFamily }]}>
-                      Add your first quote
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <>
-                  {/* ── Quote list ── */}
-                  {userQuotes.map((q) => (
-                    <View
-                      key={q.id}
-                      style={[styles.quoteRow, { backgroundColor: theme.surface, borderColor: theme.border }]}
-                    >
-                      <Text
-                        style={[styles.quoteRowText, { color: theme.text, fontFamily: theme.quoteFontFamily }]}
-                        numberOfLines={4}
-                      >
-                        {q.text}
-                      </Text>
-                      <View style={styles.rowActions}>
-                        <TouchableOpacity
-                          onPress={() => openEdit(q)}
-                          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                        >
-                          <Icon name="pencil-outline" size={19} color={theme.textMuted} />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          onPress={() => handleDelete(q.id)}
-                          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                        >
-                          <Icon name="trash-can-outline" size={19} color={theme.textMuted} />
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  ))}
-
-                  {/* ── Add more ── */}
-                  <TouchableOpacity
-                    onPress={openAdd}
-                    style={[styles.addMoreRow, { borderColor: theme.border }]}
-                    activeOpacity={0.7}
-                  >
-                    <Icon name="plus" size={18} color={theme.textMuted} />
-                    <Text style={[styles.addMoreText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-                      Add another quote
-                    </Text>
-                  </TouchableOpacity>
-                </>
-              )}
-            </ScrollView>
-          </>
-        ) : (
-          <>
-            {/* ── Form header ── */}
-            <View style={styles.header}>
-              <TouchableOpacity onPress={() => setMode('list')} style={styles.iconBtn}>
-                <Icon name="arrow-left" size={20} color={theme.textMuted} />
-              </TouchableOpacity>
-              <Text style={[styles.title, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
-                {editingQuote ? 'Edit Quote' : 'New Quote'}
+              <Text style={[styles.primaryText, { color: canSave ? ON_GOLD : theme.textMuted }]}>
+                Save
               </Text>
-              <View style={styles.iconBtn} />
-            </View>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </KeyboardAvoidingView>
+    );
+  }
 
-            <View style={styles.formContent}>
-              <TextInput
-                ref={inputRef}
-                value={draftText}
-                onChangeText={setDraftText}
-                placeholder="Write your quote here…"
-                placeholderTextColor={theme.textMuted}
-                multiline
-                maxLength={MAX_CHARS}
-                style={[
-                  styles.textInput,
+  // ── List ──────────────────────────────────────────────────────────────────
+  return (
+    <View style={[styles.root, { backgroundColor: theme.background }]}>
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+        <SheetHeader
+          title="My quotes"
+          leading="back"
+          onLeadingPress={back}
+          actionLabel="Add"
+          onActionPress={() => openForm(null)}
+        />
+
+        {userQuotes.length > 0 && (
+          <View style={styles.search}>
+            <SearchField
+              value={query}
+              onChangeText={setQuery}
+              accessibilityLabel="Search your quotes"
+            />
+          </View>
+        )}
+
+        {userQuotes.length === 0 ? (
+          <View style={styles.empty}>
+            <Text style={[styles.emptyTitle, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
+              Your voice, your wisdom
+            </Text>
+            <Text style={[styles.emptyBody, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+              Write quotes you have crafted or collected. Enable them in Mix to see them in your feed.
+            </Text>
+          </View>
+        ) : visible.length === 0 ? (
+          <View style={styles.empty}>
+            <Text style={[styles.emptyBody, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+              Nothing matches “{query.trim()}”.
+            </Text>
+          </View>
+        ) : (
+          <FlatList
+            style={styles.list}
+            data={visible}
+            keyExtractor={item => item.id}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+            renderItem={({ item }) => (
+              <QuoteListCard
+                text={item.text}
+                date={item.createdAt}
+                actions={[
                   {
-                    color: theme.text,
-                    fontFamily: theme.quoteFontFamily,
-                    borderColor: draftText.length > 0 ? theme.gold + '40' : theme.border,
-                    backgroundColor: theme.surface,
+                    icon: 'pencil-outline',
+                    accessibilityLabel: 'Edit this quote',
+                    onPress: () => openForm(item),
+                  },
+                  {
+                    icon: 'trash-can-outline',
+                    accessibilityLabel: 'Delete this quote',
+                    onPress: () => setDeleteId(item.id),
+                  },
+                  {
+                    icon: 'export-variant',
+                    accessibilityLabel: 'Share',
+                    onPress: () => handleShare(item),
                   },
                 ]}
-                textAlignVertical="top"
-                autoCorrect
-                autoCapitalize="sentences"
               />
-              <Text style={[styles.charCount, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-                {draftText.length}/{MAX_CHARS}
-              </Text>
-
-              <TouchableOpacity
-                onPress={handleSave}
-                disabled={!canSave}
-                style={[
-                  styles.saveBtn,
-                  { backgroundColor: canSave ? theme.goldButton : theme.surface },
-                ]}
-                activeOpacity={0.8}
-              >
-                <Text
-                  style={[
-                    styles.saveBtnText,
-                    { color: canSave ? '#1A1208' : theme.textMuted, fontFamily: theme.uiFontFamily },
-                  ]}
-                >
-                  {editingQuote ? 'Save Changes' : 'Add Quote'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </>
+            )}
+          />
         )}
+
+        <View style={styles.footer}>
+          <TouchableOpacity
+            onPress={() => openForm(null)}
+            style={[styles.primaryBtn, { backgroundColor: theme.goldButton }]}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+          >
+            <Text style={[styles.primaryText, { color: ON_GOLD }]}>Add</Text>
+          </TouchableOpacity>
+        </View>
       </SafeAreaView>
 
       <ConfirmSheet
         visible={deleteId !== null}
         onClose={() => setDeleteId(null)}
-        title="Delete Quote"
-        message="Remove this quote from your collection?"
+        title="Delete quote"
+        message="This removes the quote from your own collection for good."
         confirmLabel="Delete"
         destructive
         cancelLabel="Cancel"
         onConfirm={() => { if (deleteId) removeQuote(deleteId); }}
       />
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  dragHandle: { alignItems: 'center', paddingTop: 10, paddingBottom: 4 },
-  dragPill: { width: 36, height: 4, borderRadius: 2 },
+  root: { flex: 1 },
   safe: { flex: 1 },
 
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 8,
+  // ── List ──────────────────────────────────────────────────────────────────
+  search: {
+    paddingHorizontal: GUTTER,
+    paddingBottom: SPACE.lg,
   },
-  iconBtn: {
-    width: 36,
-    height: 36,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: '700',
-  },
-
-  // ── List ──
+  // Without flex the list sizes to its content, and one or two quotes would let
+  // the pinned Add button float up under the last card.
+  list: { flex: 1 },
   listContent: {
-    paddingHorizontal: 16,
-    paddingTop: 4,
-    paddingBottom: 40,
+    paddingHorizontal: GUTTER,
+    paddingBottom: SPACE.xl,
   },
-
-  emptyState: {
+  empty: {
+    flex: 1,
     alignItems: 'center',
-    paddingTop: 60,
-    paddingHorizontal: 32,
-    gap: 12,
+    justifyContent: 'center',
+    paddingHorizontal: SPACE.xxl,
+    gap: SPACE.sm,
   },
   emptyTitle: {
     fontSize: 22,
-    fontWeight: '700',
+    lineHeight: 30,
+    includeFontPadding: false,
     textAlign: 'center',
-    marginTop: 8,
   },
   emptyBody: {
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 22,
-  },
-  emptyAddBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    borderRadius: 28,
-    marginTop: 16,
-  },
-  emptyAddText: {
     fontSize: 15,
-    fontWeight: '600',
+    lineHeight: 23,
+    textAlign: 'center',
   },
 
-  quoteRow: {
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 16,
-    marginBottom: 10,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-  },
-  quoteRowText: {
+  // ── Form ──────────────────────────────────────────────────────────────────
+  body: {
     flex: 1,
-    fontSize: 16,
-    lineHeight: 26,
+    paddingHorizontal: GUTTER,
+    gap: SPACE.xl,
   },
-  rowActions: {
-    gap: 16,
-    paddingTop: 2,
+  blurb: {
+    fontSize: 17,
+    lineHeight: 25,
+  },
+  // A quote runs to 300 characters, so this is a card rather than the single
+  // line pill used for a collection name.
+  input: {
+    minHeight: 160,
+    borderRadius: RADIUS.card,
+    padding: SPACE.lg,
+    fontSize: 17,
+    lineHeight: 25,
+  },
+  counter: {
+    fontSize: 13,
+    textAlign: 'right',
+    marginTop: -SPACE.lg,
   },
 
-  addMoreRow: {
-    flexDirection: 'row',
+  footer: {
+    paddingHorizontal: GUTTER,
+    paddingTop: SPACE.md,
+    paddingBottom: SPACE.sm,
+  },
+  primaryBtn: {
+    height: 58,
+    borderRadius: RADIUS.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 16,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    marginTop: 4,
   },
-  addMoreText: {
-    fontSize: 14,
-  },
-
-  // ── Form ──
-  formContent: {
-    flex: 1,
-    paddingHorizontal: 16,
-    paddingTop: 8,
-  },
-  textInput: {
-    borderWidth: 1,
-    borderRadius: 16,
-    padding: 18,
-    fontSize: 20,
-    lineHeight: 32,
-    minHeight: 200,
-  },
-  charCount: {
-    fontSize: 12,
-    textAlign: 'right',
-    marginTop: 8,
-    marginRight: 4,
-  },
-  saveBtn: {
-    marginTop: 20,
-    borderRadius: 28,
-    paddingVertical: 16,
-    alignItems: 'center',
-  },
-  saveBtnText: {
-    fontSize: 16,
-    fontWeight: '600',
-    letterSpacing: 0.3,
+  primaryText: {
+    fontSize: 18,
+    fontFamily: FONTS.display.bold,
+    lineHeight: 25,
+    includeFontPadding: false,
   },
 });
