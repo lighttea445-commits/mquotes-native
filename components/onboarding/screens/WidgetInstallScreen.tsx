@@ -56,7 +56,11 @@ export function WidgetInstallScreen({ next, back, progress }: Props) {
         <View style={wg.art}>
           <View style={[wg.phone, { borderColor: theme.border, backgroundColor: theme.surface }]}>
             <View style={[wg.widget, { backgroundColor: theme.surfaceElevated }]}>
-              <Text style={[wg.widgetText, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
+              <Text
+                numberOfLines={3}
+                adjustsFontSizeToFit
+                style={[wg.widgetText, { color: theme.text, fontFamily: theme.quoteFontFamily }]}
+              >
                 Everything is fine.
               </Text>
             </View>
@@ -114,8 +118,11 @@ const wg = StyleSheet.create({
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
+    // The tile is only ~168 wide inside the 200pt phone, so the quote needs
+    // room to wrap rather than running into the rounded edges.
+    paddingHorizontal: 14,
   },
-  widgetText: { fontSize: 18 },
+  widgetText: { fontSize: 15, lineHeight: 21, textAlign: 'center' },
   appGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
