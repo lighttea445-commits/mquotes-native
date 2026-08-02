@@ -18,6 +18,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../../hooks/useTheme';
 import { useRevenueCat } from '../../hooks/useRevenueCat';
 import { ENTITLEMENT_PRO } from '../../lib/revenuecat';
+import { requestPermissions, canAskForPermissions } from '../../lib/notifications';
 import { errorReporting } from '../../lib/errorReporting';
 import { analytics } from '../../lib/analytics';
 import { SheetHeader } from '../ui/SheetHeader';
@@ -149,6 +150,7 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
   const theme = useTheme();
   const { offerings } = useRevenueCat();
   const [reminderEnabled, setReminderEnabled] = useState(false);
+  const [reminderBusy, setReminderBusy] = useState(false);
   const [purchasing, setPurchasing] = useState(false);
   const notifIdRef = useRef<string | null>(null);
   const steps = buildSteps();
@@ -156,32 +158,79 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
   const priceLine = priceLineFor(offerings);
   const trialPackage = trialPackageFor(offerings);
 
-  // Restore persisted notification ID on mount
+  /**
+   * Restores the switch from the persisted ID, but only after confirming the
+   * OS still holds that notification. `rescheduleAll` cancels every scheduled
+   * notification, so a stored ID is not proof the reminder survived — showing
+   * the switch on regardless would promise a reminder that no longer exists.
+   */
   useEffect(() => {
-    AsyncStorage.getItem(TRIAL_REMINDER_KEY).then(id => {
-      if (id) {
-        notifIdRef.current = id;
-        setReminderEnabled(true);
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const id = await AsyncStorage.getItem(TRIAL_REMINDER_KEY);
+        if (!id || cancelled) return;
+
+        const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+        if (cancelled) return;
+
+        if (scheduled.some(n => n.identifier === id)) {
+          notifIdRef.current = id;
+          setReminderEnabled(true);
+        } else {
+          await AsyncStorage.removeItem(TRIAL_REMINDER_KEY);
+        }
+      } catch {
+        // Best effort — leave the switch off rather than lying about state.
       }
-    });
+    })();
+
+    return () => { cancelled = true; };
   }, []);
 
+  const clearReminder = async () => {
+    if (notifIdRef.current) {
+      await Notifications.cancelScheduledNotificationAsync(notifIdRef.current);
+      notifIdRef.current = null;
+    }
+    await AsyncStorage.removeItem(TRIAL_REMINDER_KEY);
+  };
+
+  /**
+   * The switch moves on tap and reverts only if the work behind it fails.
+   *
+   * Permission goes through lib/notifications, which returns an existing grant
+   * instead of re-asking. A raw requestPermissionsAsync() resolves to 'denied'
+   * without ever showing a dialog once the user has answered — and onboarding
+   * always asks first — so this switch refused to move at all for anyone who
+   * skipped or denied that prompt. When no dialog is left to show, Settings is
+   * the only route to a grant.
+   */
   const handleReminderToggle = async (value: boolean) => {
-    if (value) {
-      const { status } = await Notifications.requestPermissionsAsync();
-      if (status !== 'granted') {
+    if (reminderBusy) return;
+    setReminderBusy(true);
+    setReminderEnabled(value);
+
+    try {
+      if (!value) {
+        await clearReminder();
+        return;
+      }
+
+      if (!(await requestPermissions())) {
+        if (!(await canAskForPermissions())) await Linking.openSettings();
         setReminderEnabled(false);
         return;
       }
-      // Cancel any existing trial reminder
-      if (notifIdRef.current) {
-        await Notifications.cancelScheduledNotificationAsync(notifIdRef.current);
-        notifIdRef.current = null;
-      }
+
+      await clearReminder();
       await ensureTrialChannel();
-      // Schedule for 9am on day 2 (one day before trial ends on day 3)
+
+      // 9am on day 2, one day before the trial ends on day 3.
       const triggerDate = addDays(new Date(), 2);
       triggerDate.setHours(9, 0, 0, 0);
+
       const id = await Notifications.scheduleNotificationAsync({
         content: {
           title: 'Your free trial ends tomorrow',
@@ -194,16 +243,14 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
           date: triggerDate,
         },
       });
+
       notifIdRef.current = id;
       await AsyncStorage.setItem(TRIAL_REMINDER_KEY, id);
-      setReminderEnabled(true);
-    } else {
-      if (notifIdRef.current) {
-        await Notifications.cancelScheduledNotificationAsync(notifIdRef.current);
-        notifIdRef.current = null;
-      }
-      await AsyncStorage.removeItem(TRIAL_REMINDER_KEY);
-      setReminderEnabled(false);
+    } catch (e) {
+      errorReporting.captureError(e as Error, { context: 'TrialScreen:reminderToggle' });
+      setReminderEnabled(!value);
+    } finally {
+      setReminderBusy(false);
     }
   };
 
@@ -355,6 +402,7 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
             <Toggle
               value={reminderEnabled}
               onValueChange={handleReminderToggle}
+              disabled={reminderBusy}
               accessibilityLabel="Reminder before trial ends"
             />
           </View>
