@@ -21,7 +21,7 @@ import Animated, {
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Icon } from '../ui/Icon';
 import { useTheme } from '../../hooks/useTheme';
 import { useRevenueCat } from '../../hooks/useRevenueCat';
 import { useFavoritesStore } from '../../store/useFavoritesStore';
@@ -35,7 +35,6 @@ import { useMix } from '../../hooks/useMix';
 import { CATEGORIES } from '../../constants/categories';
 import { useModal } from '../../contexts/ModalContext';
 import { useShareStore } from '../../store/useShareStore';
-import { DailyReflectPill } from './DailyReflectPill';
 import { PremiumModal } from '../subscriptions/PremiumModal';
 
 import { errorReporting } from '../../lib/errorReporting';
@@ -52,7 +51,6 @@ export function QuoteCard() {
   // Dynamic layout values that adapt to every phone screen size.
   const SWIPE_THRESHOLD = SCREEN_HEIGHT * 0.15;
   const BTN_BOTTOM = insets.bottom + 10;           // above safe-area / home indicator
-  const PROFILE_BOTTOM = BTN_BOTTOM + 52 + 8;      // stacked above bottom buttons
   const QUOTE_FONT_SIZE = Math.max(18, Math.min(28, Math.round(SCREEN_WIDTH * 0.062)));
   const QUOTE_LINE_HEIGHT = Math.round(QUOTE_FONT_SIZE * 1.58);
   const QUOTE_BODY_PB = BTN_BOTTOM + 52 + 20;      // clear floating buttons
@@ -417,7 +415,7 @@ export function QuoteCard() {
   if (fetchError) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: theme.background }]}>
-        <MaterialCommunityIcons name="wifi-off" size={48} color={theme.textMuted} />
+        <Icon name="wifi-off" size={48} color={theme.textMuted} />
         <Text style={[styles.emptyTitle, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
           Couldn't load quotes
         </Text>
@@ -448,7 +446,7 @@ export function QuoteCard() {
 
     return (
       <View style={[styles.loadingContainer, { backgroundColor: theme.background }]}>
-        <MaterialCommunityIcons name={emptyIcon as any} size={48} color={theme.textMuted} />
+        <Icon name={emptyIcon} size={48} color={theme.textMuted} />
         <Text style={[styles.emptyTitle, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
           Nothing here yet
         </Text>
@@ -477,14 +475,22 @@ export function QuoteCard() {
 
         {/* ── TOP BAR: fixed — never animates ── */}
         <View style={styles.topBar}>
-          {/* Left spacer balances the crown on the right */}
-          <View style={styles.topBarSpacer} />
+          {/* Left: profile */}
+          <Animated.View style={chromeStyle} pointerEvents={chromeHidden ? 'none' : 'auto'}>
+          <TouchableOpacity
+            onPress={() => { if (hapticsEnabled) Haptics.selectionAsync(); modal ? modal.openSheet('profile') : router.push('/profile'); }}
+            style={[styles.profileBtn, { backgroundColor: theme.surface }]}
+            accessibilityLabel="Open profile"
+          >
+            <Icon name="account" size={20} color={theme.gold} />
+          </TouchableOpacity>
+          </Animated.View>
 
-          {/* Center: progress pill or collection pill */}
+          {/* Center: favorites progress nudge, or the mix-builder entry once a mix is active */}
           <View style={styles.topBarCenter}>
             {favorites.length < 5 ? (
               <View style={[styles.progressPill, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                <MaterialCommunityIcons name="heart" size={13} color={theme.gold} />
+                <Icon name="heart" size={13} color={theme.gold} />
                 <Text style={[styles.progressText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
                   {progressNumerator}/{progressDenominator}
                 </Text>
@@ -500,7 +506,7 @@ export function QuoteCard() {
                   />
                 </View>
               </View>
-            ) : (
+            ) : mixActive ? (
               <TouchableOpacity
                 onPress={() => {
                   if (hapticsEnabled) Haptics.selectionAsync();
@@ -509,14 +515,11 @@ export function QuoteCard() {
                 style={[styles.collectionPill, { backgroundColor: theme.surface, borderColor: theme.border }]}
                 accessibilityLabel="Open mix builder"
               >
-                {!mixActive && (
-                  <MaterialCommunityIcons name={pillIcon as any} size={14} color={theme.textMuted} />
-                )}
-                <Text style={[styles.collectionPillText, { color: pillLabel === 'Mix' ? theme.gold : theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+                <Text style={[styles.collectionPillText, { color: theme.gold, fontFamily: theme.uiFontFamily }]}>
                   {pillLabel}
                 </Text>
               </TouchableOpacity>
-            )}
+            ) : null}
           </View>
 
           {/* Right: crown icon — gold if Pro, muted if free */}
@@ -530,7 +533,7 @@ export function QuoteCard() {
             style={[styles.crownBtn, { backgroundColor: theme.surface }]}
             accessibilityLabel={isPro ? 'Premium member' : 'Upgrade to premium'}
           >
-            <MaterialCommunityIcons
+            <Icon
               name="crown"
               size={20}
               color={isPro ? theme.gold : theme.textMuted}
@@ -557,15 +560,15 @@ export function QuoteCard() {
                 </Text>
               ) : null}
               <Animated.View style={[styles.bigHeartOverlay, bigHeartAnimStyle]} pointerEvents="none">
-                <MaterialCommunityIcons name="heart" size={180} color={theme.gold} />
+                <Icon name="heart" size={180} color={theme.gold} />
               </Animated.View>
             </View>
             <View style={styles.actionRow}>
               <TouchableOpacity onPress={() => { if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShareQuote(converted?.text ?? '', converted?.author ?? ''); modal ? modal.openSheet('share') : router.push('/share'); }} hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}>
-                <MaterialCommunityIcons name="share-variant" size={30} color={theme.textMuted} />
+                <Icon name="share-variant" size={32} color={theme.textMuted} />
               </TouchableOpacity>
               <TouchableOpacity onPress={handleFavorite} hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}>
-                <MaterialCommunityIcons
+                <Icon
                   name={favorited ? 'heart' : 'heart-outline'}
                   size={32}
                   color={favorited ? theme.gold : theme.textMuted}
@@ -575,37 +578,36 @@ export function QuoteCard() {
           </View>
         </Animated.View>
 
-        {/* ── CORNER BUTTONS + Reflect: hidden until the first-run reveal ── */}
+        {/* ── BOTTOM BAR: hidden until the first-run reveal ── */}
         <Animated.View
           style={[StyleSheet.absoluteFill, chromeStyle]}
           pointerEvents={chromeHidden ? 'none' : 'box-none'}
         >
+        {/* Left: collection pill — the current collection, tap to browse */}
         <TouchableOpacity
           onPress={() => { if (hapticsEnabled) Haptics.selectionAsync(); modal ? modal.openSheet('categories') : router.push('/categories'); }}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          style={[styles.categoriesFloat, { backgroundColor: theme.surface, bottom: BTN_BOTTOM, left: BTN_BOTTOM }]}
-          accessibilityLabel="Browse categories"
+          style={[styles.collectionFloat, { backgroundColor: theme.surface, bottom: BTN_BOTTOM, left: BTN_BOTTOM }]}
+          accessibilityLabel={`Browse collections. Current collection: ${pillLabel}`}
         >
-          <MaterialCommunityIcons name="apps" size={22} color={theme.gold} />
+          <Icon name={mixActive ? 'playlist-music' : pillIcon} size={18} color={theme.gold} />
+          <Text
+            style={[styles.collectionFloatText, { color: theme.text, fontFamily: theme.uiFontFamily }]}
+            numberOfLines={1}
+          >
+            {pillLabel}
+          </Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          onPress={() => { if (hapticsEnabled) Haptics.selectionAsync(); modal ? modal.openSheet('profile') : router.push('/profile'); }}
-          style={[styles.profileFloat, { backgroundColor: theme.surface, bottom: PROFILE_BOTTOM, right: BTN_BOTTOM }]}
-          accessibilityLabel="Open profile"
-        >
-          <MaterialCommunityIcons name="account-outline" size={20} color={theme.gold} />
-        </TouchableOpacity>
+
+        {/* Right: theme picker */}
         <TouchableOpacity
           onPress={() => { if (hapticsEnabled) Haptics.selectionAsync(); modal ? modal.openSheet('themes') : router.push('/themes'); }}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           style={[styles.themesFloat, { backgroundColor: theme.surface, bottom: BTN_BOTTOM, right: BTN_BOTTOM }]}
           accessibilityLabel="Change theme"
         >
-          <MaterialCommunityIcons name="brush-variant" size={22} color={theme.gold} />
+          <Icon name="brush-variant" size={22} color={theme.gold} />
         </TouchableOpacity>
-
-        {/* Daily Reflect pill — centered bottom */}
-        <DailyReflectPill />
         </Animated.View>
 
       </View>
@@ -673,8 +675,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 4,
   },
-  topBarSpacer: {
+  profileBtn: {
     width: 52,
+    height: 52,
+    borderRadius: 26,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   topBarCenter: {
     flex: 1,
@@ -739,6 +745,7 @@ const styles = StyleSheet.create({
   actionRow: {
     flexDirection: 'row',
     justifyContent: 'center',
+    alignItems: 'center',
     gap: 32,
     marginTop: 28,
   },
@@ -781,23 +788,23 @@ const styles = StyleSheet.create({
   },
 
   // Floating corner buttons (bottom/left/right applied inline — dynamic safe-area offsets)
-  categoriesFloat: {
+  // Bottom-left collection pill — icon + current collection label
+  collectionFloat: {
     position: 'absolute',
-    width: 52,
     height: 52,
     borderRadius: 26,
-    justifyContent: 'center',
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 18,
+    maxWidth: '58%',
+  },
+  collectionFloatText: {
+    fontSize: 15,
+    fontWeight: '500',
+    flexShrink: 1,
   },
   themesFloat: {
-    position: 'absolute',
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  profileFloat: {
     position: 'absolute',
     width: 52,
     height: 52,

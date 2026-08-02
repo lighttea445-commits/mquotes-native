@@ -10,7 +10,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Icon } from '../ui/Icon';
 import * as ExpoSharing from 'expo-sharing';
 import { useBaseTheme } from '../../hooks/useTheme';
 import { useRevenueCat } from '../../hooks/useRevenueCat';
@@ -87,14 +87,14 @@ export default function ShareScreen({ onClose }: { onClose?: () => void }) {
   }, [isPro, watermarkRemoved, setWatermarkRemoved, close, modal]);
 
   return (
-    <View style={[styles.root, { paddingBottom: insets.bottom + 16 }]}>
+    <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom + 16 }]}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
           onPress={close}
           style={[styles.closeBtn, { backgroundColor: theme.surfaceElevated ?? theme.surface }]}
         >
-          <MaterialCommunityIcons name="close" size={18} color={theme.textMuted} />
+          <Icon name="close" size={18} color={theme.textMuted} />
         </TouchableOpacity>
         <Text style={[styles.title, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
           Share Quote
@@ -131,7 +131,7 @@ export default function ShareScreen({ onClose }: { onClose?: () => void }) {
       <View style={styles.actions}>
         <TouchableOpacity onPress={handleCopyText} style={styles.actionItem}>
           <View style={[styles.actionCircle, { backgroundColor: theme.surface, borderColor: copiedFeedback ? theme.gold : theme.border }]}>
-            <MaterialCommunityIcons
+            <Icon
               name={copiedFeedback ? 'check' : 'content-copy'}
               size={22}
               color={copiedFeedback ? theme.gold : theme.text}
@@ -144,7 +144,7 @@ export default function ShareScreen({ onClose }: { onClose?: () => void }) {
 
         <TouchableOpacity onPress={handleToggleWatermark} style={styles.actionItem}>
           <View style={[styles.actionCircle, { backgroundColor: theme.surface, borderColor: (isPro && watermarkRemoved) ? theme.gold : theme.border }]}>
-            <MaterialCommunityIcons
+            <Icon
               name={(isPro && watermarkRemoved) ? 'image-off-outline' : 'image-minus-outline'}
               size={22}
               color={(isPro && watermarkRemoved) ? theme.gold : theme.text}
@@ -163,7 +163,7 @@ export default function ShareScreen({ onClose }: { onClose?: () => void }) {
           style={[styles.primaryBtn, { backgroundColor: theme.gold }]}
           activeOpacity={0.8}
         >
-          <MaterialCommunityIcons name="export-variant" size={20} color="#000" />
+          <Icon name="export-variant" size={20} color="#000" />
           <Text style={[styles.primaryBtnText, { fontFamily: theme.uiFontFamily }]}>
             Share
           </Text>

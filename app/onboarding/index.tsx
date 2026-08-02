@@ -189,8 +189,6 @@ export default function OnboardingScreen() {
         showAuthor: p.notificationShowAuthor,
         qodEnabled: p.qodEnabled,
         qodTime: p.qodTime,
-        reflectEnabled: p.reflectEnabled,
-        reflectTime: p.reflectTime,
         streakEnabled: p.streakEnabled,
         streakTime: p.streakTime,
       });

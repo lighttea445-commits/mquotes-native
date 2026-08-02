@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { FONTS } from '../../constants/fonts';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Icon } from '../ui/Icon';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useFavoritesStore, FavoriteQuote } from '../../store/useFavoritesStore';
@@ -30,7 +30,7 @@ function FavoriteItem({
         style={styles.removeBtn}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       >
-        <MaterialCommunityIcons name="heart" size={18} color="#ef4444" />
+        <Icon name="heart" size={18} color="#ef4444" />
       </TouchableOpacity>
     </View>
   );
@@ -48,10 +48,10 @@ export default function FavoritesScreen({ onClose, onBack }: { onClose?: () => v
 
   return (
     <View style={{ flex: 1 }}>
-      <SafeAreaView style={styles.safe} edges={['bottom']}>
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
         <View style={styles.header}>
           <TouchableOpacity onPress={back} style={[styles.backBtn, { backgroundColor: theme.surface }]}>
-            <MaterialCommunityIcons name="chevron-left" size={22} color={theme.textMuted} />
+            <Icon name="chevron-left" size={22} color={theme.textMuted} />
           </TouchableOpacity>
           <Text style={[styles.title, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
             Favorites
@@ -67,7 +67,7 @@ export default function FavoritesScreen({ onClose, onBack }: { onClose?: () => v
 
         {favorites.length === 0 ? (
           <View style={styles.empty}>
-            <MaterialCommunityIcons name="heart-outline" size={48} color={theme.textMuted} style={{ marginBottom: 16 }} />
+            <Icon name="heart-outline" size={48} color={theme.textMuted} style={{ marginBottom: 16 }} />
             <Text style={[styles.emptyText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
               No favorites yet
             </Text>

@@ -19,8 +19,6 @@ export interface UserPreferences {
   notificationShowAuthor: boolean; // show author under quote notification, default false
   qodEnabled: boolean;         // quote of the day
   qodTime: string;             // HH:mm, default "08:00"
-  reflectEnabled: boolean;     // reflect reminder
-  reflectTime: string;         // HH:mm, default "20:00"
   streakEnabled: boolean;      // streak reminder
   streakTime: string;          // HH:mm, default "21:00"
   lastNotifScheduledAt?: string; // ISO timestamp of most recent rescheduleAll call
@@ -103,8 +101,6 @@ const defaultPreferences: UserPreferences = {
   notificationShowAuthor: false,
   qodEnabled: true,
   qodTime: '08:00',
-  reflectEnabled: true,
-  reflectTime: '20:00',
   streakEnabled: true,
   streakTime: '21:00',
   hapticsEnabled: true,

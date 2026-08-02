@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Icon } from '../ui/Icon';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '../../hooks/useTheme';
@@ -45,17 +45,17 @@ export default function HistoryScreen({ onClose, onBack }: { onClose?: () => voi
   if (!isLoading && !isPro) {
     return (
       <View style={{ flex: 1 }}>
-        <SafeAreaView style={styles.safe} edges={['bottom']}>
+        <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
           <View style={styles.header}>
             <TouchableOpacity onPress={back} style={[styles.backBtn, { backgroundColor: theme.surface }]}>
-              <MaterialCommunityIcons name="chevron-left" size={22} color={theme.textMuted} />
+              <Icon name="chevron-left" size={22} color={theme.textMuted} />
             </TouchableOpacity>
             <Text style={[styles.title, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>History</Text>
             <View style={{ width: 40 }} />
           </View>
           <View style={styles.gate}>
             <View style={[styles.gateIconBg, { backgroundColor: 'rgba(184,151,90,0.12)' }]}>
-              <MaterialCommunityIcons name="crown" size={32} color="#B8975A" />
+              <Icon name="crown" size={32} color="#B8975A" />
             </View>
             <Text style={[styles.gateTitle, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
               History is Pro
@@ -68,7 +68,7 @@ export default function HistoryScreen({ onClose, onBack }: { onClose?: () => voi
               onPress={handleUnlock}
               activeOpacity={0.85}
             >
-              <MaterialCommunityIcons name="crown" size={16} color="#1A1208" />
+              <Icon name="crown" size={16} color="#1A1208" />
               <Text style={[styles.unlockBtnText, { color: '#1A1208', fontFamily: FONTS.ui.bold }]}>
                 Unlock Pro
               </Text>
@@ -81,10 +81,10 @@ export default function HistoryScreen({ onClose, onBack }: { onClose?: () => voi
 
   return (
     <View style={{ flex: 1 }}>
-      <SafeAreaView style={styles.safe} edges={['bottom']}>
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
         <View style={styles.header}>
           <TouchableOpacity onPress={back} style={[styles.backBtn, { backgroundColor: theme.surface }]}>
-            <MaterialCommunityIcons name="chevron-left" size={22} color={theme.textMuted} />
+            <Icon name="chevron-left" size={22} color={theme.textMuted} />
           </TouchableOpacity>
           <Text style={[styles.title, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
             History
@@ -99,7 +99,7 @@ export default function HistoryScreen({ onClose, onBack }: { onClose?: () => voi
 
         {history.length === 0 ? (
           <View style={styles.empty}>
-            <MaterialCommunityIcons name="clock-outline" size={48} color={theme.textMuted} style={{ marginBottom: 16 }} />
+            <Icon name="clock-outline" size={48} color={theme.textMuted} style={{ marginBottom: 16 }} />
             <Text style={[styles.emptyText, { color: theme.textMuted }]}>No history yet</Text>
           </View>
         ) : (

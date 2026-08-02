@@ -2,13 +2,12 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Icon } from '../ui/Icon';
 import { useTheme } from '../../hooks/useTheme';
 import { useAppStore } from '../../store/useAppStore';
 import { useStreak } from '../../hooks/useStreak';
 import { useFavoritesStore } from '../../store/useFavoritesStore';
 import { useHistoryStore } from '../../store/useHistoryStore';
-import { useReflectStore } from '../../store/useReflectStore';
 import { StreakCard } from '../ui/StreakCard';
 import { StreakShareSheet } from '../streak/StreakShareSheet';
 import { useRevenueCat } from '../../hooks/useRevenueCat';
@@ -57,7 +56,6 @@ export default function ProfileScreen({ onClose }: { onClose?: () => void }) {
   const favorites = useFavoritesStore((s) => s.favorites);
   const totalQuotesRead = useHistoryStore((s) => s.totalQuotesRead);
   const { isPro } = useRevenueCat();
-  const reflectionsCount = useReflectStore((s) => s.reflections.length);
   const modal = useModal();
   const close = onClose ?? (() => router.back());
   const [showStreakShare, setShowStreakShare] = useState(false);
@@ -76,10 +74,6 @@ export default function ProfileScreen({ onClose }: { onClose?: () => void }) {
     }
   };
 
-  const handleReflections = () => {
-    modal ? modal.openSheet('journal') : router.push('/journal');
-  };
-
   return (
     <View style={[styles.root, { backgroundColor: theme.background }]}>
       {!onClose && (
@@ -88,11 +82,11 @@ export default function ProfileScreen({ onClose }: { onClose?: () => void }) {
         </View>
       )}
 
-      <SafeAreaView style={styles.safe} edges={['bottom']}>
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={close} style={[styles.closeBtn, { backgroundColor: theme.surface }]}>
-            <MaterialCommunityIcons name="close" size={20} color={theme.textMuted} />
+            <Icon name="close" size={20} color={theme.textMuted} />
           </TouchableOpacity>
           <View style={{ flex: 1 }} />
           <TouchableOpacity onPress={openSettings} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -117,7 +111,6 @@ export default function ProfileScreen({ onClose }: { onClose?: () => void }) {
           <View style={styles.statsRow}>
             <StatCard label="Favorites" value={favorites.length} theme={theme} onPress={handleFavorites} />
             <StatCard label="Quotes Read" value={totalQuotesRead} theme={theme} onPress={handleHistory} />
-            <StatCard label="Reflections" value={reflectionsCount} theme={theme} onPress={handleReflections} />
           </View>
 
           {/* Feature rows */}
@@ -126,18 +119,18 @@ export default function ProfileScreen({ onClose }: { onClose?: () => void }) {
               style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border }]}
               onPress={() => modal ? modal.openSheet('themes') : router.push('/themes')}
             >
-              <MaterialCommunityIcons name="palette-outline" size={20} color={theme.gold} />
+              <Icon name="palette-outline" size={20} color={theme.gold} />
               <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>Theme</Text>
-              <MaterialCommunityIcons name="chevron-right" size={18} color={theme.textMuted} />
+              <Icon name="chevron-right" size={18} color={theme.textMuted} />
             </TouchableOpacity>
 
             <TouchableOpacity
               style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border }]}
               onPress={handleHistory}
             >
-              <MaterialCommunityIcons name="history" size={20} color={theme.gold} />
+              <Icon name="history" size={20} color={theme.gold} />
               <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>History</Text>
-              <MaterialCommunityIcons name="chevron-right" size={18} color={theme.textMuted} />
+              <Icon name="chevron-right" size={18} color={theme.textMuted} />
             </TouchableOpacity>
 
             {/* Android only. iOS widgets are configured entirely in Apple's
@@ -149,9 +142,9 @@ export default function ProfileScreen({ onClose }: { onClose?: () => void }) {
                 style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border }]}
                 onPress={() => modal ? modal.openSheet('widgets') : router.push('/widgets')}
               >
-                <MaterialCommunityIcons name="view-grid-plus-outline" size={20} color={theme.gold} />
+                <Icon name="view-grid-plus-outline" size={20} color={theme.gold} />
                 <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>Widgets</Text>
-                <MaterialCommunityIcons name="chevron-right" size={18} color={theme.textMuted} />
+                <Icon name="chevron-right" size={18} color={theme.textMuted} />
               </TouchableOpacity>
             )}
 
@@ -159,9 +152,9 @@ export default function ProfileScreen({ onClose }: { onClose?: () => void }) {
               style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border }]}
               onPress={() => modal ? modal.openSheet('notifications') : router.push('/notifications')}
             >
-              <MaterialCommunityIcons name="bell-outline" size={20} color={theme.gold} />
+              <Icon name="bell-outline" size={20} color={theme.gold} />
               <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>Notifications</Text>
-              <MaterialCommunityIcons name="chevron-right" size={18} color={theme.textMuted} />
+              <Icon name="chevron-right" size={18} color={theme.textMuted} />
             </TouchableOpacity>
           </View>
 

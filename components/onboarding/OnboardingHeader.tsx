@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Icon } from '../ui/Icon';
 import { useTheme } from '../../hooks/useTheme';
 import { OB } from './tokens';
 
@@ -35,7 +35,7 @@ export function OnboardingHeader({ progress, onBack, onSkip, title }: Props) {
       <View style={hdr.row}>
         {onBack ? (
           <TouchableOpacity style={hdr.side} onPress={onBack} hitSlop={12}>
-            <MaterialCommunityIcons name="chevron-left" size={20} color={theme.textMuted} />
+            <Icon name="chevron-left" size={20} color={theme.textMuted} />
             <Text style={[hdr.backText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
               Back
             </Text>

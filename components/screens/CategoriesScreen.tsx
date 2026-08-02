@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Icon } from '../ui/Icon';
 import { useTheme } from '../../hooks/useTheme';
 import { useRevenueCat } from '../../hooks/useRevenueCat';
 import { useMixStore } from '../../store/useMixStore';
@@ -63,7 +63,7 @@ function SpecialTile({
           <Text style={[styles.tileSubtitle, { color: theme.textMuted }]}>{subtitle}</Text>
         )}
       </View>
-      <MaterialCommunityIcons
+      <Icon
         name={icon as any}
         size={20}
         color={theme.gold}
@@ -107,14 +107,14 @@ function CategoryPillRow({
       activeOpacity={0.7}
     >
       <View style={[styles.iconSquare, { backgroundColor: GOLD_ICON_BG }]}>
-        <MaterialCommunityIcons name={icon as any} size={18} color={theme.gold} />
+        <Icon name={icon as any} size={18} color={theme.gold} />
       </View>
       <Text style={[styles.pillLabel, { color: theme.text, fontFamily: FONTS.ui.medium }]}>
         {name}
       </Text>
       {locked
-        ? <MaterialCommunityIcons name="lock-outline" size={16} color="#B8975A" />
-        : <MaterialCommunityIcons name="chevron-right" size={18} color={theme.textMuted} />
+        ? <Icon name="lock-outline" size={16} color="#B8975A" />
+        : <Icon name="chevron-right" size={18} color={theme.textMuted} />
       }
     </TouchableOpacity>
   );
@@ -176,11 +176,11 @@ export default function CategoriesScreen({ onClose }: { onClose?: () => void }) 
         </View>
       )}
 
-      <SafeAreaView style={styles.safe} edges={['bottom']}>
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={close} style={[styles.closeBtn, { backgroundColor: theme.surface }]}>
-            <MaterialCommunityIcons name="close" size={20} color={theme.textMuted} />
+            <Icon name="close" size={20} color={theme.textMuted} />
           </TouchableOpacity>
         </View>
 
@@ -237,7 +237,7 @@ export default function CategoriesScreen({ onClose }: { onClose?: () => void }) 
             <Text style={[styles.sectionTitle, { color: theme.text, marginBottom: 0 }]}>All Categories</Text>
             {!isPro && (
               <View style={[styles.proBadge, { backgroundColor: 'rgba(184,151,90,0.12)' }]}>
-                <MaterialCommunityIcons name="crown" size={11} color="#B8975A" />
+                <Icon name="crown" size={11} color="#B8975A" />
                 <Text style={[styles.proBadgeText, { color: '#B8975A', fontFamily: FONTS.ui.bold }]}>Premium</Text>
               </View>
             )}

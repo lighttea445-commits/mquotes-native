@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { FONTS } from '../../constants/fonts';
 import { View, StyleSheet, Text, Pressable, ActivityIndicator, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Icon } from '../ui/Icon';
 import RevenueCatUI from 'react-native-purchases-ui';
 import { useTheme } from '../../hooks/useTheme';
 import * as RevenueChat from '../../lib/revenuecat';
@@ -39,7 +39,7 @@ export function CustomerCenterModal({ onClose }: CustomerCenterModalProps) {
       <View style={styles.header}>
         <Text style={[styles.title, { color: theme.text }]}>Account & Billing</Text>
         <Pressable onPress={onClose} disabled={isLoading}>
-          <MaterialCommunityIcons
+          <Icon
             name="close"
             size={24}
             color={theme.text}

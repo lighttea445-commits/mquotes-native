@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Icon } from '../ui/Icon';
 import { useTheme } from '../../hooks/useTheme';
 import { useUserQuotesStore, UserQuote } from '../../store/useUserQuotesStore';
 import { ConfirmSheet } from '../ui/ConfirmSheet';
@@ -74,19 +74,19 @@ export default function MyQuotesScreen({ onClose, onBack }: { onClose?: () => vo
         </View>
       )}
 
-      <SafeAreaView style={styles.safe} edges={['bottom']}>
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
         {mode === 'list' ? (
           <>
             {/* ── List header ── */}
             <View style={styles.header}>
               <TouchableOpacity onPress={back} style={styles.iconBtn}>
-                <MaterialCommunityIcons name="chevron-left" size={24} color={theme.textMuted} />
+                <Icon name="chevron-left" size={24} color={theme.textMuted} />
               </TouchableOpacity>
               <Text style={[styles.title, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
                 My Quotes
               </Text>
               <TouchableOpacity onPress={openAdd} style={styles.iconBtn}>
-                <MaterialCommunityIcons name="plus" size={24} color={theme.gold} />
+                <Icon name="plus" size={24} color={theme.gold} />
               </TouchableOpacity>
             </View>
 
@@ -97,7 +97,7 @@ export default function MyQuotesScreen({ onClose, onBack }: { onClose?: () => vo
               {userQuotes.length === 0 ? (
                 /* ── Empty state ── */
                 <View style={styles.emptyState}>
-                  <MaterialCommunityIcons name="feather" size={52} color={theme.textMuted} />
+                  <Icon name="feather" size={52} color={theme.textMuted} />
                   <Text style={[styles.emptyTitle, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
                     Your voice, your wisdom
                   </Text>
@@ -110,7 +110,7 @@ export default function MyQuotesScreen({ onClose, onBack }: { onClose?: () => vo
                     style={[styles.emptyAddBtn, { backgroundColor: theme.gold }]}
                     activeOpacity={0.8}
                   >
-                    <MaterialCommunityIcons name="plus" size={18} color="#1A1208" />
+                    <Icon name="plus" size={18} color="#1A1208" />
                     <Text style={[styles.emptyAddText, { color: '#1A1208', fontFamily: theme.uiFontFamily }]}>
                       Add your first quote
                     </Text>
@@ -135,13 +135,13 @@ export default function MyQuotesScreen({ onClose, onBack }: { onClose?: () => vo
                           onPress={() => openEdit(q)}
                           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                         >
-                          <MaterialCommunityIcons name="pencil-outline" size={19} color={theme.textMuted} />
+                          <Icon name="pencil-outline" size={19} color={theme.textMuted} />
                         </TouchableOpacity>
                         <TouchableOpacity
                           onPress={() => handleDelete(q.id)}
                           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                         >
-                          <MaterialCommunityIcons name="trash-can-outline" size={19} color={theme.textMuted} />
+                          <Icon name="trash-can-outline" size={19} color={theme.textMuted} />
                         </TouchableOpacity>
                       </View>
                     </View>
@@ -153,7 +153,7 @@ export default function MyQuotesScreen({ onClose, onBack }: { onClose?: () => vo
                     style={[styles.addMoreRow, { borderColor: theme.border }]}
                     activeOpacity={0.7}
                   >
-                    <MaterialCommunityIcons name="plus" size={18} color={theme.textMuted} />
+                    <Icon name="plus" size={18} color={theme.textMuted} />
                     <Text style={[styles.addMoreText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
                       Add another quote
                     </Text>
@@ -167,7 +167,7 @@ export default function MyQuotesScreen({ onClose, onBack }: { onClose?: () => vo
             {/* ── Form header ── */}
             <View style={styles.header}>
               <TouchableOpacity onPress={() => setMode('list')} style={styles.iconBtn}>
-                <MaterialCommunityIcons name="arrow-left" size={20} color={theme.textMuted} />
+                <Icon name="arrow-left" size={20} color={theme.textMuted} />
               </TouchableOpacity>
               <Text style={[styles.title, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
                 {editingQuote ? 'Edit Quote' : 'New Quote'}

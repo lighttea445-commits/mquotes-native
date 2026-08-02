@@ -8,7 +8,7 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Icon } from '../ui/Icon';
 import { useTheme } from '../../hooks/useTheme';
 import { useModal } from '../../contexts/ModalContext';
 
@@ -22,11 +22,6 @@ const FEATURES = [
     icon: 'history' as const,
     title: 'Full quote history',
     subtitle: "Every quote you've ever read, always within reach",
-  },
-  {
-    icon: 'pencil-outline' as const,
-    title: 'Reflections journal',
-    subtitle: 'Turn quotes into insights with daily written reflections',
   },
   {
     icon: 'format-quote-open' as const,
@@ -76,10 +71,10 @@ export default function FeaturesScreen({ onClose, onContinue }: Props) {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <SafeAreaView style={styles.safe} edges={['bottom']}>
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
         {/* X Close */}
         <Pressable onPress={onClose} style={[styles.closeBtn, { backgroundColor: theme.surface }]} hitSlop={12}>
-          <MaterialCommunityIcons name="close" size={20} color={theme.textMuted} />
+          <Icon name="close" size={20} color={theme.textMuted} />
         </Pressable>
 
         <ScrollView
@@ -89,7 +84,7 @@ export default function FeaturesScreen({ onClose, onContinue }: Props) {
         >
           {/* Badge */}
           <View style={[styles.badge, { backgroundColor: goldIconBg, borderColor: `${theme.gold}40` }]}>
-            <MaterialCommunityIcons name="crown" size={14} color={theme.gold} />
+            <Icon name="crown" size={14} color={theme.gold} />
             <Text style={[styles.badgeText, { color: theme.gold, fontFamily: theme.uiFontFamily }]}>
               Quotable Premium
             </Text>
@@ -111,7 +106,7 @@ export default function FeaturesScreen({ onClose, onContinue }: Props) {
                 style={[styles.featureItem, { backgroundColor: theme.surface, borderColor: theme.border }]}
               >
                 <View style={[styles.featureIconBg, { backgroundColor: goldIconBg }]}>
-                  <MaterialCommunityIcons name={f.icon} size={20} color={theme.gold} />
+                  <Icon name={f.icon} size={20} color={theme.gold} />
                 </View>
                 <View style={styles.featureText}>
                   <Text style={[styles.featureTitle, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
@@ -121,7 +116,7 @@ export default function FeaturesScreen({ onClose, onContinue }: Props) {
                     {f.subtitle}
                   </Text>
                 </View>
-                <MaterialCommunityIcons name="check-circle" size={18} color={theme.gold} />
+                <Icon name="check-circle" size={18} color={theme.gold} />
               </View>
             ))}
           </View>

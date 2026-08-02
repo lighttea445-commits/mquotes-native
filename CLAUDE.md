@@ -8,8 +8,8 @@
 
 - Expo SDK, New Architecture enabled (`newArchEnabled: true` in `app.json`)
 - Expo Router v3 (file-based routing, flat Stack — no tab navigator)
-- NativeWind / Tailwind for styling
-- Zustand + AsyncStorage for state persistence
+- Plain `StyleSheet.create` for styling — NativeWind/Tailwind is NOT installed
+- Zustand + MMKV for state persistence
 - `@expo/vector-icons` (MaterialCommunityIcons, Ionicons)
 - `react-native-gesture-handler` + `react-native-reanimated@4.x` for gestures/animations
 - RevenueCat (`react-native-purchases@9.11.0`) for subscriptions
@@ -17,8 +17,7 @@
 ## Architecture
 
 - `app/index.tsx` — root screen (quote card + all sheet orchestration via `ModalContext`)
-- `app/categories.tsx`, `app/themes.tsx`, `app/mix/create.tsx`, `app/profile.tsx` — inline BottomSheet modals
-- `app/favorites.tsx`, `app/history.tsx`, `app/settings.tsx`, `app/notifications.tsx`, `app/widgets.tsx` — push screens
+- Every screen lives in `components/screens/` and is mounted BOTH as an inline `BottomSheet` from `index.tsx` AND as a route (`app/favorites.tsx` etc. are 3-line re-exports). Both paths must keep working — screens do `onClose ?? (() => router.back())`.
 - `app/subscriptions.tsx` — full subscription screen (Benefits / Account tabs)
 - `components/quotes/QuoteCard.tsx` — main card with gestures, progress pill, bottom bar
 - `components/layout/BottomSheet.tsx` — slide-up/down animation, backdrop, drag-to-dismiss
@@ -30,14 +29,14 @@
 
 ## Navigation Pattern
 
-All modals open as inline `BottomSheet` components managed by `ModalContext` in `index.tsx`. No push navigation for overlays. Each sheet accepts `onClose?: () => void`. Sheet leaves 8% gap at top so the main card peeks through.
+All modals open as inline `BottomSheet` components managed by `ModalContext` in `index.tsx`. No push navigation for overlays. Each sheet accepts `onClose?: () => void`. Sheets slide up to the very top of the screen (full height) and slide back down — each screen supplies its own top safe-area inset.
 
 ## Design Conventions
 
 - Premium minimalist aesthetic — elevated and calm, not loud or gamified
 - Design tokens only — colors from `theme.*`, no hardcoded values
 - Gold accent: `#B8975A`, gold icon bg: `rgba(184,151,90,0.12)`
-- Fonts: `theme.quoteFontFamily` (Playfair Display) for quotes/headings, `theme.uiFontFamily` (Inter) for UI
+- Fonts: `theme.quoteFontFamily` (Peachi) for quotes/headings, `theme.uiFontFamily` (Averta, falls back to Inter) for UI, `theme.bodyFontFamily` (Inter) for body/legal
 - Icon buttons: 48×48, `borderRadius: 24` (circle), `backgroundColor: theme.surface`
 - Modals: drag handle pill at top + X close button (MaterialCommunityIcons `close`)
 - Safe area: modals use `edges={['bottom']}`, push screens use `edges={['top']}`

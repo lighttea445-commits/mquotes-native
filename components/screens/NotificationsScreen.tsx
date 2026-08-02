@@ -15,7 +15,7 @@ import {
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Icon } from '../ui/Icon';
 import { useTheme } from '../../hooks/useTheme';
 import { useAppStore } from '../../store/useAppStore';
 import { useRevenueCat } from '../../hooks/useRevenueCat';
@@ -48,14 +48,13 @@ function describeDays(days: number[]): string {
 }
 
 // ── Types ──────────────────────────────────────────────────────────────────
-type PickerTarget = 'startTime' | 'endTime' | 'qodTime' | 'reflectTime' | 'streakTime';
-type ActiveCard = null | 'quotes' | 'qod' | 'reflect' | 'streak';
+type PickerTarget = 'startTime' | 'endTime' | 'qodTime' | 'streakTime';
+type ActiveCard = null | 'quotes' | 'qod' | 'streak';
 interface Settings {
   enabled: boolean; days: number[];
   quotesEnabled: boolean; showAuthor: boolean;
   count: number; startTime: string; endTime: string;
   qodEnabled: boolean; qodTime: string;
-  reflectEnabled: boolean; reflectTime: string;
   streakEnabled: boolean; streakTime: string;
 }
 
@@ -86,8 +85,6 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
   const [endTime, setEndTime] = useState(pref.notificationEndTime ?? '22:00');
   const [qodEnabled, setQodEnabled] = useState(pref.qodEnabled ?? true);
   const [qodTime, setQodTime] = useState(pref.qodTime ?? '08:00');
-  const [reflectEnabled, setReflectEnabled] = useState(pref.reflectEnabled ?? true);
-  const [reflectTime, setReflectTime] = useState(pref.reflectTime ?? '20:00');
   const [streakEnabled, setStreakEnabled] = useState(pref.streakEnabled ?? true);
   const [streakTime, setStreakTime] = useState(pref.streakTime ?? '21:00');
   const [permissionGranted, setPermissionGranted] = useState<boolean | null>(null);
@@ -100,7 +97,7 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
   const prevPermissionRef = useRef<boolean | null>(null);
 
   // Card stagger anims
-  const cardAnims = useRef([0, 1, 2, 3].map(() => new Animated.Value(0))).current;
+  const cardAnims = useRef([0, 1, 2].map(() => new Animated.Value(0))).current;
 
   useEffect(() => {
     requestPermissions().then(g => setPermissionGranted(g));
@@ -126,13 +123,11 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
   useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current); }, []);
 
   function buildSettings(o: Partial<Settings> = {}): Settings {
-    const effectiveReflectEnabled = isPro ? reflectEnabled : false;
-    const anyEnabled = quotesEnabled || qodEnabled || effectiveReflectEnabled || streakEnabled;
+    const anyEnabled = quotesEnabled || qodEnabled || streakEnabled;
     return {
       enabled: anyEnabled,
       days, quotesEnabled, showAuthor, count, startTime, endTime,
       qodEnabled, qodTime,
-      reflectEnabled: effectiveReflectEnabled, reflectTime,
       streakEnabled, streakTime,
       ...o,
     };
@@ -152,7 +147,6 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
       notificationStartTime: s.startTime, notificationEndTime: s.endTime,
       notificationDays: s.days, quotesEnabled: s.quotesEnabled,
       notificationShowAuthor: s.showAuthor, qodEnabled: s.qodEnabled, qodTime: s.qodTime,
-      reflectEnabled: s.reflectEnabled, reflectTime: s.reflectTime,
       streakEnabled: s.streakEnabled, streakTime: s.streakTime,
     });
     if (s.enabled) {
@@ -164,7 +158,6 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
           showAuthor: s.showAuthor, quoteCount: s.count,
           startHHMM: s.startTime, endHHMM: s.endTime,
           qodEnabled: s.qodEnabled, qodTime: s.qodTime,
-          reflectEnabled: s.reflectEnabled, reflectTime: s.reflectTime,
           streakEnabled: s.streakEnabled, streakTime: s.streakTime,
         }).then(() => setPreferences({ lastNotifScheduledAt: new Date().toISOString() }));
       }).catch(console.warn);
@@ -194,7 +187,6 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
     if (pickerTarget === 'startTime') { setStartTime(hhmm); next = buildSettings({ startTime: hhmm }); }
     else if (pickerTarget === 'endTime') { setEndTime(hhmm); next = buildSettings({ endTime: hhmm }); }
     else if (pickerTarget === 'qodTime') { setQodTime(hhmm); next = buildSettings({ qodTime: hhmm }); }
-    else if (pickerTarget === 'reflectTime') { setReflectTime(hhmm); next = buildSettings({ reflectTime: hhmm }); }
     else if (pickerTarget === 'streakTime') { setStreakTime(hhmm); next = buildSettings({ streakTime: hhmm }); }
     debouncedApply(next);
   }
@@ -210,12 +202,12 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
       <View style={ss.stepperRow}>
         <TouchableOpacity onPress={onDecrement} activeOpacity={0.7}
           style={[ss.stepperBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-          <MaterialCommunityIcons name="minus" size={18} color={theme.text} />
+          <Icon name="minus" size={18} color={theme.text} />
         </TouchableOpacity>
         <Text style={[ss.stepperValue, { color: theme.text, fontFamily: theme.uiFontFamily }]}>{label}</Text>
         <TouchableOpacity onPress={onIncrement} activeOpacity={0.7}
           style={[ss.stepperBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-          <MaterialCommunityIcons name="plus" size={18} color={theme.text} />
+          <Icon name="plus" size={18} color={theme.text} />
         </TouchableOpacity>
       </View>
     );
@@ -228,7 +220,7 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
         activeOpacity={0.7}
         style={[ss.timeBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}
       >
-        <MaterialCommunityIcons name="clock-outline" size={16} color={theme.textMuted} style={{ marginRight: 6 }} />
+        <Icon name="clock-outline" size={16} color={theme.textMuted} style={{ marginRight: 6 }} />
         <Text style={[ss.timeBtnText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
           {formatHHMMto12h(hhmm)}
         </Text>
@@ -305,7 +297,7 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
             }]}>{title}</Text>
             {locked ? (
               <View style={[ss.proBadge, { backgroundColor: theme.gold + '22', borderColor: theme.gold + '55' }]}>
-                <MaterialCommunityIcons name="crown" size={10} color={theme.gold} style={{ marginRight: 3 }} />
+                <Icon name="crown" size={10} color={theme.gold} style={{ marginRight: 3 }} />
                 <Text style={[ss.proBadgeText, { color: theme.gold, fontFamily: theme.uiFontFamily }]}>Pro</Text>
               </View>
             ) : (
@@ -326,7 +318,7 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
               </Text>
             </View>
             {locked ? (
-              <MaterialCommunityIcons name="lock-outline" size={20} color={theme.textMuted} />
+              <Icon name="lock-outline" size={20} color={theme.textMuted} />
             ) : (
               <Switch
                 value={isEnabled}
@@ -397,7 +389,6 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
   const EDIT_META: Record<NonNullable<ActiveCard>, { icon: string; title: string }> = {
     quotes:  { icon: 'format-quote-close',  title: 'Edit reminder'       },
     qod:     { icon: 'white-balance-sunny', title: 'Edit reminder'       },
-    reflect: { icon: 'book-open-variant',   title: 'Edit reminder'       },
     streak:  { icon: 'fire',                title: 'Edit reminder'       },
   };
 
@@ -406,7 +397,6 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
     if (pickerTarget === 'startTime') return 'Start at';
     if (pickerTarget === 'endTime') return 'End at';
     if (pickerTarget === 'qodTime') return 'Quote of the Day';
-    if (pickerTarget === 'reflectTime') return 'Reflection Reminder';
     if (pickerTarget === 'streakTime') return 'Streak Reminder';
     return 'Select time';
   }
@@ -443,7 +433,7 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
-      <SafeAreaView style={{ flex: 1 }} edges={onContinue ? ['top', 'bottom'] : ['bottom']}>
+      <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
 
         {/* Progress bar (onboarding only) */}
         {progress !== undefined && (
@@ -460,7 +450,7 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
         {/* Header */}
         <View style={ss.header}>
           <TouchableOpacity onPress={topBarBack} style={[ss.backBtn, { backgroundColor: theme.surface }]}>
-            <MaterialCommunityIcons name="arrow-left" size={20} color={theme.text} />
+            <Icon name="arrow-left" size={20} color={theme.text} />
           </TouchableOpacity>
           <Text style={[ss.headerTitle, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>{topBarTitle}</Text>
           <Animated.Text style={[ss.savedBadge, { color: theme.gold, fontFamily: theme.uiFontFamily, opacity: savedOpacity }]}>
@@ -474,9 +464,6 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
             {activeCard === 'quotes'  && <QuotesEdit />}
             {activeCard === 'qod'     && (
               <SingleTimeEdit timeValue={qodTime} setTimeValue={setQodTime} pickerTgt="qodTime" />
-            )}
-            {activeCard === 'reflect' && (
-              <SingleTimeEdit timeValue={reflectTime} setTimeValue={setReflectTime} pickerTgt="reflectTime" />
             )}
             {activeCard === 'streak'  && (
               <SingleTimeEdit timeValue={streakTime} setTimeValue={setStreakTime} pickerTgt="streakTime" />
@@ -500,12 +487,12 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
                 activeOpacity={0.8}
               >
                 <View style={[ss.permIconWrap, { backgroundColor: 'rgba(184,151,90,0.10)' }]}>
-                  <MaterialCommunityIcons name="information-outline" size={16} color={theme.gold} />
+                  <Icon name="information-outline" size={16} color={theme.gold} />
                 </View>
                 <Text style={[ss.permText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
                   Notifications not working?
                 </Text>
-                <MaterialCommunityIcons name="chevron-right" size={16} color={theme.textMuted} />
+                <Icon name="chevron-right" size={16} color={theme.textMuted} />
               </TouchableOpacity>
             )}
 
@@ -534,18 +521,6 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
 
             <ReminderCard
               anim={cardAnims[2]}
-              icon="book-open-variant"
-              title="Reflection Reminder"
-              timeLabel={formatHHMMto12h(reflectTime)}
-              countLabel="1×"
-              isEnabled={reflectEnabled}
-              onToggle={v => { if (!isPro) { if (!onContinue) openPaywall(); return; } setReflectEnabled(v); debouncedApply(buildSettings({ reflectEnabled: v })); }}
-              onPress={() => { if (!isPro) { if (!onContinue) openPaywall(); return; } setActiveCard('reflect'); }}
-              locked={!isPro}
-            />
-
-            <ReminderCard
-              anim={cardAnims[3]}
               icon="fire"
               title="Streak Reminder"
               timeLabel={formatHHMMto12h(streakTime)}

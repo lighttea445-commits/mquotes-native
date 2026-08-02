@@ -10,12 +10,11 @@ import {
   Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Icon } from '../ui/Icon';
 import { useTheme } from '../../hooks/useTheme';
 
 const BENEFITS = [
   { icon: 'history', label: 'Unlimited Quote History', desc: 'Every quote you read, saved forever' },
-  { icon: 'book-open-outline', label: 'Journal & Reflections', desc: 'Daily mood tracking and personal notes' },
   { icon: 'playlist-music', label: 'Unlimited Mixes', desc: 'Combine any topics into a custom feed' },
   { icon: 'palette-outline', label: 'All Themes Unlocked', desc: 'Every color theme and visual style' },
   { icon: 'shape-outline', label: 'All Topics Unlocked', desc: 'Access every quote category' },
@@ -84,7 +83,7 @@ export function PremiumModal({ visible, onClose }: PremiumModalProps) {
         {/* Header */}
         <View style={styles.header}>
           <View style={[styles.crownWrap, { backgroundColor: `${theme.gold}1F` }]}>
-            <MaterialCommunityIcons name="crown" size={36} color={theme.gold} />
+            <Icon name="crown" size={36} color={theme.gold} />
           </View>
           <Text style={[styles.congrats, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
             Congrats!
@@ -103,7 +102,7 @@ export function PremiumModal({ visible, onClose }: PremiumModalProps) {
           {BENEFITS.map((b) => (
             <View key={b.icon} style={[styles.benefitRow, { backgroundColor: theme.surface, borderColor: theme.border }]}>
               <View style={[styles.benefitIcon, { backgroundColor: `${theme.gold}1A` }]}>
-                <MaterialCommunityIcons name={b.icon as any} size={20} color={theme.gold} />
+                <Icon name={b.icon as any} size={20} color={theme.gold} />
               </View>
               <View style={styles.benefitText}>
                 <Text style={[styles.benefitLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
@@ -113,7 +112,7 @@ export function PremiumModal({ visible, onClose }: PremiumModalProps) {
                   {b.desc}
                 </Text>
               </View>
-              <MaterialCommunityIcons name="check-circle" size={18} color={theme.gold} />
+              <Icon name="check-circle" size={18} color={theme.gold} />
             </View>
           ))}
         </ScrollView>

@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Icon, IconName } from '../ui/Icon';
 import { useTheme } from '../../hooks/useTheme';
 import {
   useWidgetStore,
@@ -68,7 +68,7 @@ async function persistWidgetQuote(
 
 // ── Widget type meta ──────────────────────────────────────────────────────────
 
-const WIDGET_META: Record<WidgetType, { label: string; subtitle: string; icon: keyof typeof MaterialCommunityIcons.glyphMap }> = {
+const WIDGET_META: Record<WidgetType, { label: string; subtitle: string; icon: IconName }> = {
   basic: { label: 'Basic', subtitle: 'Rotating quotes', icon: 'format-quote-open' },
 };
 
@@ -118,7 +118,7 @@ function PickerModal<T extends string>({
                 {item.label}
               </Text>
               {item.value === selected && (
-                <MaterialCommunityIcons name="check" size={18} color={theme.gold} />
+                <Icon name="check" size={18} color={theme.gold} />
               )}
             </TouchableOpacity>
           )}
@@ -156,7 +156,7 @@ function SettingsRow({
   theme,
   isLast,
 }: {
-  icon: keyof typeof MaterialCommunityIcons.glyphMap;
+  icon: IconName;
   label: string;
   value: string;
   onPress: () => void;
@@ -166,10 +166,10 @@ function SettingsRow({
   return (
     <>
       <TouchableOpacity style={rowStyles.row} onPress={onPress} activeOpacity={0.7}>
-        <MaterialCommunityIcons name={icon} size={18} color={theme.gold} />
+        <Icon name={icon} size={18} color={theme.gold} />
         <Text style={[rowStyles.label, { color: theme.text, fontFamily: theme.uiFontFamily }]}>{label}</Text>
         <Text style={[rowStyles.value, { color: theme.textMuted }]} numberOfLines={1}>{value}</Text>
-        <MaterialCommunityIcons name="chevron-right" size={16} color={theme.textMuted} />
+        <Icon name="chevron-right" size={16} color={theme.textMuted} />
       </TouchableOpacity>
       {!isLast && <View style={[rowStyles.separator, { backgroundColor: theme.border }]} />}
     </>
@@ -193,7 +193,7 @@ function ToggleRow({
   theme,
   isLast,
 }: {
-  icon: keyof typeof MaterialCommunityIcons.glyphMap;
+  icon: IconName;
   label: string;
   value: boolean;
   onToggle: (v: boolean) => void;
@@ -203,7 +203,7 @@ function ToggleRow({
   return (
     <>
       <View style={rowStyles.row}>
-        <MaterialCommunityIcons name={icon} size={18} color={theme.gold} />
+        <Icon name={icon} size={18} color={theme.gold} />
         <Text style={[rowStyles.label, { color: theme.text, fontFamily: theme.uiFontFamily }]}>{label}</Text>
         <Switch
           value={value}
@@ -238,7 +238,7 @@ function WidgetCard({
     <View style={[cardStyles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
       <View style={cardStyles.cardMain}>
         <View style={cardStyles.typeRow}>
-          <MaterialCommunityIcons name={meta.icon} size={15} color={theme.gold} />
+          <Icon name={meta.icon} size={15} color={theme.gold} />
           <Text style={[cardStyles.typeLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
             {displayName}
           </Text>
@@ -253,7 +253,7 @@ function WidgetCard({
         onPress={onEdit}
         activeOpacity={0.8}
       >
-        <MaterialCommunityIcons name="pencil-outline" size={14} color={theme.textMuted} />
+        <Icon name="pencil-outline" size={14} color={theme.textMuted} />
         <Text style={[cardStyles.editBtnText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
           Edit
         </Text>
@@ -311,7 +311,7 @@ function EmptyState({ theme, onRefresh }: { theme: ReturnType<typeof useTheme>; 
 
   return (
     <View style={emptyStyles.container}>
-      <MaterialCommunityIcons name="view-grid-plus-outline" size={48} color={theme.textMuted} style={{ opacity: 0.4 }} />
+      <Icon name="view-grid-plus-outline" size={48} color={theme.textMuted} style={{ opacity: 0.4 }} />
       <Text style={[emptyStyles.title, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
         No widgets yet
       </Text>
@@ -322,7 +322,7 @@ function EmptyState({ theme, onRefresh }: { theme: ReturnType<typeof useTheme>; 
         activeOpacity={0.82}
         disabled={adding}
       >
-        <MaterialCommunityIcons name="plus-circle-outline" size={18} color="#1A1208" />
+        <Icon name="plus-circle-outline" size={18} color="#1A1208" />
         <Text style={[emptyStyles.addBtnText, { fontFamily: theme.uiFontFamily }]}>
           {adding ? 'Opening…' : 'Add Widget'}
         </Text>
@@ -348,7 +348,7 @@ function EmptyState({ theme, onRefresh }: { theme: ReturnType<typeof useTheme>; 
         onPress={onRefresh}
         activeOpacity={0.7}
       >
-        <MaterialCommunityIcons name="refresh" size={16} color={theme.textMuted} />
+        <Icon name="refresh" size={16} color={theme.textMuted} />
         <Text style={[emptyStyles.refreshBtnText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
           Refresh
         </Text>
@@ -432,7 +432,7 @@ function IOSWidgetPanel({
   return (
     <ScrollView contentContainerStyle={iosStyles.content} showsVerticalScrollIndicator={false}>
       <View style={[iosStyles.preview, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-        <MaterialCommunityIcons name="format-quote-open" size={20} color={theme.text} style={{ opacity: 0.25 }} />
+        <Icon name="format-quote-open" size={20} color={theme.text} style={{ opacity: 0.25 }} />
         <Text
           style={[iosStyles.previewQuote, { color: theme.text, fontFamily: theme.quoteFontFamily }]}
           numberOfLines={4}
@@ -465,7 +465,7 @@ function IOSWidgetPanel({
       </View>
 
       <View style={[iosStyles.hintCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-        <MaterialCommunityIcons name="palette-outline" size={18} color={theme.gold} />
+        <Icon name="palette-outline" size={18} color={theme.gold} />
         <Text style={[iosStyles.hintText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
           For text size and author, long-press the widget on your home screen and tap Edit Widget.
         </Text>
@@ -488,7 +488,7 @@ function IOSWidgetPanel({
         activeOpacity={0.82}
         disabled={refreshing}
       >
-        <MaterialCommunityIcons name="refresh" size={18} color="#1A1208" />
+        <Icon name="refresh" size={18} color="#1A1208" />
         <Text style={[emptyStyles.addBtnText, { fontFamily: theme.uiFontFamily }]}>
           {refreshing ? 'Refreshing…' : 'Refresh now'}
         </Text>
@@ -777,16 +777,16 @@ export default function WidgetsScreen({ onClose, onBack, onContinue }: { onClose
   if (isIOS) {
     return (
       <View style={{ flex: 1, backgroundColor: theme.background }}>
-        <SafeAreaView style={styles.safe} edges={['bottom']}>
+        <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
           <View style={styles.header}>
             <TouchableOpacity onPress={back} style={[styles.backBtn, { backgroundColor: theme.surface }]} activeOpacity={0.7}>
-              <MaterialCommunityIcons name="arrow-left" size={22} color={theme.textMuted} />
+              <Icon name="arrow-left" size={22} color={theme.textMuted} />
             </TouchableOpacity>
             <Text style={[styles.headerTitle, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
               Widgets
             </Text>
             <TouchableOpacity onPress={handleIOSRefresh} style={styles.backBtn} activeOpacity={0.7}>
-              <MaterialCommunityIcons name="refresh" size={20} color={theme.textMuted} />
+              <Icon name="refresh" size={20} color={theme.textMuted} />
             </TouchableOpacity>
           </View>
 
@@ -848,16 +848,16 @@ export default function WidgetsScreen({ onClose, onBack, onContinue }: { onClose
 
     return (
       <View style={{ flex: 1, backgroundColor: theme.background }}>
-        <SafeAreaView style={styles.safe} edges={['bottom']}>
+        <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
           <View style={styles.header}>
             <TouchableOpacity onPress={handleEditorBack} style={[styles.backBtn, { backgroundColor: theme.surface }]} activeOpacity={0.7}>
-              <MaterialCommunityIcons name="arrow-left" size={22} color={theme.textMuted} />
+              <Icon name="arrow-left" size={22} color={theme.textMuted} />
             </TouchableOpacity>
             <Text style={[styles.headerTitle, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
               Widget Editor
             </Text>
             <View style={[styles.typeBadge, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-              <MaterialCommunityIcons name={meta.icon} size={13} color={theme.gold} />
+              <Icon name={meta.icon} size={13} color={theme.gold} />
               <Text style={[styles.typeBadgeText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
                 {meta.label}
               </Text>
@@ -997,16 +997,16 @@ export default function WidgetsScreen({ onClose, onBack, onContinue }: { onClose
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
-      <SafeAreaView style={styles.safe} edges={['bottom']}>
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
         <View style={styles.header}>
           <TouchableOpacity onPress={back} style={[styles.backBtn, { backgroundColor: theme.surface }]} activeOpacity={0.7}>
-            <MaterialCommunityIcons name="arrow-left" size={22} color={theme.textMuted} />
+            <Icon name="arrow-left" size={22} color={theme.textMuted} />
           </TouchableOpacity>
           <Text style={[styles.headerTitle, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
             Widgets
           </Text>
           <TouchableOpacity onPress={loadActiveWidgets} style={styles.backBtn} activeOpacity={0.7}>
-            <MaterialCommunityIcons name="refresh" size={20} color={theme.textMuted} />
+            <Icon name="refresh" size={20} color={theme.textMuted} />
           </TouchableOpacity>
         </View>
 

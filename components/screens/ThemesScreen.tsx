@@ -11,21 +11,22 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Icon } from '../ui/Icon';
+import { SheetHeader } from '../ui/SheetHeader';
+import { GUTTER, SPACE, RADIUS, ON_GOLD } from '../ui/tokens';
 import { useTheme } from '../../hooks/useTheme';
 import { useRevenueCat } from '../../hooks/useRevenueCat';
 import { useAppStore } from '../../store/useAppStore';
 import { THEMES, DEFAULT_THEME_ID } from '../../constants/themes';
 import { useModal } from '../../contexts/ModalContext';
 import { analytics } from '../../lib/analytics';
-import { FONTS } from '../../constants/fonts';
 
-const SIDE_PADDING = 16;
-const GAP = 8;
+const GAP = 10;
+const BADGE = 22;
 
 export default function ThemesScreen({ onClose }: { onClose?: () => void }) {
   const { width } = useWindowDimensions();
-  const CARD_WIDTH = (width - SIDE_PADDING * 2 - GAP * 2) / 3;
+  const CARD_WIDTH = (width - GUTTER * 2 - GAP * 2) / 3;
   const CARD_HEIGHT = CARD_WIDTH * 1.5; // 2:3 portrait ratio
   const theme = useTheme();
   const router = useRouter();
@@ -38,11 +39,14 @@ export default function ThemesScreen({ onClose }: { onClose?: () => void }) {
   /** Gated for free users — the default theme never is. */
   const isLocked = (themeId: string) => !isPro && themeId !== DEFAULT_THEME_ID;
 
+  const openUpsell = () =>
+    modal ? modal.openSheet('features') : router.push('/subscriptions');
+
   const handleSelect = (themeId: string) => {
     // Onboarding lets free users pick from six themes, so without this a free
     // user who chose one there would have no way back to the default.
     if (isLocked(themeId)) {
-      modal ? modal.openSheet('features') : router.push('/subscriptions');
+      openUpsell();
       return;
     }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -60,29 +64,15 @@ export default function ThemesScreen({ onClose }: { onClose?: () => void }) {
         </View>
       )}
 
-      <SafeAreaView style={styles.safe} edges={['bottom']}>
-        {/* Header — close only */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={close} style={[styles.closeBtn, { backgroundColor: theme.surface }]}>
-            <MaterialCommunityIcons name="close" size={20} color={theme.textMuted} />
-          </TouchableOpacity>
-          <View style={{ flex: 1 }} />
-        </View>
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+        <SheetHeader
+          title="Themes"
+          leading="close"
+          onLeadingPress={close}
+          actionLabel={isPro ? undefined : 'Unlock all'}
+          onActionPress={isPro ? undefined : openUpsell}
+        />
 
-        {/* Screen title */}
-        <Text style={[styles.title, { color: theme.text }]}>Customize</Text>
-
-        {/* Pro lock banner */}
-        {!isPro && (
-          <View style={[styles.proBanner, { backgroundColor: 'rgba(184,151,90,0.10)', borderColor: 'rgba(184,151,90,0.25)' }]}>
-            <MaterialCommunityIcons name="crown" size={14} color="#B8975A" />
-            <Text style={[styles.proBannerText, { color: '#B8975A', fontFamily: FONTS.ui.medium }]}>
-              Unlock all themes
-            </Text>
-          </View>
-        )}
-
-        {/* 3-column portrait grid */}
         <FlatList
           data={THEMES}
           keyExtractor={item => item.id}
@@ -90,6 +80,11 @@ export default function ThemesScreen({ onClose }: { onClose?: () => void }) {
           contentContainerStyle={styles.grid}
           columnWrapperStyle={styles.row}
           showsVerticalScrollIndicator={false}
+          ListHeaderComponent={
+            <Text style={[styles.sectionTitle, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
+              For you
+            </Text>
+          }
           renderItem={({ item: t }) => {
             const isSelected = preferences.theme === t.id;
             const locked = isLocked(t.id);
@@ -98,53 +93,58 @@ export default function ThemesScreen({ onClose }: { onClose?: () => void }) {
               width: CARD_WIDTH,
               height: CARD_HEIGHT,
               borderColor: isSelected ? theme.gold : theme.border,
-              borderWidth: 2,
+              borderWidth: isSelected ? 2 : 1,
             };
             return (
               <TouchableOpacity
                 style={[styles.cardWrapper, { width: CARD_WIDTH }]}
                 onPress={() => handleSelect(t.id)}
                 activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  `${t.name} theme` +
+                  (isSelected ? ', selected' : locked ? ', locked — requires Premium' : '')
+                }
               >
-                {locked && (
-                  <View style={styles.lockBadge}>
-                    <MaterialCommunityIcons name="crown" size={12} color="#1A1208" />
+                {/* Selected wins the badge slot — a free user can arrive here
+                    with a locked theme already applied from onboarding. */}
+                {isSelected ? (
+                  <View style={[styles.badge, { backgroundColor: theme.gold }]}>
+                    <Icon name="check" size={13} color={ON_GOLD} />
                   </View>
-                )}
+                ) : locked ? (
+                  <View style={[styles.badge, { backgroundColor: theme.gold }]}>
+                    <Icon name="crown" size={12} color={ON_GOLD} />
+                  </View>
+                ) : null}
+
                 {t.backgroundImage ? (
                   <ImageBackground
                     source={t.backgroundImage}
                     style={[styles.card, cardStyle]}
-                    imageStyle={{ borderRadius: 14 }}
+                    imageStyle={{ borderRadius: RADIUS.card - 2 }}
                     resizeMode="cover"
                   >
                     <View style={styles.aaOverlay}>
-                      <Text
-                        style={[
-                          styles.aaTextImage,
-                          { fontFamily: t.quoteFontFamily },
-                        ]}
-                      >
-                        Aa
-                      </Text>
+                      <Text style={[styles.aaTextImage, { fontFamily: t.quoteFontFamily }]}>Aa</Text>
                     </View>
                   </ImageBackground>
                 ) : (
                   <View style={[styles.card, cardStyle]}>
                     <View style={[styles.cardBg, { backgroundColor: t.background }]}>
-                      <View style={styles.aaContainer}>
-                        <Text
-                          style={[
-                            styles.aaText,
-                            { color: aaColor, fontFamily: t.quoteFontFamily },
-                          ]}
-                        >
-                          Aa
-                        </Text>
-                      </View>
+                      <Text style={[styles.aaText, { color: aaColor, fontFamily: t.quoteFontFamily }]}>
+                        Aa
+                      </Text>
                     </View>
                   </View>
                 )}
+
+                <Text
+                  style={[styles.cardLabel, { color: isSelected ? theme.text : theme.textMuted, fontFamily: theme.uiFontFamily }]}
+                  numberOfLines={1}
+                >
+                  {t.name}
+                </Text>
               </TouchableOpacity>
             );
           }}
@@ -167,72 +167,34 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
   safe: { flex: 1 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 4,
-  },
-  closeBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  lockBadge: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
-    zIndex: 1,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#B8975A',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  title: {
-    fontSize: 32,
-    fontFamily: FONTS.display.bold,
-    textAlign: 'center',
-    marginTop: 4,
-    marginBottom: 8,
-  },
-  forYouLabel: {
-    fontSize: 16,
-    fontFamily: FONTS.ui.bold,
-    marginBottom: 12,
-    paddingHorizontal: SIDE_PADDING,
-  },
-  proBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginHorizontal: SIDE_PADDING,
-    marginBottom: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
-    borderWidth: 1,
-  },
-  proBannerText: {
-    fontSize: 13,
+  sectionTitle: {
+    fontSize: 24,
+    marginBottom: SPACE.lg,
   },
   grid: {
-    paddingHorizontal: SIDE_PADDING,
+    paddingHorizontal: GUTTER,
     paddingBottom: 40,
   },
   row: {
     gap: GAP,
-    marginBottom: GAP,
+    marginBottom: SPACE.lg,
   },
   cardWrapper: {
     alignItems: 'center',
   },
+  badge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    zIndex: 1,
+    width: BADGE,
+    height: BADGE,
+    borderRadius: BADGE / 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   card: {
-    borderRadius: 16,
+    borderRadius: RADIUS.card,
     overflow: 'hidden',
   },
   cardBg: {
@@ -241,14 +203,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   cardLabel: {
-    fontSize: 11,
-    marginTop: 5,
+    fontSize: 12,
+    marginTop: SPACE.sm,
     textAlign: 'center',
     width: '100%',
-  },
-  aaContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   aaText: {
     fontSize: 20,

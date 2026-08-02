@@ -3,7 +3,7 @@ import { FONTS } from '../constants/fonts';
 import { View, StyleSheet, Text, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Icon } from '../components/ui/Icon';
 import { useTheme } from '../hooks/useTheme';
 import { useRevenueCat } from '../hooks/useRevenueCat';
 import RevenueCatUI, { PAYWALL_RESULT } from 'react-native-purchases-ui';
@@ -46,7 +46,7 @@ export default function SubscriptionsScreen() {
       {/* Header */}
       <View style={styles.header}>
         <Pressable onPress={() => router.back()}>
-          <MaterialCommunityIcons name="arrow-left" size={24} color={theme.text} />
+          <Icon name="arrow-left" size={24} color={theme.text} />
         </Pressable>
         <Text style={[styles.headerTitle, { color: theme.text }]}>Quotable Premium</Text>
         <View style={{ width: 24 }} />
@@ -56,14 +56,14 @@ export default function SubscriptionsScreen() {
       {isPro && (
         <View style={[styles.memberCard, { borderColor: `${theme.accent}4D`, backgroundColor: `${theme.accent}14` }]}>
           <View style={[styles.memberCardIcon, { backgroundColor: `${theme.accent}26` }]}>
-            <MaterialCommunityIcons name="crown" size={28} color={theme.accent} />
+            <Icon name="crown" size={28} color={theme.accent} />
           </View>
           <View style={styles.memberCardBody}>
             <Text style={[styles.memberCardTitle, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
               Quotable Premium
             </Text>
             <View style={styles.memberCardStatus}>
-              <MaterialCommunityIcons name="check-circle" size={14} color={theme.accent} />
+              <Icon name="check-circle" size={14} color={theme.accent} />
               <Text style={[styles.memberCardStatusText, { color: theme.accent, fontFamily: theme.uiFontFamily }]}>
                 Active member
               </Text>

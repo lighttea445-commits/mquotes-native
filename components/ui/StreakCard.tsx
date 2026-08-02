@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Icon } from './Icon';
 import { useTheme } from '../../hooks/useTheme';
 import { SunIcon } from './SunIcon';
 import { FONTS } from '../../constants/fonts';
@@ -59,7 +59,7 @@ export function StreakCard({ streakCount, weekData, onShare }: StreakCardProps) 
                   ]}
                 >
                   {completed && (
-                    <MaterialCommunityIcons name="check-bold" size={13} color="#1A1208" />
+                    <Icon name="check-bold" size={13} color="#1A1208" />
                   )}
                 </View>
               </View>

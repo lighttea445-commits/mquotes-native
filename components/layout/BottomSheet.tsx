@@ -11,8 +11,15 @@ import Animated, {
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
-// Gap at top so main card peeks through (~8% of screen)
-const SHEET_TOP_GAP = Math.round(SCREEN_HEIGHT * 0.08);
+// Sheets travel to the very top of the screen. Individual sheets can still
+// opt out via the `topGap` prop.
+const SHEET_TOP_GAP = 0;
+
+// Breathing room between the status bar and a sheet's header row. Each screen
+// already pads itself by the top safe-area inset, which stops exactly at the
+// bottom of the status bar — without this the close button sits flush against
+// the clock.
+const SHEET_CONTENT_TOP = 14;
 
 interface BottomSheetProps {
   visible: boolean;
@@ -23,7 +30,7 @@ interface BottomSheetProps {
   instantClose?: boolean;
   /** Skip open animation — sheet appears instantly at full height (used when replacing another sheet). */
   instantOpen?: boolean;
-  /** Override the top gap (distance from top of screen). Defaults to SHEET_TOP_GAP (~8%). */
+  /** Override the top gap (distance from top of screen). Defaults to SHEET_TOP_GAP (0 — full height). */
   topGap?: number;
 }
 
@@ -153,17 +160,16 @@ export function BottomSheet({ visible, onClose, children, backgroundColor, insta
           sheetStyle,
         ]}
       >
-        {/* Drag handle zone */}
-        <GestureDetector gesture={dragGesture}>
-          <View style={styles.dragZone}>
-            <View style={styles.dragPill} />
-          </View>
-        </GestureDetector>
-
-        {/* Content */}
+        {/* Content fills the sheet — at full height it starts at the very top edge */}
         <View style={styles.content}>
           {children}
         </View>
+
+        {/* Drag-to-dismiss strip — an invisible band over the status-bar area,
+            absolutely positioned so it does not push the content down. */}
+        <GestureDetector gesture={dragGesture}>
+          <View style={styles.dragZone} />
+        </GestureDetector>
       </Animated.View>
     </View>
   );
@@ -178,8 +184,10 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    // Full-height sheets sit flush against the status bar — a rounded top edge
+    // would read as a rendering seam.
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -4 },
@@ -187,18 +195,19 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 24,
   },
+  // Kept inside the status-bar band so it never covers a screen's header
+  // controls — screens pad themselves by the top safe-area inset, which is
+  // at least this tall on every supported device.
   dragZone: {
-    alignItems: 'center',
-    paddingTop: 12,
-    paddingBottom: 6,
-  },
-  dragPill: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.18)',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 20,
+    zIndex: 2,
   },
   content: {
     flex: 1,
+    paddingTop: SHEET_CONTENT_TOP,
   },
 });

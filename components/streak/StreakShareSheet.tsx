@@ -17,7 +17,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Icon } from '../ui/Icon';
 import * as Haptics from 'expo-haptics';
 import * as ExpoSharing from 'expo-sharing';
 import { useBaseTheme } from '../../hooks/useTheme';
@@ -136,7 +136,7 @@ export function StreakShareSheet({ visible, streakCount, onClose }: Props) {
                 onPress={onClose}
                 style={[styles.closeBtn, { backgroundColor: theme.surfaceElevated ?? theme.surface }]}
               >
-                <MaterialCommunityIcons name="close" size={18} color={theme.textMuted} />
+                <Icon name="close" size={18} color={theme.textMuted} />
               </TouchableOpacity>
               <Text style={[styles.title, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
                 Share Streak
@@ -181,7 +181,7 @@ export function StreakShareSheet({ visible, streakCount, onClose }: Props) {
                 style={styles.actionItem}
               >
                 <View style={[styles.actionCircle, { backgroundColor: theme.surface, borderColor: (isPro && watermarkRemoved) ? theme.gold : theme.border }]}>
-                  <MaterialCommunityIcons
+                  <Icon
                     name={(isPro && watermarkRemoved) ? 'image-off-outline' : 'image-minus-outline'}
                     size={22}
                     color={(isPro && watermarkRemoved) ? theme.gold : theme.text}
@@ -200,7 +200,7 @@ export function StreakShareSheet({ visible, streakCount, onClose }: Props) {
                 style={[styles.primaryBtn, { backgroundColor: theme.gold }]}
                 activeOpacity={0.8}
               >
-                <MaterialCommunityIcons name="export-variant" size={20} color="#000" />
+                <Icon name="export-variant" size={20} color="#000" />
                 <Text style={[styles.primaryBtnText, { fontFamily: theme.uiFontFamily }]}>
                   Share
                 </Text>

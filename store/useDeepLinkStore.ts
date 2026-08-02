@@ -11,23 +11,14 @@ export interface PendingQuote {
   author: string;
 }
 
-/** Route to open via BottomSheet when the app launches from a deep link. */
-export type PendingRoute = 'reflect' | null;
-
 interface DeepLinkStore {
   pendingQuote: PendingQuote | null;
-  pendingRoute: PendingRoute;
   setPendingQuote: (quote: PendingQuote) => void;
   clearPendingQuote: () => void;
-  setPendingRoute: (route: PendingRoute) => void;
-  clearPendingRoute: () => void;
 }
 
 export const useDeepLinkStore = create<DeepLinkStore>()((set) => ({
   pendingQuote: null,
-  pendingRoute: null,
   setPendingQuote: (quote) => set({ pendingQuote: quote }),
   clearPendingQuote: () => set({ pendingQuote: null }),
-  setPendingRoute: (route) => set({ pendingRoute: route }),
-  clearPendingRoute: () => set({ pendingRoute: null }),
 }));

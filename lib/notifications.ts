@@ -4,7 +4,7 @@ import { fetchQuotesForNotifications } from './quotesApi';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export type NotifCategory = 'daily-quote' | 'qod' | 'reflect' | 'streak';
+export type NotifCategory = 'daily-quote' | 'qod' | 'streak';
 
 export interface RescheduleOptions {
   enabled: boolean;
@@ -18,9 +18,6 @@ export interface RescheduleOptions {
   // Quote of the Day
   qodEnabled: boolean;
   qodTime: string;         // HH:mm
-  // Reflect reminder
-  reflectEnabled: boolean;
-  reflectTime: string;     // HH:mm
   // Streak reminder
   streakEnabled: boolean;
   streakTime: string;      // HH:mm
@@ -132,7 +129,7 @@ let _scheduleGen = 0;
  * quote. The scheduler fills as many future days as fit within the iOS 64-
  * notification cap. The app re-calls this on every foreground to top up.
  *
- * QoD / reflect / streak use repeating DAILY or WEEKLY triggers since their
+ * QoD / streak use repeating DAILY or WEEKLY triggers since their
  * content is static.
  *
  * Day-of-week filtering:
@@ -196,7 +193,6 @@ export async function rescheduleAll(opts: RescheduleOptions): Promise<void> {
     let n = 0;
     const multiplier = specificDays ? specificDays.length : 1;
     if (opts.qodEnabled) n += multiplier;
-    if (opts.reflectEnabled) n += multiplier;
     if (opts.streakEnabled) n += multiplier;
     return n;
   })();
@@ -298,23 +294,7 @@ export async function rescheduleAll(opts: RescheduleOptions): Promise<void> {
     );
   }
 
-  // ── 3. Reflect Reminder (repeating — static content) ──────────────────
-  if (opts.reflectEnabled) {
-    if (gen !== _scheduleGen) return;
-    const [hour, minute] = opts.reflectTime.split(':').map(Number);
-    await schedRepeating(
-      {
-        title: 'Time to reflect',
-        body: 'A few words a day builds a life of intention.',
-        sound: true,
-        data: { category: 'reflect' as NotifCategory },
-        ...(Platform.OS === 'android' && { channelId: 'daily-quotes' }),
-      },
-      { hour, minute },
-    );
-  }
-
-  // ── 4. Streak Reminder (repeating — static content) ───────────────────
+  // ── 3. Streak Reminder (repeating — static content) ───────────────────
   if (opts.streakEnabled) {
     if (gen !== _scheduleGen) return;
     const [hour, minute] = opts.streakTime.split(':').map(Number);
@@ -355,8 +335,6 @@ export async function scheduleQuoteNotifications(opts: ScheduleOptions): Promise
     endHHMM: opts.endHHMM,
     qodEnabled: false,
     qodTime: '08:00',
-    reflectEnabled: false,
-    reflectTime: '20:00',
     streakEnabled: false,
     streakTime: '21:00',
   });

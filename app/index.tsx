@@ -1,7 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Dimensions, StyleSheet } from 'react-native';
-
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+import { StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -20,12 +18,10 @@ import ThemesScreen from '../components/screens/ThemesScreen';
 import CreateMixScreen from '../components/screens/CreateMixScreen';
 import ProfileScreen from '../components/screens/ProfileScreen';
 import MyQuotesScreen from '../components/screens/MyQuotesScreen';
-import ReflectScreen from '../components/screens/ReflectScreen';
 import HistoryScreen from '../components/screens/HistoryScreen';
 import NotificationsScreen from '../components/screens/NotificationsScreen';
 import WidgetsScreen from '../components/screens/WidgetsScreen';
 import FavoritesScreen from '../components/screens/FavoritesScreen';
-import JournalScreen from '../components/screens/JournalScreen';
 import FeaturesScreen from '../components/subscriptions/FeaturesScreen';
 import TrialScreen from '../components/subscriptions/TrialScreen';
 import SettingsScreen from '../components/screens/SettingsScreen';
@@ -99,16 +95,6 @@ function HomeScreenInner() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [widgetParams.src, widgetParams.widgetId, widgetParams.text, widgetParams.id]);
 
-  // Open a BottomSheet when the app is launched from a notification deep link
-  // (e.g. reflect reminder notification sets pendingRoute='reflect').
-  const pendingRoute = useDeepLinkStore((s) => s.pendingRoute);
-  const { openSheet } = useModal()!;
-  useEffect(() => {
-    if (!pendingRoute) return;
-    useDeepLinkStore.getState().clearPendingRoute();
-    openSheet(pendingRoute);
-  }, [pendingRoute, openSheet]);
-
   return (
     <ThemeBackground style={styles.root}>
       <SafeAreaView style={styles.safe} edges={['top']}>
@@ -152,12 +138,6 @@ function HomeScreenInner() {
         <MyQuotesScreen onClose={closeSheet} onBack={goBack} />
       </BottomSheet>
 
-      {/* Reflect sheet */}
-      <BottomSheet visible={activeSheet === 'reflect'} onClose={closeSheet} backgroundColor={theme.background}
-        instantClose={previousSheet === 'reflect'} instantOpen={isSwitching}>
-        <ReflectScreen onClose={closeSheet} />
-      </BottomSheet>
-
       {/* History sheet */}
       <BottomSheet visible={activeSheet === 'history'} onClose={closeSheet} backgroundColor={theme.background}
         instantClose={previousSheet === 'history'} instantOpen={isSwitching}>
@@ -182,12 +162,6 @@ function HomeScreenInner() {
         <FavoritesScreen onClose={closeSheet} onBack={goBack} />
       </BottomSheet>
 
-      {/* Journal sheet */}
-      <BottomSheet visible={activeSheet === 'journal'} onClose={closeSheet} backgroundColor={theme.background}
-        instantClose={previousSheet === 'journal'} instantOpen={isSwitching}>
-        <JournalScreen onClose={closeSheet} onBack={goBack} />
-      </BottomSheet>
-
       {/* Settings sheet */}
       <BottomSheet visible={activeSheet === 'settings'} onClose={closeSheet} backgroundColor={theme.background}
         instantClose={previousSheet === 'settings'} instantOpen={isSwitching}>
@@ -196,8 +170,7 @@ function HomeScreenInner() {
 
       {/* Share sheet */}
       <BottomSheet visible={activeSheet === 'share'} onClose={closeSheet} backgroundColor={theme.background}
-        instantClose={previousSheet === 'share'} instantOpen={isSwitching}
-        topGap={Math.round(SCREEN_HEIGHT * 0.18)}>
+        instantClose={previousSheet === 'share'} instantOpen={isSwitching}>
         <ShareScreen onClose={closeSheet} />
       </BottomSheet>
 

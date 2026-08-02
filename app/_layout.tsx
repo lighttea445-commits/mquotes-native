@@ -164,9 +164,7 @@ function RootLayoutInner() {
       quoteAuthor?: string;
     } | null;
 
-    if (data?.category === 'reflect') {
-      useDeepLinkStore.getState().setPendingRoute('reflect');
-    } else if (data?.quoteId) {
+    if (data?.quoteId) {
       const { title, body } = lastNotifResponse.notification.request.content;
       useDeepLinkStore.getState().setPendingQuote({
         id: data.quoteId,
@@ -206,8 +204,6 @@ function RootLayoutInner() {
           endHHMM: prefs.notificationEndTime ?? '22:00',
           qodEnabled: prefs.qodEnabled ?? true,
           qodTime: prefs.qodTime ?? '08:00',
-          reflectEnabled: prefs.reflectEnabled ?? true,
-          reflectTime: prefs.reflectTime ?? '20:00',
           streakEnabled: prefs.streakEnabled ?? true,
           streakTime: prefs.streakTime ?? '21:00',
         }).then(() => {
@@ -272,8 +268,6 @@ function RootLayoutInner() {
         <Stack.Screen name="widgets" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="notifications" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="subscriptions" options={{ animation: 'slide_from_right' }} />
-        <Stack.Screen name="reflect" options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
-        <Stack.Screen name="journal" options={{ animation: 'slide_from_right' }} />
         {/* Trampoline for widget tap deep links — invisible, navigates straight to index */}
         <Stack.Screen name="widget-open" options={{ animation: 'none', headerShown: false }} />
       </Stack>

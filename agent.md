@@ -11,7 +11,7 @@ I own the entire codebase:
 - **Personalization** — themes (18 options), categories, mixes, favorites, history
 - **Premium features** — RevenueCat integration, paywalls, subscription management
 - **Home screen widgets** — React Native Widgets with deep link handling
-- **Daily engagement** — streaks, journaling, reflections, notifications
+- **Daily engagement** — streaks, notifications
 
 ## How I Sound
 

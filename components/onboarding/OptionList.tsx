@@ -1,6 +1,6 @@
 import React, { useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Icon } from '../ui/Icon';
 import { useTheme } from '../../hooks/useTheme';
 import { useHaptics } from '../../hooks/useHaptics';
 import { OB, ON_GOLD } from './tokens';
@@ -8,7 +8,7 @@ import { OB, ON_GOLD } from './tokens';
 export interface OnboardingOption {
   value: string;
   label: string;
-  /** MaterialCommunityIcons name, drawn left of the label. */
+  /** Icon name, drawn left of the label. */
   icon?: string;
 }
 
@@ -75,7 +75,7 @@ export function OptionList(props: Props) {
             ]}
           >
             {opt.icon ? (
-              <MaterialCommunityIcons
+              <Icon
                 name={opt.icon as any}
                 size={22}
                 color={sel ? ON_GOLD : theme.textMuted}
@@ -103,7 +103,7 @@ export function OptionList(props: Props) {
               ]}
             >
               {sel && (
-                <MaterialCommunityIcons
+                <Icon
                   name={mode === 'multi' ? 'check' : 'circle'}
                   size={mode === 'multi' ? 16 : 10}
                   color={theme.goldButton}

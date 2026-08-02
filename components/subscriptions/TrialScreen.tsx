@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Icon } from '../ui/Icon';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../../hooks/useTheme';
@@ -122,7 +122,7 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
       const id = await Notifications.scheduleNotificationAsync({
         content: {
           title: 'Your free trial ends tomorrow',
-          body: 'Upgrade to Quotable Premium to keep your themes, history, and reflections.',
+          body: 'Upgrade to Quotable Premium to keep your themes, history, and favorites.',
           sound: true,
           ...(Platform.OS === 'android' && { channelId: 'trial-reminder' }),
         },
@@ -154,14 +154,14 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <SafeAreaView style={styles.safe} edges={['bottom']}>
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
         {/* X Close */}
         <Pressable
           onPress={onClose}
           style={[styles.closeBtn, { backgroundColor: theme.surface }]}
           hitSlop={12}
         >
-          <MaterialCommunityIcons name="close" size={20} color={theme.textMuted} />
+          <Icon name="close" size={20} color={theme.textMuted} />
         </Pressable>
 
         <ScrollView
@@ -212,7 +212,7 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
                       justifyContent: 'center',
                     }}
                   >
-                    <MaterialCommunityIcons
+                    <Icon
                       name={step.icon}
                       size={15}
                       color={i === 0 ? theme.background : i === 1 ? theme.gold : theme.textMuted}

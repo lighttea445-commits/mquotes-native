@@ -59,8 +59,6 @@ const ALL_TYPES_OPTS = {
   endHHMM: '22:00',
   qodEnabled: true,
   qodTime: '08:00',
-  reflectEnabled: true,
-  reflectTime: '20:00',
   streakEnabled: true,
   streakTime: '21:00',
 };
@@ -184,7 +182,7 @@ describe('rescheduleAll — trigger types', () => {
   it('assigns correct Expo weekday numbers (JS 0-based + 1)', async () => {
     const { rescheduleAll } = require('../../lib/notifications');
     // JS Sunday=0 → Expo weekday=1, JS Saturday=6 → Expo weekday=7
-    await rescheduleAll({ ...ALL_TYPES_OPTS, days: [0, 6], quotesEnabled: false, qodEnabled: true, qodTime: '08:00', reflectEnabled: false, streakEnabled: false });
+    await rescheduleAll({ ...ALL_TYPES_OPTS, days: [0, 6], quotesEnabled: false, qodEnabled: true, qodTime: '08:00', streakEnabled: false });
 
     const weekdays = mockSchedule.mock.calls.map((c) => c[0].trigger.weekday);
     expect(weekdays).toContain(1); // Sunday
@@ -215,7 +213,6 @@ describe('rescheduleAll — disabled', () => {
       ...ALL_TYPES_OPTS,
       quotesEnabled: false,
       qodEnabled: false,
-      reflectEnabled: false,
       streakEnabled: false,
     });
 
@@ -233,44 +230,43 @@ describe('rescheduleAll — notification counts', () => {
     mockCancel.mockClear();
   });
 
-  it('schedules exactly count+3 notifications on DAILY (all days, all types)', async () => {
+  it('schedules exactly count+2 notifications on DAILY (all days, all types)', async () => {
     const { rescheduleAll } = require('../../lib/notifications');
     const count = 5;
     await rescheduleAll({ ...ALL_TYPES_OPTS, quoteCount: count, days: [] });
 
-    // count quote slots + 1 QOD + 1 reflect + 1 streak
-    expect(mockSchedule).toHaveBeenCalledTimes(count + 3);
+    // count quote slots + 1 QOD + 1 streak
+    expect(mockSchedule).toHaveBeenCalledTimes(count + 2);
   });
 
-  it('schedules count×days + 3×days notifications with WEEKLY triggers', async () => {
+  it('schedules count×days + 2×days notifications with WEEKLY triggers', async () => {
     const { rescheduleAll } = require('../../lib/notifications');
     const count = 3;
     const days = [1, 3, 5]; // 3 specific weekdays
     await rescheduleAll({ ...ALL_TYPES_OPTS, quoteCount: count, days });
 
-    // (count + 3 types) × number of days
-    expect(mockSchedule).toHaveBeenCalledTimes((count + 3) * days.length);
+    // (count + 2 types) × number of days
+    expect(mockSchedule).toHaveBeenCalledTimes((count + 2) * days.length);
   });
 
   /**
    * B1 — iOS overflow regression test.
    *
-   * With count=10 and 5 specific weekdays + all 4 reminder types:
-   *   quotes: 10×5 = 50
+   * With count=12 and 5 specific weekdays + all 3 reminder types:
+   *   quotes: 12×5 = 60
    *   QOD:     1×5 =  5
-   *   reflect: 1×5 =  5
    *   streak:  1×5 =  5
-   *   total         = 65 → would exceed iOS limit of 64
+   *   total         = 70 → would exceed iOS limit of 64
    *
-   * The fix caps scheduling at 64 so the last slot is silently skipped
+   * The fix caps scheduling at 64 so the last slots are silently skipped
    * rather than causing the system to silently drop the oldest notification.
    */
   it('[B1] caps scheduled notifications at 64 on iOS (overflow fixed)', async () => {
     const { rescheduleAll } = require('../../lib/notifications');
     await rescheduleAll({
       ...ALL_TYPES_OPTS,
-      quoteCount: 10,
-      days: [1, 2, 3, 4, 5], // Mon–Fri (5 days) → would be 65 without cap
+      quoteCount: 12,
+      days: [1, 2, 3, 4, 5], // Mon–Fri (5 days) → would be 70 without cap
     });
 
     const totalScheduled = mockSchedule.mock.calls.length;
@@ -280,7 +276,7 @@ describe('rescheduleAll — notification counts', () => {
 
   it('stays within iOS limit with all-day DAILY triggers (max settings)', async () => {
     const { rescheduleAll } = require('../../lib/notifications');
-    // With DAILY triggers (empty days): count + 3 = 13 → well within 64
+    // With DAILY triggers (empty days): count + 2 = 12 → well within 64
     await rescheduleAll({ ...ALL_TYPES_OPTS, quoteCount: 10, days: [] });
 
     expect(mockSchedule.mock.calls.length).toBeLessThanOrEqual(IOS_NOTIF_LIMIT);
@@ -303,7 +299,6 @@ describe('rescheduleAll — time scheduling', () => {
       quotesEnabled: false,
       qodEnabled: true,
       qodTime: '07:30',
-      reflectEnabled: false,
       streakEnabled: false,
     });
 
@@ -312,29 +307,12 @@ describe('rescheduleAll — time scheduling', () => {
     expect(trigger.minute).toBe(30);
   });
 
-  it('reflect trigger fires at the configured hour and minute', async () => {
-    const { rescheduleAll } = require('../../lib/notifications');
-    await rescheduleAll({
-      ...ALL_TYPES_OPTS,
-      quotesEnabled: false,
-      qodEnabled: false,
-      reflectEnabled: true,
-      reflectTime: '19:15',
-      streakEnabled: false,
-    });
-
-    const trigger = mockSchedule.mock.calls[0][0].trigger;
-    expect(trigger.hour).toBe(19);
-    expect(trigger.minute).toBe(15);
-  });
-
   it('streak trigger fires at the configured hour and minute', async () => {
     const { rescheduleAll } = require('../../lib/notifications');
     await rescheduleAll({
       ...ALL_TYPES_OPTS,
       quotesEnabled: false,
       qodEnabled: false,
-      reflectEnabled: false,
       streakEnabled: true,
       streakTime: '21:00',
     });
@@ -353,7 +331,6 @@ describe('rescheduleAll — time scheduling', () => {
       startHHMM: '10:00',
       endHHMM: '10:00',
       qodEnabled: false,
-      reflectEnabled: false,
       streakEnabled: false,
     });
 
@@ -373,7 +350,6 @@ describe('rescheduleAll — time scheduling', () => {
       startHHMM: '09:00',
       endHHMM: '13:00',
       qodEnabled: false,
-      reflectEnabled: false,
       streakEnabled: false,
     });
 
@@ -403,7 +379,6 @@ describe('rescheduleAll — notification content', () => {
       ...ALL_TYPES_OPTS,
       showAuthor: false,
       qodEnabled: false,
-      reflectEnabled: false,
       streakEnabled: false,
     });
 
@@ -418,7 +393,6 @@ describe('rescheduleAll — notification content', () => {
       ...ALL_TYPES_OPTS,
       showAuthor: true,
       qodEnabled: false,
-      reflectEnabled: false,
       streakEnabled: false,
     });
 
@@ -439,7 +413,6 @@ describe('rescheduleAll — notification content', () => {
       ...ALL_TYPES_OPTS,
       quoteCount: 1,
       qodEnabled: false,
-      reflectEnabled: false,
       streakEnabled: false,
     });
 
@@ -454,24 +427,10 @@ describe('rescheduleAll — notification content', () => {
       ...ALL_TYPES_OPTS,
       quotesEnabled: false,
       qodEnabled: true,
-      reflectEnabled: false,
       streakEnabled: false,
     });
 
     expect(mockSchedule.mock.calls[0][0].content.title).toBe('✨ Quote of the Day');
-  });
-
-  it('reflect notification has the correct title', async () => {
-    const { rescheduleAll } = require('../../lib/notifications');
-    await rescheduleAll({
-      ...ALL_TYPES_OPTS,
-      quotesEnabled: false,
-      qodEnabled: false,
-      reflectEnabled: true,
-      streakEnabled: false,
-    });
-
-    expect(mockSchedule.mock.calls[0][0].content.title).toBe('📖 Time to reflect');
   });
 
   it('streak notification has the correct title', async () => {
@@ -480,7 +439,6 @@ describe('rescheduleAll — notification content', () => {
       ...ALL_TYPES_OPTS,
       quotesEnabled: false,
       qodEnabled: false,
-      reflectEnabled: false,
       streakEnabled: true,
     });
 
@@ -501,13 +459,13 @@ describe('scheduleQuoteNotifications (legacy)', () => {
     const { scheduleQuoteNotifications } = require('../../lib/notifications');
     await scheduleQuoteNotifications({ count: 3, startHHMM: '09:00', endHHMM: '21:00' });
 
-    // Only quote notifications should be scheduled (no QOD, reflect, streak)
+    // Only quote notifications should be scheduled (no QOD, streak)
     // count=3, DAILY triggers → 3 scheduleNotificationAsync calls
     expect(mockSchedule).toHaveBeenCalledTimes(3);
 
     // All titles should be quote text (not fixed strings)
     const titles = mockSchedule.mock.calls.map((c) => c[0].content.title);
-    expect(titles.every((t) => !['✨ Quote of the Day', '📖 Time to reflect', '🔥 Keep your streak alive'].includes(t))).toBe(true);
+    expect(titles.every((t) => !['✨ Quote of the Day', '🔥 Keep your streak alive'].includes(t))).toBe(true);
   });
 });
 

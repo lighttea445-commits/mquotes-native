@@ -1,6 +1,6 @@
 import React, { useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Icon } from '../ui/Icon';
 import { useTheme } from '../../hooks/useTheme';
 import { useHaptics } from '../../hooks/useHaptics';
 import { OB, ON_GOLD } from './tokens';
@@ -52,7 +52,7 @@ export function ChipGrid({ chips, value, onChange }: Props) {
               },
             ]}
           >
-            <MaterialCommunityIcons
+            <Icon
               name={sel ? 'check' : 'plus'}
               size={16}
               color={sel ? ON_GOLD : theme.textMuted}

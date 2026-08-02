@@ -1,7 +1,9 @@
+import type { IconName } from './icons';
+
 export interface Category {
   id: string;        // lowercased slug used as internal key
   name: string;      // display name
-  icon: string;      // MaterialCommunityIcons or Ionicons name
+  icon: IconName;    // resolved to a glyph by constants/icons.ts
   color: string;
   section: 'forYou' | 'byType';
   apiTag: string;    // exact Quotable API tag name (e.g. 'Wisdom')

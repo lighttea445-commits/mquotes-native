@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Icon } from '../ui/Icon';
 import { useTheme } from '../../hooks/useTheme';
 import { useRevenueCat } from '../../hooks/useRevenueCat';
 import { useMixStore } from '../../store/useMixStore';
@@ -63,16 +63,16 @@ function CategoryCard({
     >
       {selected && (
         <View style={[styles.checkBadge, { backgroundColor: theme.gold }]}>
-          <MaterialCommunityIcons name="check" size={11} color="#1A1208" />
+          <Icon name="check" size={11} color="#1A1208" />
         </View>
       )}
       {locked && !selected && (
         <View style={[styles.checkBadge, { backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border }]}>
-          <MaterialCommunityIcons name="lock" size={10} color={theme.textMuted} />
+          <Icon name="lock" size={10} color={theme.textMuted} />
         </View>
       )}
       <View style={[styles.iconBg, { backgroundColor: GOLD_ICON_BG }]}>
-        <MaterialCommunityIcons name={item.icon as any} size={20} color={theme.gold} />
+        <Icon name={item.icon as any} size={20} color={theme.gold} />
       </View>
       <Text style={[styles.categoryName, { color: selected ? theme.text : theme.textMuted, fontFamily: theme.uiFontFamily }]}>
         {item.name}
@@ -131,11 +131,11 @@ export default function CreateMixScreen({ onClose }: { onClose?: () => void }) {
         </View>
       )}
 
-      <SafeAreaView style={styles.safe} edges={['bottom']}>
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={close} style={[styles.closeBtn, { backgroundColor: theme.surface }]}>
-            <MaterialCommunityIcons name="close" size={20} color={theme.textMuted} />
+            <Icon name="close" size={20} color={theme.textMuted} />
           </TouchableOpacity>
           <Text style={[styles.title, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
             Create Mix

@@ -14,14 +14,13 @@ import {
 import * as StoreReview from 'expo-store-review';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Icon } from '../ui/Icon';
 import { useTheme } from '../../hooks/useTheme';
 import { useAppStore } from '../../store/useAppStore';
 import { useFavoritesStore } from '../../store/useFavoritesStore';
 import { useHistoryStore } from '../../store/useHistoryStore';
 import { useMixStore } from '../../store/useMixStore';
 import { useUserQuotesStore } from '../../store/useUserQuotesStore';
-import { useReflectStore } from '../../store/useReflectStore';
 import { useWidgetStore } from '../../store/useWidgetStore';
 import { useModal } from '../../contexts/ModalContext';
 import { ConfirmSheet } from '../ui/ConfirmSheet';
@@ -37,7 +36,6 @@ export default function SettingsScreen({ onClose, onBack }: { onClose?: () => vo
   const clearHistory = useHistoryStore((s) => s.clearHistory);
   const clearMix = useMixStore((s) => s.clearMix);
   const clearUserQuotes = useUserQuotesStore((s) => s.clearUserQuotes);
-  const clearReflections = useReflectStore((s) => s.clearReflections);
   const clearWidgetConfigs = useWidgetStore((s) => s.clearWidgetConfigs);
 
   const close = onClose ?? (() => router.back());
@@ -54,16 +52,11 @@ export default function SettingsScreen({ onClose, onBack }: { onClose?: () => vo
     }
   };
 
-  const handleJournal = () => {
-    modal ? modal.openSheet('journal') : router.push('/journal');
-  };
-
   const confirmDeleteAccount = () => {
     clearFavorites();
     clearHistory();
     clearMix();
     clearUserQuotes();
-    clearReflections();
     clearWidgetConfigs();
     resetApp();
     router.replace('/onboarding');
@@ -74,11 +67,11 @@ export default function SettingsScreen({ onClose, onBack }: { onClose?: () => vo
       style={[styles.root, { backgroundColor: theme.background }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <SafeAreaView style={styles.safe} edges={['bottom']}>
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={back} style={[styles.backBtn, { backgroundColor: theme.surface }]}>
-            <MaterialCommunityIcons name="arrow-left" size={20} color={theme.textMuted} />
+            <Icon name="arrow-left" size={20} color={theme.textMuted} />
           </TouchableOpacity>
           <Text style={[styles.headerTitle, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
             Settings
@@ -93,7 +86,7 @@ export default function SettingsScreen({ onClose, onBack }: { onClose?: () => vo
               YOUR NAME
             </Text>
             <View style={[styles.nameRow, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-              <MaterialCommunityIcons name="account-outline" size={20} color={theme.gold} />
+              <Icon name="account-outline" size={20} color={theme.gold} />
               <TextInput
                 style={[styles.nameInput, { color: theme.text, fontFamily: theme.uiFontFamily }]}
                 value={nameValue}
@@ -114,7 +107,7 @@ export default function SettingsScreen({ onClose, onBack }: { onClose?: () => vo
             </Text>
 
             <View style={[styles.toggleItem, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-              <MaterialCommunityIcons name="white-balance-sunny" size={20} color={theme.gold} />
+              <Icon name="white-balance-sunny" size={20} color={theme.gold} />
               <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>Light mode</Text>
               <Switch
                 value={preferences.lightMode}
@@ -125,7 +118,7 @@ export default function SettingsScreen({ onClose, onBack }: { onClose?: () => vo
             </View>
 
             <View style={[styles.toggleItem, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-              <MaterialCommunityIcons name="vibrate" size={20} color={theme.gold} />
+              <Icon name="vibrate" size={20} color={theme.gold} />
               <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>Haptics</Text>
               <Switch
                 value={preferences.hapticsEnabled}
@@ -136,7 +129,7 @@ export default function SettingsScreen({ onClose, onBack }: { onClose?: () => vo
             </View>
 
             <View style={[styles.toggleItem, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-              <MaterialCommunityIcons name="account-outline" size={20} color={theme.gold} />
+              <Icon name="account-outline" size={20} color={theme.gold} />
               <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>Show author</Text>
               <Switch
                 value={preferences.showAuthor}
@@ -147,23 +140,6 @@ export default function SettingsScreen({ onClose, onBack }: { onClose?: () => vo
             </View>
 
 
-          </View>
-
-          {/* Content */}
-          <View style={styles.section}>
-            <Text style={[styles.sectionLabel, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-              CONTENT
-            </Text>
-            <TouchableOpacity
-              style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border }]}
-              onPress={handleJournal}
-            >
-              <MaterialCommunityIcons name="pencil-outline" size={20} color={theme.gold} />
-              <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
-                Reflections
-              </Text>
-              <MaterialCommunityIcons name="chevron-right" size={18} color={theme.textMuted} />
-            </TouchableOpacity>
           </View>
 
           {/* Account */}
@@ -177,7 +153,7 @@ export default function SettingsScreen({ onClose, onBack }: { onClose?: () => vo
               accessibilityState={{ disabled: !canManageSubscription }}
               onPress={() => Linking.openURL('https://apps.apple.com/account/subscriptions')}
             >
-              <MaterialCommunityIcons
+              <Icon
                 name="crown-outline"
                 size={20}
                 color={canManageSubscription ? theme.gold : theme.textMuted}
@@ -186,7 +162,7 @@ export default function SettingsScreen({ onClose, onBack }: { onClose?: () => vo
                 Manage Subscription
               </Text>
               {canManageSubscription && (
-                <MaterialCommunityIcons name="chevron-right" size={18} color={theme.textMuted} />
+                <Icon name="chevron-right" size={18} color={theme.textMuted} />
               )}
             </TouchableOpacity>
             <TouchableOpacity
@@ -197,11 +173,11 @@ export default function SettingsScreen({ onClose, onBack }: { onClose?: () => vo
                 }
               }}
             >
-              <MaterialCommunityIcons name="star-outline" size={20} color={theme.gold} />
+              <Icon name="star-outline" size={20} color={theme.gold} />
               <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
                 Rate Quotable
               </Text>
-              <MaterialCommunityIcons name="chevron-right" size={18} color={theme.textMuted} />
+              <Icon name="chevron-right" size={18} color={theme.textMuted} />
             </TouchableOpacity>
           </View>
 
@@ -218,11 +194,11 @@ export default function SettingsScreen({ onClose, onBack }: { onClose?: () => vo
                   router.replace('/onboarding');
                 }}
               >
-                <MaterialCommunityIcons name="restart" size={20} color={theme.gold} />
+                <Icon name="restart" size={20} color={theme.gold} />
                 <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
                   Replay Onboarding
                 </Text>
-                <MaterialCommunityIcons name="chevron-right" size={18} color={theme.textMuted} />
+                <Icon name="chevron-right" size={18} color={theme.textMuted} />
               </TouchableOpacity>
             </View>
           )}
@@ -236,7 +212,7 @@ export default function SettingsScreen({ onClose, onBack }: { onClose?: () => vo
               style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border }]}
               onPress={() => setShowDeleteConfirm(true)}
             >
-              <MaterialCommunityIcons name="delete-outline" size={20} color="#EF4444" />
+              <Icon name="delete-outline" size={20} color="#EF4444" />
               <Text style={[styles.menuText, { color: '#EF4444', fontFamily: theme.uiFontFamily }]}>
                 Delete Account
               </Text>

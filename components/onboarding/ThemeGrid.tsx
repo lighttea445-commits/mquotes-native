@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ImageBackground, Dimensions } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Icon } from '../ui/Icon';
 import { Theme } from '../../constants/themes';
 import { useTheme } from '../../hooks/useTheme';
 import { OB } from './tokens';
@@ -36,7 +36,7 @@ export function ThemeGrid({ themes, selectedId, onSelect }: Props) {
             <Text style={[tg.glyph, { color: t.text, fontFamily: t.quoteFontFamily }]}>Aa</Text>
             {selected && (
               <View style={[tg.check, { backgroundColor: active.gold }]}>
-                <MaterialCommunityIcons name="check" size={14} color={t.background} />
+                <Icon name="check" size={14} color={t.background} />
               </View>
             )}
           </>
