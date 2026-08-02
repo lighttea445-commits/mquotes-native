@@ -46,6 +46,10 @@ const MAP = {
   'crown-outline': 'crown',
   'delete-outline': 'trash',
   'dots-horizontal': 'dots',
+  'dots-vertical': 'dots',
+  'magnify': 'search',
+  'bookmark-outline': 'bookmark',
+  'bookmark': 'bookmark-filled',
   'emoticon-cry-outline': 'mood-cry',
   'emoticon-excited-outline': 'mood-happy',
   'emoticon-happy-outline': 'mood-smile',
@@ -116,7 +120,9 @@ const MAP = {
 };
 
 /** Names whose glyph is the mirror of another — rotated at render time. */
-const ROTATE = { 'format-quote-close': 180 };
+// Tabler ships only a horizontal `dots`; the vertical overflow glyph is the
+// same three dots turned a quarter turn.
+const ROTATE = { 'format-quote-close': 180, 'dots-vertical': 90 };
 
 /**
  * Optical corrections, keyed by icon name in SET so one entry covers every

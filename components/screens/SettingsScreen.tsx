@@ -19,7 +19,8 @@ import { useTheme } from '../../hooks/useTheme';
 import { useAppStore } from '../../store/useAppStore';
 import { useFavoritesStore } from '../../store/useFavoritesStore';
 import { useHistoryStore } from '../../store/useHistoryStore';
-import { useMixStore } from '../../store/useMixStore';
+import { useTopicsStore } from '../../store/useTopicsStore';
+import { useCollectionsStore } from '../../store/useCollectionsStore';
 import { useUserQuotesStore } from '../../store/useUserQuotesStore';
 import { useWidgetStore } from '../../store/useWidgetStore';
 import { useModal } from '../../contexts/ModalContext';
@@ -29,12 +30,13 @@ export default function SettingsScreen({ onClose, onBack }: { onClose?: () => vo
   const theme = useTheme();
   const router = useRouter();
   const modal = useModal();
-  const { preferences, setName, setPreferences, resetApp, restartOnboarding } = useAppStore();
+  const { preferences, setName, setPreferences, resetApp } = useAppStore();
   const [nameValue, setNameValue] = useState(preferences.name || '');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const clearFavorites = useFavoritesStore((s) => s.clearFavorites);
   const clearHistory = useHistoryStore((s) => s.clearHistory);
-  const clearMix = useMixStore((s) => s.clearMix);
+  const resetTopics = useTopicsStore((s) => s.resetTopics);
+  const clearCollections = useCollectionsStore((s) => s.clearCollections);
   const clearUserQuotes = useUserQuotesStore((s) => s.clearUserQuotes);
   const clearWidgetConfigs = useWidgetStore((s) => s.clearWidgetConfigs);
 
@@ -55,7 +57,8 @@ export default function SettingsScreen({ onClose, onBack }: { onClose?: () => vo
   const confirmDeleteAccount = () => {
     clearFavorites();
     clearHistory();
-    clearMix();
+    resetTopics();
+    clearCollections();
     clearUserQuotes();
     clearWidgetConfigs();
     resetApp();
@@ -105,17 +108,6 @@ export default function SettingsScreen({ onClose, onBack }: { onClose?: () => vo
             <Text style={[styles.sectionLabel, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
               PREFERENCES
             </Text>
-
-            <View style={[styles.toggleItem, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-              <Icon name="white-balance-sunny" size={20} color={theme.gold} />
-              <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>Light mode</Text>
-              <Switch
-                value={preferences.lightMode}
-                onValueChange={(v) => setPreferences({ lightMode: v })}
-                trackColor={{ false: theme.border, true: theme.gold }}
-                thumbColor="#fff"
-              />
-            </View>
 
             <View style={[styles.toggleItem, { backgroundColor: theme.surface, borderColor: theme.border }]}>
               <Icon name="vibrate" size={20} color={theme.gold} />
@@ -180,28 +172,6 @@ export default function SettingsScreen({ onClose, onBack }: { onClose?: () => vo
               <Icon name="chevron-right" size={18} color={theme.textMuted} />
             </TouchableOpacity>
           </View>
-
-          {/* Dev tools — stripped from release builds */}
-          {__DEV__ && (
-            <View style={styles.section}>
-              <Text style={[styles.sectionLabel, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-                DEVELOPER
-              </Text>
-              <TouchableOpacity
-                style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border }]}
-                onPress={() => {
-                  restartOnboarding();
-                  router.replace('/onboarding');
-                }}
-              >
-                <Icon name="restart" size={20} color={theme.gold} />
-                <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
-                  Replay Onboarding
-                </Text>
-                <Icon name="chevron-right" size={18} color={theme.textMuted} />
-              </TouchableOpacity>
-            </View>
-          )}
 
           {/* Danger zone */}
           <View style={styles.section}>

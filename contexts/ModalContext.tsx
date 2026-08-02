@@ -1,20 +1,17 @@
 import React, { createContext, useCallback, useContext, useRef, useState } from 'react';
 
-export type ModalSheet = 'categories' | 'themes' | 'mix' | 'profile' | 'myquotes' | 'history' | 'notifications' | 'widgets' | 'favorites' | 'trial' | 'settings' | 'share' | null;
+export type ModalSheet = 'categories' | 'themes' | 'topics' | 'profile' | 'myquotes' | 'history' | 'notifications' | 'widgets' | 'favorites' | 'collections' | 'trial' | 'settings' | 'share' | 'streak' | null;
 type SheetName = Exclude<ModalSheet, null>;
 
 interface ModalContextValue {
   activeSheet: ModalSheet;
   /** The sheet that was active just before the current one (null if fresh open). */
   previousSheet: ModalSheet;
-  paywallVisible: boolean;
   openSheet: (sheet: SheetName) => void;
   /** Pop back to the previous sheet in the stack. */
   goBack: () => void;
   /** Close all sheets. */
   closeSheet: () => void;
-  openPaywall: () => void;
-  closePaywall: () => void;
 }
 
 const ModalContext = createContext<ModalContextValue | null>(null);
@@ -22,7 +19,6 @@ const ModalContext = createContext<ModalContextValue | null>(null);
 export function ModalProvider({ children }: { children: React.ReactNode }) {
   const [sheetStack, setSheetStack] = useState<SheetName[]>([]);
   const [previousSheet, setPreviousSheet] = useState<ModalSheet>(null);
-  const [paywallVisible, setPaywallVisible] = useState(false);
 
   // Ref so callbacks always see current stack without stale closures
   const stackRef = useRef<SheetName[]>([]);
@@ -56,17 +52,8 @@ export function ModalProvider({ children }: { children: React.ReactNode }) {
     setSheetStack([]);
   }, []);
 
-  const openPaywall = useCallback(() => {
-    setPreviousSheet(null);
-    stackRef.current = [];
-    setSheetStack([]);
-    setPaywallVisible(true);
-  }, []);
-
-  const closePaywall = useCallback(() => setPaywallVisible(false), []);
-
   return (
-    <ModalContext.Provider value={{ activeSheet, previousSheet, paywallVisible, openSheet, goBack, closeSheet, openPaywall, closePaywall }}>
+    <ModalContext.Provider value={{ activeSheet, previousSheet, openSheet, goBack, closeSheet }}>
       {children}
     </ModalContext.Provider>
   );

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { FONTS } from '../constants/fonts';
 import { View, StyleSheet, Text, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -6,40 +6,30 @@ import { useRouter } from 'expo-router';
 import { Icon } from '../components/ui/Icon';
 import { useTheme } from '../hooks/useTheme';
 import { useRevenueCat } from '../hooks/useRevenueCat';
-import RevenueCatUI, { PAYWALL_RESULT } from 'react-native-purchases-ui';
 import { CustomerCenterModal } from '../components/subscriptions/CustomerCenterModal';
-
-type SubscriptionView = 'loading' | 'paywall' | 'customer-center';
+import TrialScreen from '../components/subscriptions/TrialScreen';
 
 export default function SubscriptionsScreen() {
   const router = useRouter();
   const theme = useTheme();
-  const { isPro, isLoading: rcLoading, offerings, customerInfo } = useRevenueCat();
-  const [activeView, setActiveView] = useState<SubscriptionView>('loading');
+  const { isPro, isLoading: rcLoading, customerInfo } = useRevenueCat();
 
-  // Auto-present paywall as a native modal when ready
-  useEffect(() => {
-    if (rcLoading) return;
-    if (isPro) {
-      setActiveView('customer-center');
-      return;
-    }
-    setActiveView('paywall');
-    const offering = offerings?.all['sale'] ?? offerings?.current ?? undefined;
-    RevenueCatUI.presentPaywall({ offering })
-      .then((result) => {
-        if (__DEV__) console.log('Paywall result:', result);
-        if (result === PAYWALL_RESULT.PURCHASED || result === PAYWALL_RESULT.RESTORED) {
-          setActiveView('customer-center');
-        } else {
-          router.back();
-        }
-      })
-      .catch((err) => {
-        if (__DEV__) console.error('Paywall error:', err);
-        router.back();
-      });
-  }, [rcLoading, isPro]);
+  if (rcLoading) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.accent} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Not a member yet — this route is the non-modal fallback for every gated
+  // action, so it shows the same trial screen the sheets do. Its CTA buys
+  // through the store directly; there is no RevenueCat paywall any more.
+  if (!isPro) {
+    return <TrialScreen onClose={() => router.back()} />;
+  }
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
@@ -77,42 +67,10 @@ export default function SubscriptionsScreen() {
         </View>
       )}
 
-      {/* Tab Navigation — pro users only */}
-      {isPro && (
-        <View style={[styles.tabNavigation, { borderBottomColor: theme.surface }]}>
-          <Pressable
-            style={[styles.tab, { borderBottomColor: activeView !== 'customer-center' ? theme.accent : 'transparent' }]}
-            onPress={() => {
-              const offering = offerings?.all['sale'] ?? offerings?.current ?? undefined;
-              RevenueCatUI.presentPaywall({ offering }).catch(() => {});
-            }}
-          >
-            <Text style={[styles.tabText, { color: activeView !== 'customer-center' ? theme.text : theme.textMuted, fontWeight: activeView !== 'customer-center' ? '600' : '400' }]}>
-              Benefits
-            </Text>
-          </Pressable>
-          <Pressable
-            style={[styles.tab, { borderBottomColor: activeView === 'customer-center' ? theme.accent : 'transparent' }]}
-            onPress={() => setActiveView('customer-center')}
-          >
-            <Text style={[styles.tabText, { color: activeView === 'customer-center' ? theme.text : theme.textMuted, fontWeight: activeView === 'customer-center' ? '600' : '400' }]}>
-              Account
-            </Text>
-          </Pressable>
-        </View>
-      )}
-
-      {/* Loading while RC initializes */}
-      {activeView === 'loading' && (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.accent} />
-        </View>
-      )}
-
-      {/* Customer center for pro users */}
-      {activeView === 'customer-center' && (
-        <CustomerCenterModal onClose={() => router.back()} />
-      )}
+      {/* Manage the subscription. The Benefits tab is gone: it re-presented the
+          RevenueCat paywall, which no longer exists, and there is nothing to
+          sell someone who is already a member. */}
+      <CustomerCenterModal onClose={() => router.back()} />
     </SafeAreaView>
   );
 }
@@ -177,19 +135,5 @@ const styles = StyleSheet.create({
   memberCardExpiry: {
     fontSize: 12,
     marginTop: 2,
-  },
-  tabNavigation: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 12,
-    alignItems: 'center',
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
-  },
-  tabText: {
-    fontSize: 14, fontFamily: FONTS.ui.medium
   },
 });

@@ -24,6 +24,8 @@ import { useBaseTheme } from '../../hooks/useTheme';
 import { useRevenueCat } from '../../hooks/useRevenueCat';
 import { useModal } from '../../contexts/ModalContext';
 import { StreakShareCard } from './StreakShareCard';
+import { ON_GOLD, GUTTER, RADIUS } from '../ui/tokens';
+import { FONTS } from '../../constants/fonts';
 
 let captureRef: ((ref: React.RefObject<any>, opts: object) => Promise<string>) | null = null;
 try { captureRef = require('react-native-view-shot').captureRef; } catch {}
@@ -47,7 +49,8 @@ export function StreakShareSheet({ visible, streakCount, onClose }: Props) {
 
   const cardPreviewWidth = Math.min(W - 80, 280);
 
-  const SHEET_HEIGHT = H * 0.82;
+  // Full height, matching every other sheet in the app.
+  const SHEET_HEIGHT = H;
   const translateY = useSharedValue(SHEET_HEIGHT);
   const backdropOpacity = useSharedValue(0);
 
@@ -125,23 +128,16 @@ export function StreakShareSheet({ visible, streakCount, onClose }: Props) {
               sheetStyle,
             ]}
           >
-            {/* Drag handle */}
-            <View style={styles.handleRow}>
-              <View style={[styles.handle, { backgroundColor: theme.border }]} />
-            </View>
-
-            {/* Header */}
-            <View style={styles.header}>
+            {/* Header — close only, as in the reference */}
+            <View style={[styles.header, { paddingTop: insets.top + 14 }]}>
               <TouchableOpacity
                 onPress={onClose}
-                style={[styles.closeBtn, { backgroundColor: theme.surfaceElevated ?? theme.surface }]}
+                hitSlop={12}
+                accessibilityRole="button"
+                accessibilityLabel="Close"
               >
-                <Icon name="close" size={18} color={theme.textMuted} />
+                <Icon name="close" size={26} color={theme.text} />
               </TouchableOpacity>
-              <Text style={[styles.title, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
-                Share Streak
-              </Text>
-              <View style={styles.closeBtn} />
             </View>
 
             {/* Card preview */}
@@ -197,11 +193,11 @@ export function StreakShareSheet({ visible, streakCount, onClose }: Props) {
             <View style={styles.actionsArea}>
               <TouchableOpacity
                 onPress={handleShare}
-                style={[styles.primaryBtn, { backgroundColor: theme.gold }]}
+                style={[styles.primaryBtn, { backgroundColor: theme.goldButton }]}
                 activeOpacity={0.8}
               >
-                <Icon name="export-variant" size={20} color="#000" />
-                <Text style={[styles.primaryBtnText, { fontFamily: theme.uiFontFamily }]}>
+                <Icon name="export-variant" size={20} color={ON_GOLD} />
+                <Text style={[styles.primaryBtnText, { color: ON_GOLD }]}>
                   Share
                 </Text>
               </TouchableOpacity>
@@ -222,32 +218,12 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    borderTopWidth: 1,
-  },
-  handleRow: {
-    alignItems: 'center',
-    paddingTop: 12,
-    paddingBottom: 4,
-  },
-  handle: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 16,
-  },
-  title: {
-    flex: 1,
-    fontSize: 20,
-    fontWeight: '700',
-    textAlign: 'center',
+    paddingHorizontal: GUTTER,
+    paddingBottom: 8,
   },
   actions: {
     flexDirection: 'row',
@@ -303,12 +279,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    height: 52,
-    borderRadius: 14,
+    height: 56,
+    borderRadius: RADIUS.pill,
   },
   primaryBtnText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000',
+    fontSize: 17,
+    fontFamily: FONTS.display.bold,
+    lineHeight: 24,
+    includeFontPadding: false,
   },
 });

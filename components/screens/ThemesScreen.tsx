@@ -98,7 +98,7 @@ export default function ThemesScreen({ onClose }: { onClose?: () => void }) {
                 accessibilityRole="button"
                 accessibilityLabel={
                   `${t.name} theme` +
-                  (isSelected ? ', selected' : locked ? ', locked — requires Premium' : '')
+                  (isSelected ? ', selected' : locked ? ', locked, requires Premium' : '')
                 }
               >
                 {isSelected && (

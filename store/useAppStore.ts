@@ -21,6 +21,8 @@ export interface UserPreferences {
   qodTime: string;             // HH:mm, default "08:00"
   streakEnabled: boolean;      // streak reminder
   streakTime: string;          // HH:mm, default "21:00"
+  /** Master switch for streak counting. Off = no count, no banner, no card. */
+  streakTrackingEnabled: boolean;
   lastNotifScheduledAt?: string; // ISO timestamp of most recent rescheduleAll call
   goals?: string[]; // onboarding goals (e.g. "Build a daily motivation habit")
   phoneUsage?: string; // daily phone usage range e.g. "2-3 hours"
@@ -39,7 +41,6 @@ export interface UserPreferences {
   beliefRewire?: string;       // daily quotes rewire your brain
   improveAreas?: string[];     // "Personal growth", "Positive thinking", …
   hapticsEnabled: boolean;
-  lightMode: boolean;
   showAuthor: boolean;
 }
 
@@ -77,8 +78,6 @@ interface AppState {
   setMood: (moodId: string | null) => void;
   setName: (name: string) => void;
   completeOnboarding: () => void;
-  /** Replays onboarding on next launch without touching any user data. */
-  restartOnboarding: () => void;
   /** Counts a quote toward the first-run reveal. No-op once past the threshold. */
   noteQuoteViewed: () => void;
   updateStreak: () => void;
@@ -103,8 +102,8 @@ const defaultPreferences: UserPreferences = {
   qodTime: '08:00',
   streakEnabled: true,
   streakTime: '21:00',
+  streakTrackingEnabled: true,
   hapticsEnabled: true,
-  lightMode: false,
   showAuthor: false,
 };
 
@@ -179,7 +178,6 @@ export const useAppStore = create<AppState>()(
       // Seeding the counter here is what opts a user into the staged reveal.
       completeOnboarding: () => set({ onboardingComplete: true, postOnboardingQuoteViews: 0 }),
 
-      restartOnboarding: () => set({ onboardingComplete: false }),
 
       noteQuoteViewed: () => {
         const seen = get().postOnboardingQuoteViews;
@@ -189,6 +187,10 @@ export const useAppStore = create<AppState>()(
       },
 
       updateStreak: () => {
+        // Tracking off — leave the stored streak untouched so turning it back
+        // on resumes from where it stopped rather than starting over.
+        if (get().preferences.streakTrackingEnabled === false) return;
+
         const { streak } = get();
         const today = getTodayString();
         const yesterday = getYesterdayString();

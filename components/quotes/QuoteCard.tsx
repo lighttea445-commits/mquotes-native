@@ -26,13 +26,11 @@ import { useTheme } from '../../hooks/useTheme';
 import { useRevenueCat } from '../../hooks/useRevenueCat';
 import { useFavoritesStore } from '../../store/useFavoritesStore';
 import { useHistoryStore } from '../../store/useHistoryStore';
-import { useMixStore } from '../../store/useMixStore';
 import { useAppStore, QUOTES_BEFORE_REVEAL } from '../../store/useAppStore';
 import { ApiQuote, convertApiQuote, fetchMultipleRandomQuotes, fetchQuotesByCategory, inferCategory } from '../../lib/quotesApi';
 import { useUserQuotesStore } from '../../store/useUserQuotesStore';
 import { useDeepLinkStore } from '../../store/useDeepLinkStore';
-import { useMix } from '../../hooks/useMix';
-import { CATEGORIES } from '../../constants/categories';
+import { useTopics } from '../../hooks/useTopics';
 import { useModal } from '../../contexts/ModalContext';
 import { useShareStore } from '../../store/useShareStore';
 import { PremiumModal } from '../subscriptions/PremiumModal';
@@ -62,8 +60,7 @@ export function QuoteCard() {
   const hapticsEnabled = useAppStore((s) => s.preferences.hapticsEnabled);
   const showAuthor = useAppStore((s) => s.preferences.showAuthor);
   const { isPro } = useRevenueCat();
-  const { mixActive, selectedCategories, loadQuotesForMix } = useMix();
-  const activeCategory = useMixStore((s) => s.activeCategory);
+  const { followed, loadQuotesForTopics } = useTopics();
   const mood = useAppStore((s) => s.preferences.mood);
   const { toggleFavorite, isFavorite, favorites } = useFavoritesStore();
   const { addToHistory } = useHistoryStore();
@@ -120,27 +117,13 @@ export function QuoteCard() {
   // Favorited heart — white on Minimal, gold everywhere else.
   const favoriteColor = theme.favorite ?? theme.gold;
 
-  // Collection pill label + icon
-  const activeCategoryName = activeCategory
-    ? CATEGORIES.find(c => c.id === activeCategory)?.name ?? activeCategory
-    : null;
-  const pillLabel = activeCategoryName
-    ? activeCategoryName
-    : mixActive
-      ? 'Mix'
-      : 'General';
-  const pillIcon = activeCategory
-    ? (CATEGORIES.find(c => c.id === activeCategory)?.icon ?? 'apps')
-    : mixActive
-      ? 'playlist-music'
-      : 'cards-outline';
 
   // Progress pill: favorites toward 5 (unlocks For You section)
   const progressNumerator = Math.min(favorites.length, 5);
   const progressDenominator = 5;
   const progressFraction = progressNumerator / progressDenominator;
 
-  const selectedCategoriesKey = selectedCategories.join(',');
+  const followedKey = followed.join(',');
   const pendingQuote = useDeepLinkStore((s) => s.pendingQuote);
   const clearPendingQuote = useDeepLinkStore((s) => s.clearPendingQuote);
 
@@ -212,7 +195,7 @@ export function QuoteCard() {
     }
     loadQuotes();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeCategory, mixActive, selectedCategoriesKey, mood]);
+  }, [followedKey, mood]);
 
   async function loadQuotes() {
     const gen = ++loadGenRef.current;
@@ -221,25 +204,18 @@ export function QuoteCard() {
     setFetchError(null);
     let quotes: ApiQuote[] = [];
     try {
-      if (activeCategory) {
-        quotes = await fetchQuotesByCategory(activeCategory);
-        if (quotes.length === 0) quotes = await fetchMultipleRandomQuotes(20);
-      } else if (mixActive && selectedCategories.length > 0) {
-        quotes = await loadQuotesForMix();
-      } else {
-        quotes = await fetchMultipleRandomQuotes(20);
-      }
+      quotes = await loadQuotesForTopics();
     } catch (err) {
       if (gen !== loadGenRef.current) return; // cancelled by deep-link
       if (hapticsEnabled) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      errorReporting.captureError(err, { context: 'loadQuotes', activeCategory: activeCategory ?? undefined, mixActive });
+      errorReporting.captureError(err, { context: 'loadQuotes', followed: followedKey });
       setFetchError("Couldn't load quotes. Check your connection.");
       setLoading(false);
       return;
     }
     // A deep-link arrived while we were fetching — discard these results.
     if (gen !== loadGenRef.current) return;
-    if (quotes.length === 0 && mixActive) {
+    if (quotes.length === 0 && followed.length > 0) {
       setIsEmpty(true);
       setBuffer([]);
       setCurrentIndex(0);
@@ -258,7 +234,7 @@ export function QuoteCard() {
     if (quotes[0]) {
       const c = convertApiQuote(quotes[0]);
       addToHistory({ id: c.id, text: c.text, author: c.author, category: c.category });
-      analytics.track('quote_viewed', { author: c.author, category: c.category, source: activeCategory ?? 'general' });
+      analytics.track('quote_viewed', { author: c.author, category: c.category, source: 'topics' });
     }
     setLoading(false);
   }
@@ -270,14 +246,7 @@ export function QuoteCard() {
     isFetching.current = true;
     try {
       let more: ApiQuote[];
-      if (activeCategory) {
-        more = await fetchQuotesByCategory(activeCategory);
-        if (more.length === 0) more = await fetchMultipleRandomQuotes(10);
-      } else if (mixActive && selectedCategories.length > 0) {
-        more = await loadQuotesForMix();
-      } else {
-        more = await fetchMultipleRandomQuotes(10);
-      }
+      more = await loadQuotesForTopics();
       if (more.length > 0) setBuffer(prev => [...prev, ...more]);
     } catch (err) {
       errorReporting.captureError(err, { context: 'prefetchMore' });
@@ -320,7 +289,7 @@ export function QuoteCard() {
       if (q) {
         const c = convertApiQuote(q);
         addToHistory({ id: c.id, text: c.text, author: c.author, category: c.category });
-        analytics.track('quote_viewed', { author: c.author, category: c.category, source: activeCategory ?? 'general' });
+        analytics.track('quote_viewed', { author: c.author, category: c.category, source: 'topics' });
       }
       runOnJS(animateIn)('up');
     });
@@ -347,7 +316,7 @@ export function QuoteCard() {
       id: converted.id,
       text: converted.text,
       author: converted.author,
-      category: activeCategory ?? inferCategory(converted.text, currentQuote?.tags),
+      category: inferCategory(converted.text, currentQuote?.tags),
       tags: currentQuote?.tags,
     });
     if (willFavorite) {
@@ -406,11 +375,6 @@ export function QuoteCard() {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: theme.background }]}>
         <ActivityIndicator color={theme.gold} size="large" />
-        {activeCategory && (
-          <Text style={[styles.loadingLabel, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-            Loading quotes…
-          </Text>
-        )}
       </View>
     );
   }
@@ -438,14 +402,14 @@ export function QuoteCard() {
   }
 
   if (isEmpty) {
-    const onlyFavorites = selectedCategories.every(c => c === '_favorites');
-    const onlyMyQuotes = selectedCategories.every(c => c === '_myquotes');
+    const onlyFavorites = followed.every(t => t === '_favorites');
+    const onlyMyQuotes = followed.every(t => t === '_myquotes');
     const emptyIcon = onlyFavorites ? 'heart-outline' : onlyMyQuotes ? 'pencil-outline' : 'playlist-remove';
     const emptyMessage = onlyFavorites
-      ? 'Heart some quotes to fill this mix.'
+      ? 'Heart some quotes and they will show up here.'
       : onlyMyQuotes
-      ? 'Add your own quotes to fill this mix.'
-      : 'No quotes found for the selected categories.';
+      ? 'Add your own quotes and they will show up here.'
+      : 'Nothing came back for the topics you follow.';
 
     return (
       <View style={[styles.loadingContainer, { backgroundColor: theme.background }]}>
@@ -457,11 +421,11 @@ export function QuoteCard() {
           {emptyMessage}
         </Text>
         <TouchableOpacity
-          onPress={() => modal ? modal.openSheet('mix') : router.push('/mix/create')}
+          onPress={() => modal ? modal.openSheet('topics') : router.push('/topics')}
           style={[styles.emptyBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}
         >
           <Text style={[styles.emptyBtnText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-            Edit Mix
+            Edit topics
           </Text>
         </TouchableOpacity>
       </View>
@@ -489,9 +453,9 @@ export function QuoteCard() {
           </TouchableOpacity>
           </Animated.View>
 
-          {/* Center: favorites progress nudge, or the mix-builder entry once a mix is active */}
+          {/* Center: favorites progress nudge */}
           <View style={styles.topBarCenter}>
-            {favorites.length < 5 ? (
+            {favorites.length < 5 && (
               <View style={[styles.progressPill, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                 <Icon name="heart" size={13} color={theme.gold} />
                 <Text style={[styles.progressText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
@@ -509,20 +473,7 @@ export function QuoteCard() {
                   />
                 </View>
               </View>
-            ) : mixActive ? (
-              <TouchableOpacity
-                onPress={() => {
-                  if (hapticsEnabled) Haptics.selectionAsync();
-                  modal ? modal.openSheet('mix') : router.push('/mix/create');
-                }}
-                style={[styles.collectionPill, { backgroundColor: theme.surface, borderColor: theme.border }]}
-                accessibilityLabel="Open mix builder"
-              >
-                <Text style={[styles.collectionPillText, { color: theme.gold, fontFamily: theme.uiFontFamily }]}>
-                  {pillLabel}
-                </Text>
-              </TouchableOpacity>
-            ) : null}
+            )}
           </View>
 
           {/* Right: crown icon — gold if Pro, muted if free */}
@@ -567,7 +518,7 @@ export function QuoteCard() {
               </Animated.View>
             </View>
             <View style={styles.actionRow}>
-              <TouchableOpacity onPress={() => { if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShareQuote(converted?.text ?? '', converted?.author ?? ''); modal ? modal.openSheet('share') : router.push('/share'); }} hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}>
+              <TouchableOpacity onPress={() => { if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShareQuote(converted?.id ?? '', converted?.text ?? '', converted?.author ?? ''); modal ? modal.openSheet('share') : router.push('/share'); }} hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}>
                 <Icon name="share-variant" size={32} color={theme.textMuted} />
               </TouchableOpacity>
               <TouchableOpacity onPress={handleFavorite} hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}>
@@ -586,20 +537,15 @@ export function QuoteCard() {
           style={[StyleSheet.absoluteFill, chromeStyle]}
           pointerEvents={chromeHidden ? 'none' : 'box-none'}
         >
-        {/* Left: collection pill — the current collection, tap to browse */}
+        {/* Left: browse topics — the glyph never changes, so it stays a stable
+            landmark whatever collection is active */}
         <TouchableOpacity
           onPress={() => { if (hapticsEnabled) Haptics.selectionAsync(); modal ? modal.openSheet('categories') : router.push('/categories'); }}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           style={[styles.collectionFloat, { backgroundColor: theme.surface, bottom: BTN_BOTTOM, left: BTN_BOTTOM }]}
-          accessibilityLabel={`Browse collections. Current collection: ${pillLabel}`}
+          accessibilityLabel="Browse topics"
         >
-          <Icon name={mixActive ? 'playlist-music' : pillIcon} size={18} color={theme.gold} />
-          <Text
-            style={[styles.collectionFloatText, { color: theme.text, fontFamily: theme.uiFontFamily }]}
-            numberOfLines={1}
-          >
-            {pillLabel}
-          </Text>
+          <Icon name="apps" size={22} color={theme.gold} />
         </TouchableOpacity>
 
         {/* Right: theme picker */}
@@ -791,21 +737,13 @@ const styles = StyleSheet.create({
   },
 
   // Floating corner buttons (bottom/left/right applied inline — dynamic safe-area offsets)
-  // Bottom-left collection pill — icon + current collection label
   collectionFloat: {
     position: 'absolute',
+    width: 52,
     height: 52,
     borderRadius: 26,
-    flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 18,
-    maxWidth: '58%',
-  },
-  collectionFloatText: {
-    fontSize: 15,
-    fontWeight: '500',
-    flexShrink: 1,
   },
   themesFloat: {
     position: 'absolute',

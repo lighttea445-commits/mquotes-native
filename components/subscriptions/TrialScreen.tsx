@@ -7,15 +7,19 @@ import {
   Pressable,
   Platform,
   Linking,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import Purchases, { PurchasesPackage } from 'react-native-purchases';
 import { Icon } from '../ui/Icon';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../../hooks/useTheme';
-import { useModal } from '../../contexts/ModalContext';
 import { useRevenueCat } from '../../hooks/useRevenueCat';
+import { ENTITLEMENT_PRO } from '../../lib/revenuecat';
+import { errorReporting } from '../../lib/errorReporting';
+import { analytics } from '../../lib/analytics';
 import { SheetHeader } from '../ui/SheetHeader';
 import { Toggle } from '../ui/Toggle';
 import { FONTS } from '../../constants/fonts';
@@ -29,6 +33,15 @@ const TRIAL_REMINDER_KEY = '@trial_reminder_notif_id';
  * than pointed at a made-up address.
  */
 const TERMS_URL = '';
+
+/**
+ * Advertised prices, shown only until the store's own strings arrive. The real
+ * priceString always wins once offerings load — the store can return a
+ * different currency or a regional price.
+ */
+const FALLBACK_MONTHLY = '$4.99';
+const FALLBACK_ANNUAL = '$44.99';
+
 const STEP_HEIGHT = 80;
 const ICON_SIZE = 30;
 const BAR_WIDTH = 10;
@@ -84,33 +97,38 @@ function buildSteps(): Step[] {
 }
 
 /**
- * Real price for the current offering, never a hardcoded one — the store can
- * return a different currency, a regional price, or a changed plan. Returns
- * null when offerings haven't loaded, in which case the line is omitted
- * rather than guessed.
+ * The price line under the CTA. Prefers the store's own price strings so the
+ * user sees their real currency; falls back to the advertised pair so the line
+ * is never missing while offerings are still in flight.
  */
-function priceLineFor(offerings: ReturnType<typeof useRevenueCat>['offerings']): string | null {
+function priceLineFor(offerings: ReturnType<typeof useRevenueCat>['offerings']): string {
   const packages = offerings?.current?.availablePackages;
-  if (!packages || packages.length === 0) return null;
 
-  const pkg = packages.find(p => p.packageType === 'ANNUAL') ?? packages[0];
-  const price = pkg.product?.priceString;
-  if (!price) return null;
+  const monthly = packages?.find(p => p.packageType === 'MONTHLY')?.product?.priceString;
+  const annual = packages?.find(p => p.packageType === 'ANNUAL')?.product?.priceString;
 
-  // The SDK computes the monthly equivalent in the store's own currency and
-  // formatting, which is why it isn't derived by dividing here. Not present on
-  // every product type, hence the guard.
-  const perMonth = (pkg.product as { pricePerMonthString?: string })?.pricePerMonthString;
-  if (pkg.packageType === 'ANNUAL' && perMonth) {
-    return `${perMonth}/month, billed yearly as ${price}/year`;
+  // Offerings loaded but neither plan is the standard monthly/annual pair —
+  // show whatever the first package actually is rather than mislabelling its
+  // period or quoting a price that isn't on sale.
+  if (packages?.length && !monthly && !annual) {
+    const price = packages[0].product?.priceString;
+    if (price) return price;
   }
 
-  const unit =
-    pkg.packageType === 'ANNUAL' ? '/year' :
-    pkg.packageType === 'MONTHLY' ? '/month' :
-    pkg.packageType === 'WEEKLY' ? '/week' : '';
+  return `${monthly ?? FALLBACK_MONTHLY}/month or ${annual ?? FALLBACK_ANNUAL}/year`;
+}
 
-  return `${price}${unit}`;
+/**
+ * The package the CTA buys. Annual is preferred because it is the plan the
+ * free trial is attached to; the monthly price is still disclosed in the line
+ * beneath the button.
+ */
+function trialPackageFor(
+  offerings: ReturnType<typeof useRevenueCat>['offerings'],
+): PurchasesPackage | null {
+  const packages = offerings?.current?.availablePackages;
+  if (!packages || packages.length === 0) return null;
+  return packages.find(p => p.packageType === 'ANNUAL') ?? packages[0];
 }
 
 async function ensureTrialChannel() {
@@ -129,13 +147,14 @@ interface Props {
 
 export default function TrialScreen({ onClose, onContinue }: Props) {
   const theme = useTheme();
-  const modal = useModal();
   const { offerings } = useRevenueCat();
   const [reminderEnabled, setReminderEnabled] = useState(false);
+  const [purchasing, setPurchasing] = useState(false);
   const notifIdRef = useRef<string | null>(null);
   const steps = buildSteps();
   const timelineHeight = STEP_HEIGHT * steps.length;
   const priceLine = priceLineFor(offerings);
+  const trialPackage = trialPackageFor(offerings);
 
   // Restore persisted notification ID on mount
   useEffect(() => {
@@ -188,11 +207,49 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
     }
   };
 
-  const handleContinue = () => {
-    if (onContinue) {
-      onContinue();
-    } else {
-      modal?.openPaywall();
+  const done = () => (onContinue ? onContinue() : onClose?.());
+
+  /**
+   * Buys straight through the store's own billing sheet — there is no second
+   * paywall in between. A cancelled purchase leaves the user on this screen
+   * rather than dismissing it, so the CTA is still there to retry.
+   */
+  const handleContinue = async () => {
+    if (purchasing) return;
+    setPurchasing(true);
+
+    try {
+      // Offerings can still be in flight when the sheet opens. Fetch on demand
+      // rather than dropping the tap, so the button always reaches the store's
+      // billing sheet.
+      let pkg = trialPackage;
+      if (!pkg) {
+        try {
+          pkg = trialPackageFor(await Purchases.getOfferings());
+        } catch {
+          pkg = null;
+        }
+      }
+
+      // Offerings never arrived, so there is nothing to buy. Don't strand the
+      // user on a dead button — especially mid-onboarding.
+      if (!pkg) { done(); return; }
+
+      const { customerInfo } = await Purchases.purchasePackage(pkg);
+      if (customerInfo.entitlements.active[ENTITLEMENT_PRO]) {
+        analytics.track('subscription_purchased', {
+          packageId: pkg.identifier,
+          productId: pkg.product.identifier,
+        });
+        done();
+      }
+    } catch (e) {
+      const err = e as { userCancelled?: boolean };
+      if (!err?.userCancelled) {
+        errorReporting.captureError(e as Error, { context: 'TrialScreen:purchase' });
+      }
+    } finally {
+      setPurchasing(false);
     }
   };
 
@@ -304,21 +361,25 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
 
           <Pressable
             onPress={handleContinue}
-            style={[styles.ctaButton, { backgroundColor: theme.goldButton }]}
+            disabled={purchasing}
+            style={[styles.ctaButton, { backgroundColor: theme.goldButton, opacity: purchasing ? 0.7 : 1 }]}
             accessibilityRole="button"
+            accessibilityState={{ disabled: purchasing }}
           >
-            <Text style={[styles.ctaText, { color: ON_GOLD }]}>
-              Try for $0.00
-            </Text>
+            {purchasing ? (
+              <ActivityIndicator color={ON_GOLD} />
+            ) : (
+              <Text style={[styles.ctaText, { color: ON_GOLD }]}>
+                Try for $0.00
+              </Text>
+            )}
           </Pressable>
 
-          {/* Omitted entirely when offerings haven't loaded — a price shown
-              here must be the store's real one. */}
-          {priceLine && (
-            <Text style={[styles.priceLine, { color: theme.textMuted, fontFamily: theme.bodyFontFamily }]}>
-              {priceLine}
-            </Text>
-          )}
+          {/* What the trial converts to, disclosed on the same screen as the
+              CTA. Reads the store's real price once offerings land. */}
+          <Text style={[styles.priceLine, { color: theme.textMuted, fontFamily: theme.bodyFontFamily }]}>
+            {priceLine}
+          </Text>
 
           {TERMS_URL ? (
             <Pressable onPress={() => Linking.openURL(TERMS_URL)} hitSlop={8} style={styles.footerItem}>

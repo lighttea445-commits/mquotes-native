@@ -1,19 +1,22 @@
 import { create } from 'zustand';
 
 interface ShareState {
+  /** Quote id — needed so collections can dedupe and show what's already saved. */
+  quoteId: string;
   quote: string;
   author: string;
   watermarkRemoved: boolean;
-  setQuote: (quote: string, author: string) => void;
+  setQuote: (quoteId: string, quote: string, author: string) => void;
   setWatermarkRemoved: (v: boolean) => void;
   reset: () => void;
 }
 
 export const useShareStore = create<ShareState>((set) => ({
+  quoteId: '',
   quote: '',
   author: '',
   watermarkRemoved: false,
-  setQuote: (quote, author) => set({ quote, author }),
+  setQuote: (quoteId, quote, author) => set({ quoteId, quote, author }),
   setWatermarkRemoved: (v) => set({ watermarkRemoved: v }),
-  reset: () => set({ quote: '', author: '', watermarkRemoved: false }),
+  reset: () => set({ quoteId: '', quote: '', author: '', watermarkRemoved: false }),
 }));

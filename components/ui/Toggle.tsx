@@ -8,6 +8,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useTheme } from '../../hooks/useTheme';
+import { ON_GOLD } from './tokens';
 
 const TRACK_W = 50;
 const TRACK_H = 30;
@@ -48,10 +49,10 @@ export function Toggle({ value, onValueChange, disabled, accessibilityLabel, sty
 
   const knobStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: progress.value * TRAVEL }],
+    // The knob has to invert against the track: light on the dark "off" track,
+    // dark on the light gold "on" track. A single colour disappears at one end.
+    backgroundColor: interpolateColor(progress.value, [0, 1], [theme.text, ON_GOLD]),
   }));
-
-  // Off-white from the theme, never #FFFFFF — see CLAUDE.md.
-  const knobColor = { backgroundColor: theme.text };
 
   return (
     <Pressable
@@ -64,7 +65,7 @@ export function Toggle({ value, onValueChange, disabled, accessibilityLabel, sty
       style={[{ opacity: disabled ? 0.5 : 1 }, style]}
     >
       <Animated.View style={[styles.track, trackStyle]}>
-        <Animated.View style={[styles.knob, knobColor, knobStyle]} />
+        <Animated.View style={[styles.knob, knobStyle]} />
       </Animated.View>
     </Pressable>
   );

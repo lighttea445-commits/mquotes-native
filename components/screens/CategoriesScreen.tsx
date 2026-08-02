@@ -9,162 +9,112 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Icon } from '../ui/Icon';
+import * as Haptics from 'expo-haptics';
+import { Icon, IconName } from '../ui/Icon';
+import { SheetHeader } from '../ui/SheetHeader';
+import { GUTTER, SPACE, RADIUS, ON_GOLD } from '../ui/tokens';
 import { useTheme } from '../../hooks/useTheme';
 import { useRevenueCat } from '../../hooks/useRevenueCat';
-import { useMixStore } from '../../store/useMixStore';
-import { useFavoritesStore } from '../../store/useFavoritesStore';
-import { useUserQuotesStore } from '../../store/useUserQuotesStore';
-import { CATEGORIES, Category } from '../../constants/categories';
+import { useTopicsStore } from '../../store/useTopicsStore';
+import { useAppStore } from '../../store/useAppStore';
+import {
+  CATEGORIES,
+  Category,
+  TOPIC_GROUP_ORDER,
+  TOPIC_GROUP_TITLES,
+  isTopicFree,
+} from '../../constants/categories';
 import { useModal } from '../../contexts/ModalContext';
 import { analytics } from '../../lib/analytics';
 import { FONTS } from '../../constants/fonts';
+import { Crystals } from '../art/Crystals';
 
-const GOLD_ICON_BG = 'rgba(184,151,90,0.12)';
-
-// ─── Special 2×2 tile ────────────────────────────────────────────────────────
-
-function SpecialTile({
-  label,
-  subtitle,
-  icon,
-  onPress,
-  isActive,
-  theme,
-  tileSize,
-}: {
-  label: string;
-  subtitle?: string;
-  icon: string;
-  onPress: () => void;
-  isActive?: boolean;
-  theme: ReturnType<typeof useTheme>;
-  tileSize: number;
-}) {
-  return (
-    <TouchableOpacity
-      style={[
-        styles.tile,
-        {
-          backgroundColor: theme.surface,
-          borderColor: isActive ? theme.gold : theme.border,
-          borderWidth: isActive ? 1.5 : 1,
-          width: tileSize,
-        },
-      ]}
-      onPress={onPress}
-      activeOpacity={0.75}
-    >
-      <View style={styles.tileContent}>
-        <Text style={[styles.tileLabel, { color: theme.text, fontFamily: FONTS.ui.medium }]}>
-          {label}
-        </Text>
-        {subtitle !== undefined && (
-          <Text style={[styles.tileSubtitle, { color: theme.textMuted }]}>{subtitle}</Text>
-        )}
-      </View>
-      <Icon
-        name={icon as any}
-        size={20}
-        color={theme.gold}
-        style={styles.tileIcon}
-      />
-    </TouchableOpacity>
-  );
-}
-
-// ─── Category pill row ────────────────────────────────────────────────────────
-
-function CategoryPillRow({
-  id,
-  name,
-  icon,
-  onPress,
-  isActive,
-  locked,
-  theme,
-}: {
-  id: string;
-  name: string;
-  icon: string;
-  onPress: () => void;
-  isActive: boolean;
-  locked?: boolean;
-  theme: ReturnType<typeof useTheme>;
-}) {
-  return (
-    <TouchableOpacity
-      style={[
-        styles.pillRow,
-        {
-          backgroundColor: theme.surface,
-          borderColor: isActive ? theme.gold : 'transparent',
-          borderWidth: isActive ? 1.5 : 0,
-          opacity: locked ? 0.6 : 1,
-        },
-      ]}
-      onPress={onPress}
-      activeOpacity={0.7}
-    >
-      <View style={[styles.iconSquare, { backgroundColor: GOLD_ICON_BG }]}>
-        <Icon name={icon as any} size={18} color={theme.gold} />
-      </View>
-      <Text style={[styles.pillLabel, { color: theme.text, fontFamily: FONTS.ui.medium }]}>
-        {name}
-      </Text>
-      {locked
-        ? <Icon name="lock-outline" size={16} color="#B8975A" />
-        : <Icon name="chevron-right" size={18} color={theme.textMuted} />
-      }
-    </TouchableOpacity>
-  );
-}
-
-// ─── Main screen ──────────────────────────────────────────────────────────────
-
-const EXPLORE = CATEGORIES;
+const GAP = 12;
 
 export default function CategoriesScreen({ onClose }: { onClose?: () => void }) {
   const { width } = useWindowDimensions();
-  const TILE_SIZE = (width - 48) / 2;
+  const TILE_W = (width - GUTTER * 2 - GAP) / 2;
   const theme = useTheme();
   const router = useRouter();
   const modal = useModal();
   const { isPro } = useRevenueCat();
-  const { activeCategory, setActiveCategory } = useMixStore();
-  const favorites = useFavoritesStore((s) => s.favorites);
-  const forYouCategoryIds = useFavoritesStore((s) => s.forYouCategoryIds);
-  const userQuotes = useUserQuotesStore((s) => s.userQuotes);
+  const followed = useTopicsStore((s) => s.followed);
+  const toggleTopic = useTopicsStore((s) => s.toggleTopic);
+  const hapticsEnabled = useAppStore((s) => s.preferences.hapticsEnabled);
 
-  // Stable For You list — computed in the store and recomputed only at tier milestones
-  const forYouCategories = useMemo(
-    () => forYouCategoryIds.map(id => CATEGORIES.find(c => c.id === id)).filter(Boolean) as Category[],
-    [forYouCategoryIds],
+  const groups = useMemo(
+    () => TOPIC_GROUP_ORDER.map(group => ({
+      group,
+      title: TOPIC_GROUP_TITLES[group],
+      items: CATEGORIES.filter(c => c.group === group),
+    })).filter(g => g.items.length > 0),
+    [],
   );
 
   const close = onClose ?? (() => router.back());
-  const openPaywall = () => modal ? modal.openSheet('trial') : router.push('/subscriptions');
+  const go = (sheet: Parameters<NonNullable<typeof modal>['openSheet']>[0], route: string) =>
+    modal ? modal.openSheet(sheet) : router.push(route as never);
+  const openPaywall = () => go('trial', '/subscriptions');
 
-  const openMyQuotes = () => {
+  const gatedOpen = (fn: () => void) => () => {
     if (!isPro) { openPaywall(); return; }
-    modal ? modal.openSheet('myquotes') : router.push('/my-quotes');
+    fn();
   };
 
-  const selectCategory = (id: string | null) => {
-    setActiveCategory(id);
-    analytics.track(id ? 'category_selected' : 'category_cleared', id ? { categoryId: id } : undefined);
-    close();
-  };
+  const quickAccess: { label: string; icon: IconName; onPress: () => void }[] = [
+    { label: 'Favorites', icon: 'heart-outline',  onPress: () => go('favorites', '/favorites') },
+    { label: 'Collections', icon: 'bookmark-outline', onPress: () => go('collections', '/collections') },
+    { label: 'My quotes', icon: 'feather',        onPress: gatedOpen(() => go('myquotes', '/my-quotes')) },
+    { label: 'History',   icon: 'history',        onPress: gatedOpen(() => go('history', '/history')) },
+  ];
 
-  // For You = free
-  const selectForYouCategory = (id: string) => {
-    selectCategory(id);
-  };
-
-  // Explore (All Categories) = Premium only
-  const selectExploreCategory = (id: string) => {
-    if (!isPro) { openPaywall(); return; }
-    selectCategory(id);
+  /** Tapping a tile follows or unfollows — the feed is the union of everything followed. */
+  const renderTile = (cat: Category) => {
+    const locked = !isPro && !isTopicFree(cat.id);
+    const following = followed.includes(cat.id);
+    return (
+      <TouchableOpacity
+        key={cat.id}
+        style={[
+          styles.tile,
+          {
+            width: TILE_W,
+            backgroundColor: theme.surface,
+            borderColor: following ? theme.gold : 'transparent',
+            borderWidth: following ? 1.5 : 0,
+          },
+        ]}
+        onPress={() => {
+          if (locked) { openPaywall(); return; }
+          if (hapticsEnabled) Haptics.selectionAsync();
+          analytics.track(following ? 'topic_unfollowed' : 'topic_followed', { topicId: cat.id });
+          toggleTopic(cat.id);
+        }}
+        activeOpacity={0.8}
+        accessibilityRole="button"
+        accessibilityLabel={
+          `${cat.name}${following ? ', following' : ''}${locked ? ', locked, requires Premium' : ''}`
+        }
+      >
+        {following && (
+          <View style={[styles.badge, { backgroundColor: theme.gold }]}>
+            <Icon name="check" size={13} color={ON_GOLD} />
+          </View>
+        )}
+        <View style={styles.tileArt} pointerEvents="none">
+          <Icon name={cat.icon} size={Math.round(TILE_W * 0.42)} color={theme.text} />
+        </View>
+        <View style={styles.tileFooter}>
+          <Text
+            style={[styles.tileLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}
+            numberOfLines={2}
+          >
+            {cat.name}
+          </Text>
+          {locked && <Icon name="lock-outline" size={16} color={theme.textMuted} />}
+        </View>
+      </TouchableOpacity>
+    );
   };
 
   return (
@@ -177,87 +127,65 @@ export default function CategoriesScreen({ onClose }: { onClose?: () => void }) 
       )}
 
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={close} style={[styles.closeBtn, { backgroundColor: theme.surface }]}>
-            <Icon name="close" size={20} color={theme.textMuted} />
-          </TouchableOpacity>
-        </View>
+        <SheetHeader
+          title="Explore topics"
+          leading="close"
+          onLeadingPress={close}
+          actionLabel="Edit"
+          onActionPress={() => go('topics', '/topics')}
+        />
 
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
-        >
-          {/* Page title */}
-          <Text style={[styles.pageTitle, { color: theme.text }]}>Explore</Text>
-
-          {/* Special tiles — My own quotes + My favorites */}
-          <View style={styles.tilesRow}>
-            <SpecialTile
-              label="My own quotes"
-              subtitle={`${userQuotes.length} quotes`}
-              icon={isPro ? 'pencil-outline' : 'lock-outline'}
-              onPress={openMyQuotes}
-              theme={theme}
-              tileSize={TILE_SIZE}
-            />
-            <SpecialTile
-              label="My favorites"
-              subtitle={`${favorites.length} saved`}
-              icon="heart-outline"
-              onPress={() => modal ? modal.openSheet('favorites') : router.push('/favorites')}
-              isActive={activeCategory === '_favorites'}
-              theme={theme}
-              tileSize={TILE_SIZE}
-            />
-          </View>
-
-          {/* For You — free, personalised as favorites grow */}
-          <View style={{ height: 28 }} />
-          <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: theme.text, marginBottom: 0 }]}>For You</Text>
-          </View>
-          <View style={styles.pillList}>
-            {forYouCategories.map(cat => (
-              <CategoryPillRow
-                key={cat.id}
-                id={cat.id}
-                name={cat.name}
-                icon={cat.icon}
-                onPress={() => selectForYouCategory(cat.id)}
-                isActive={activeCategory === cat.id}
-                theme={theme}
-              />
-            ))}
-          </View>
-
-          {/* Explore — Premium only */}
-          <View style={{ height: 28 }} />
-          <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: theme.text, marginBottom: 0 }]}>All Categories</Text>
-            {!isPro && (
-              <View style={[styles.proBadge, { backgroundColor: 'rgba(184,151,90,0.12)' }]}>
-                <Icon name="crown" size={11} color="#B8975A" />
-                <Text style={[styles.proBadgeText, { color: '#B8975A', fontFamily: FONTS.ui.bold }]}>Premium</Text>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+          {/* Upsell banner — the one light surface on the screen */}
+          {!isPro && (
+            <TouchableOpacity
+              style={[styles.banner, { backgroundColor: theme.goldButton }]}
+              onPress={openPaywall}
+              activeOpacity={0.9}
+              accessibilityRole="button"
+              accessibilityLabel="Unlock everything. Access every topic, theme and your full history."
+            >
+              <View style={styles.bannerText}>
+                <Text style={[styles.bannerTitle, { color: ON_GOLD }]}>Unlock everything</Text>
+                <Text style={[styles.bannerSubtitle, { color: ON_GOLD }]}>
+                  Access every topic, every theme, and your full quote history.
+                </Text>
               </View>
-            )}
-          </View>
-          <View style={styles.pillList}>
-            {EXPLORE.map(cat => (
-              <CategoryPillRow
-                key={cat.id}
-                id={cat.id}
-                name={cat.name}
-                icon={cat.icon}
-                onPress={() => selectExploreCategory(cat.id)}
-                isActive={activeCategory === cat.id}
-                locked={!isPro}
-                theme={theme}
-              />
+              <View style={styles.bannerArt} pointerEvents="none">
+                <Crystals size={150} color={ON_GOLD} />
+              </View>
+            </TouchableOpacity>
+          )}
+
+          {/* Quick access — glyph first, matching the reference */}
+          <View style={styles.grid}>
+            {quickAccess.map(({ label, icon, onPress }) => (
+              <TouchableOpacity
+                key={label}
+                style={[styles.quickRow, { width: TILE_W, backgroundColor: theme.surface }]}
+                onPress={onPress}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+              >
+                <Icon name={icon} size={24} color={theme.text} />
+                <Text
+                  style={[styles.quickLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}
+                  numberOfLines={2}
+                >
+                  {label}
+                </Text>
+              </TouchableOpacity>
             ))}
           </View>
 
-          <View style={{ height: 40 }} />
+          {groups.map(({ group, title, items }) => (
+            <React.Fragment key={group}>
+              <Text style={[styles.sectionTitle, { color: theme.text }]}>{title}</Text>
+              <View style={styles.grid}>
+                {items.map(renderTile)}
+              </View>
+            </React.Fragment>
+          ))}
         </ScrollView>
       </SafeAreaView>
     </View>
@@ -277,100 +205,107 @@ const styles = StyleSheet.create({
     height: 4,
     borderRadius: 2,
   },
-  header: {
+  scroll: {
+    paddingHorizontal: GUTTER,
+    paddingBottom: 40,
+    gap: SPACE.lg,
+  },
+
+  // ── Upsell banner ────────────────────────────────────────────────────────
+  banner: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 4,
+    borderRadius: RADIUS.tile,
+    paddingVertical: SPACE.xl,
+    paddingLeft: SPACE.xl,
+    paddingRight: SPACE.lg,
+    overflow: 'hidden',
   },
-  closeBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  scrollContent: {
-    paddingHorizontal: 16,
-    paddingTop: 4,
-  },
-  pageTitle: {
-    fontSize: 32,
-    fontFamily: FONTS.display.bold,
-    marginTop: 16,
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  tilesRow: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  tile: {
+  bannerText: {
     flex: 1,
-    borderRadius: 20,
-    padding: 16,
-    minHeight: 90,
-    justifyContent: 'space-between',
+    gap: SPACE.xs,
+    zIndex: 1,
   },
-  tileContent: {
-    flex: 1,
-  },
-  tileLabel: {
-    fontSize: 15,
-    fontWeight: '500',
-    marginBottom: 4,
-  },
-  tileSubtitle: {
-    fontSize: 12, fontFamily: FONTS.ui.regular
-  },
-  tileIcon: {
-    alignSelf: 'flex-end',
-    marginTop: 8,
-  },
-  pillRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 14,
-    height: 56,
-    paddingHorizontal: 16,
-    gap: 12,
-  },
-  iconSquare: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  pillLabel: {
-    flex: 1,
-    fontSize: 15,
-  },
-  sectionTitle: {
+  bannerTitle: {
     fontSize: 22,
     fontFamily: FONTS.display.bold,
-    marginBottom: 12,
+    lineHeight: 28,
+    includeFontPadding: false,
   },
-  sectionHeader: {
+  bannerSubtitle: {
+    fontSize: 13,
+    lineHeight: 18,
+    opacity: 0.75,
+  },
+  // Deliberately overflows the banner's right edge so the cluster is cropped,
+  // the way the reference art bleeds off the card.
+  bannerArt: {
+    position: 'absolute',
+    right: -22,
+    top: -12,
+  },
+
+  // ── Sections ─────────────────────────────────────────────────────────────
+  sectionTitle: {
+    fontSize: 24,
+    fontFamily: FONTS.display.bold,
+    lineHeight: 30,
+    includeFontPadding: false,
+    marginTop: SPACE.sm,
+    marginBottom: -SPACE.xs,
+  },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: GAP,
+  },
+
+  // ── Quick access rows ────────────────────────────────────────────────────
+  quickRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 12,
+    minHeight: 64,
+    borderRadius: RADIUS.card,
+    paddingHorizontal: SPACE.lg,
+    paddingVertical: SPACE.md,
+    gap: SPACE.md,
   },
-  proBadge: {
+  quickLabel: {
+    flex: 1,
+    fontSize: 15,
+  },
+
+  // ── Topic tiles ──────────────────────────────────────────────────────────
+  badge: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    zIndex: 1,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tile: {
+    aspectRatio: 1,
+    borderRadius: RADIUS.tile,
+    padding: SPACE.lg,
+    justifyContent: 'flex-end',
+  },
+  tileArt: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    bottom: 34,
+  },
+  tileFooter: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
+    gap: SPACE.sm,
   },
-  proBadgeText: {
-    fontSize: 11,
-    letterSpacing: 0.3,
-  },
-  pillList: {
-    gap: 8,
+  tileLabel: {
+    flex: 1,
+    fontSize: 15,
   },
 });

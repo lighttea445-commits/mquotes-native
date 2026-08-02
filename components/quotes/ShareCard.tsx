@@ -17,8 +17,12 @@ export const ShareCard = forwardRef<View, Props>(({ quote, author, theme, size, 
   const quoteFontSize = Math.max(16, Math.min(28, W * 0.072));
   const quoteLineHeight = quoteFontSize * 1.6;
   const padding = Math.round(W * 0.1);
-  const brandFontSize = Math.round(W * 0.044);
-  const brandBoxHeight = Math.round(W * 0.11);
+  const brandFontSize = Math.round(W * 0.042);
+  const brandBoxHeight = Math.round(W * 0.1);
+
+  // Matches StreakShareCard: on an image theme the art sits under a scrim so
+  // the mark keys off white; on a flat theme it uses the theme's own off-white.
+  const accent = theme.backgroundImage ? '#E8E0D0' : theme.text;
 
   return (
     <View ref={ref} style={{ width: W, height: H, overflow: 'hidden', borderRadius: 0 }}>
@@ -41,11 +45,8 @@ export const ShareCard = forwardRef<View, Props>(({ quote, author, theme, size, 
         style={{
           flex: 1,
           paddingHorizontal: padding,
-          // When watermark is shown, push text up so it never overlaps the brand bar.
-          // brandBoxHeight + bottom offset + a small gap = padding * 0.75 + brandBoxHeight + padding * 0.4
-          paddingBottom: showWatermark
-            ? Math.round(padding * 0.75 + brandBoxHeight + padding * 0.4)
-            : padding,
+          // Keeps the quote clear of the watermark pill below it.
+          paddingBottom: showWatermark ? padding * 2 + brandBoxHeight : padding,
           paddingTop: padding,
           justifyContent: 'center',
           alignItems: 'center',
@@ -65,43 +66,38 @@ export const ShareCard = forwardRef<View, Props>(({ quote, author, theme, size, 
         </Text>
       </View>
 
-      {/* Quotable branding — bottom bar */}
+      {/* Watermark — a compact centred pill, matching StreakShareCard */}
       {showWatermark && (
         <View
           style={{
             position: 'absolute',
-            bottom: padding * 0.75,
-            left: padding,
-            right: padding,
+            bottom: padding,
+            alignSelf: 'center',
             height: brandBoxHeight,
-            borderRadius: 10,
-            backgroundColor: 'rgba(255,255,255,0.13)',
-            borderWidth: 1,
-            borderColor: 'rgba(255,255,255,0.18)',
+            borderRadius: brandBoxHeight / 2,
+            backgroundColor: 'rgba(0,0,0,0.28)',
             flexDirection: 'row',
             alignItems: 'center',
-            justifyContent: 'center',
-            gap: Math.round(W * 0.025),
-            paddingHorizontal: Math.round(W * 0.04),
+            gap: Math.round(W * 0.022),
+            paddingLeft: Math.round(W * 0.022),
+            paddingRight: Math.round(W * 0.045),
           }}
         >
           <Image
             source={require('../../assets/icon.png')}
             style={{
-              width: Math.round(brandBoxHeight * 0.54),
-              height: Math.round(brandBoxHeight * 0.54),
-              borderRadius: 4,
+              width: Math.round(brandBoxHeight * 0.72),
+              height: Math.round(brandBoxHeight * 0.72),
+              borderRadius: Math.round(brandBoxHeight * 0.2),
             }}
             resizeMode="cover"
           />
           <Text
             style={{
-              color: 'rgba(255,255,255,0.9)',
+              color: accent,
               fontFamily: theme.uiFontFamily,
               fontSize: brandFontSize,
-              fontWeight: '600',
-              letterSpacing: 1.4,
-              textTransform: 'uppercase',
+              letterSpacing: 0.4,
             }}
           >
             Quotable

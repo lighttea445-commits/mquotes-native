@@ -7,7 +7,6 @@ import { ThemeBackground } from '../components/layout/ThemeBackground';
 import { QuoteCard } from '../components/quotes/QuoteCard';
 import { BottomSheet } from '../components/layout/BottomSheet';
 import { StreakBanner } from '../components/layout/StreakBanner';
-import { PaywallSheet } from '../components/subscriptions/PaywallSheet';
 import { useStreak } from '../hooks/useStreak';
 import { useTheme } from '../hooks/useTheme';
 import { ModalProvider, useModal } from '../contexts/ModalContext';
@@ -15,7 +14,8 @@ import { useDeepLinkStore } from '../store/useDeepLinkStore';
 import type { WidgetInstanceConfig } from '../store/useWidgetStore';
 import CategoriesScreen from '../components/screens/CategoriesScreen';
 import ThemesScreen from '../components/screens/ThemesScreen';
-import CreateMixScreen from '../components/screens/CreateMixScreen';
+import TopicsScreen from '../components/screens/TopicsScreen';
+import CollectionsScreen from '../components/screens/CollectionsScreen';
 import ProfileScreen from '../components/screens/ProfileScreen';
 import MyQuotesScreen from '../components/screens/MyQuotesScreen';
 import HistoryScreen from '../components/screens/HistoryScreen';
@@ -24,11 +24,12 @@ import WidgetsScreen from '../components/screens/WidgetsScreen';
 import FavoritesScreen from '../components/screens/FavoritesScreen';
 import TrialScreen from '../components/subscriptions/TrialScreen';
 import SettingsScreen from '../components/screens/SettingsScreen';
+import StreakScreen from '../components/screens/StreakScreen';
 import ShareScreen from '../components/screens/ShareScreen';
 
 function HomeScreenInner() {
   const theme = useTheme();
-  const { activeSheet, previousSheet, paywallVisible, goBack, closeSheet, closePaywall } = useModal()!;
+  const { activeSheet, previousSheet, goBack, closeSheet } = useModal()!;
   // True when switching between sheets (not a fresh open/close) — used to skip animations
   const isSwitching = previousSheet !== null;
   const { streakCount, weekData, showStreakBanner, dismissStreakBanner } = useStreak();
@@ -119,10 +120,10 @@ function HomeScreenInner() {
         <ThemesScreen onClose={closeSheet} />
       </BottomSheet>
 
-      {/* Mix builder sheet */}
-      <BottomSheet visible={activeSheet === 'mix'} onClose={closeSheet} backgroundColor={theme.background}
-        instantClose={previousSheet === 'mix'} instantOpen={isSwitching}>
-        <CreateMixScreen onClose={closeSheet} />
+      {/* Topics you follow — the feed is the union of everything followed */}
+      <BottomSheet visible={activeSheet === 'topics'} onClose={closeSheet} backgroundColor={theme.background}
+        instantClose={previousSheet === 'topics'} instantOpen={isSwitching}>
+        <TopicsScreen onClose={closeSheet} onBack={goBack} />
       </BottomSheet>
 
       {/* Profile sheet */}
@@ -173,20 +174,26 @@ function HomeScreenInner() {
         <ShareScreen onClose={closeSheet} />
       </BottomSheet>
 
-      {/* Paywall step 1 — "How your free trial works". Its CTA raises the
-          RevenueCat paywall (step 2). Every gated action in the app opens
-          this sheet. */}
+      {/* Collections sheet */}
+      <BottomSheet visible={activeSheet === 'collections'} onClose={closeSheet} backgroundColor={theme.background}
+        instantClose={previousSheet === 'collections'} instantOpen={isSwitching}>
+        <CollectionsScreen onClose={closeSheet} onBack={goBack} />
+      </BottomSheet>
+
+      {/* Streak settings sheet */}
+      <BottomSheet visible={activeSheet === 'streak'} onClose={closeSheet} backgroundColor={theme.background}
+        instantClose={previousSheet === 'streak'} instantOpen={isSwitching}>
+        <StreakScreen onClose={closeSheet} onBack={goBack} />
+      </BottomSheet>
+
+      {/* "How your free trial works" — the only paywall. Its CTA buys through
+          the store's own billing sheet; there is no RevenueCat paywall behind
+          it. Every gated action in the app opens this sheet. */}
       <BottomSheet visible={activeSheet === 'trial'} onClose={closeSheet} backgroundColor={theme.background}
         instantClose={previousSheet === 'trial'} instantOpen={isSwitching}>
         <TrialScreen onClose={closeSheet} />
       </BottomSheet>
 
-      {/* Paywall — rendered last so it appears above all sheets.
-          Mounted only when visible so the native RevenueCatUI.Paywall view
-          isn't constructed on every home-screen render. (Note: QuoteCard also
-          calls useRevenueCat() for isPro gating, so the SDK still configures
-          at launch — this only avoids the native paywall view.) */}
-      {paywallVisible && <PaywallSheet visible onClose={closePaywall} />}
     </ThemeBackground>
   );
 }

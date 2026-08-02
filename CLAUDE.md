@@ -53,11 +53,9 @@ All modals open as inline `BottomSheet` components managed by `ModalContext` in 
 
 The type system lives in `constants/fonts.ts` and nothing outside it may name a font directly. Three roles, each surfaced on the theme:
 
-| Role | Token | Face | Used for |
-|---|---|---|---|
-| display | `theme.quoteFontFamily` | Peachi | quotes, screen titles, headings, the wordmark |
-| ui | `theme.uiFontFamily` | Averta (falls back to Inter until `AVERTA_READY`) | buttons, labels, controls |
-| body | `theme.bodyFontFamily` | Inter | body and legal copy |
+- **display** — `theme.quoteFontFamily`, Peachi. Quotes, screen titles, headings, the wordmark.
+- **ui** — `theme.uiFontFamily`, Averta (falls back to Inter until `AVERTA_READY`). Buttons, labels, controls.
+- **body** — `theme.bodyFontFamily`, Inter. Body and legal copy.
 
 **`fontWeight` does nothing on these faces.** React Native applies no synthetic bolding to custom families, so `fontWeight: '700'` on Peachi or Inter is silently ignored. A weight change means naming a different family:
 
@@ -98,6 +96,8 @@ Peachi carries heavy ascent/descent — for display text set an explicit `lineHe
 
 - Draft written content (docs, copy, md files) for approval before creating the file
 - No emoji in responses or files
+- **Never write `---`** — no horizontal rules, no section dividers, no markdown tables (their separator row is `---`). Use a heading or a blank line to break sections, and a bullet list instead of a table
+- **No dashes in user-facing copy** — no em dashes, en dashes or ` - ` in any string the user reads (screen text, empty states, button labels, accessibility labels). Use a colon, a comma, or two sentences. Dashes in code comments are fine
 - Short and direct — no preamble, summaries, or filler
 - Don't restate what was just said, just act
 

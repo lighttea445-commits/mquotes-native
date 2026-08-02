@@ -1,78 +1,77 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
+  Platform,
+  useWindowDimensions,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Icon } from '../ui/Icon';
+import { Icon, IconName } from '../ui/Icon';
+import { SheetHeader } from '../ui/SheetHeader';
+import { GUTTER, SPACE, RADIUS, ON_GOLD } from '../ui/tokens';
 import { useTheme } from '../../hooks/useTheme';
-import { useAppStore } from '../../store/useAppStore';
 import { useStreak } from '../../hooks/useStreak';
-import { useFavoritesStore } from '../../store/useFavoritesStore';
-import { useHistoryStore } from '../../store/useHistoryStore';
+import { useAppStore } from '../../store/useAppStore';
 import { StreakCard } from '../ui/StreakCard';
 import { StreakShareSheet } from '../streak/StreakShareSheet';
 import { useRevenueCat } from '../../hooks/useRevenueCat';
 import { useModal } from '../../contexts/ModalContext';
+import { FONTS } from '../../constants/fonts';
+import { Crystals } from '../art/Crystals';
+import { Cards } from '../art/Cards';
+import { PhoneStack } from '../art/PhoneStack';
+import { Bell } from '../art/Bell';
+import { WidgetPhone } from '../art/WidgetPhone';
 
-function StatCard({
-  label,
-  value,
-  theme,
-  onPress,
-}: {
-  label: string;
-  value: string | number;
-  theme: ReturnType<typeof useTheme>;
-  onPress?: () => void;
-}) {
-  const content = (
-    <>
-      <Text style={[styles.statValue, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>{value}</Text>
-      <Text style={[styles.statLabel, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>{label}</Text>
-    </>
-  );
-  if (onPress) {
-    return (
-      <TouchableOpacity
-        style={[styles.statCard, { backgroundColor: theme.surface, borderColor: theme.border }]}
-        onPress={onPress}
-        activeOpacity={0.75}
-      >
-        {content}
-      </TouchableOpacity>
-    );
-  }
-  return (
-    <View style={[styles.statCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-      {content}
-    </View>
-  );
-}
+const GAP = 12;
+
+type ArtComponent = React.ComponentType<{ size?: number; color: string }>;
 
 export default function ProfileScreen({ onClose }: { onClose?: () => void }) {
   const theme = useTheme();
   const router = useRouter();
-  const { preferences } = useAppStore();
+  const { width } = useWindowDimensions();
   const { streakCount, weekData } = useStreak();
-  const favorites = useFavoritesStore((s) => s.favorites);
-  const totalQuotesRead = useHistoryStore((s) => s.totalQuotesRead);
+  const trackingEnabled = useAppStore(s => s.preferences.streakTrackingEnabled ?? true);
   const { isPro } = useRevenueCat();
   const modal = useModal();
   const close = onClose ?? (() => router.back());
   const [showStreakShare, setShowStreakShare] = useState(false);
 
-  const openSettings = () => modal ? modal.openSheet('settings') : router.push('/settings');
+  const TILE_W = (width - GUTTER * 2 - GAP) / 2;
 
-  const handleFavorites = () => {
-    modal ? modal.openSheet('favorites') : router.push('/favorites');
-  };
+  const go = (sheet: Parameters<NonNullable<typeof modal>['openSheet']>[0], route: string) =>
+    modal ? modal.openSheet(sheet) : router.push(route as never);
+
+  const openUpsell = () => go('trial', '/subscriptions');
 
   const handleHistory = () => {
-    if (isPro) {
-      modal ? modal.openSheet('history') : router.push('/history');
-    } else {
-      modal ? modal.openSheet('trial') : router.push('/history');
-    }
+    if (isPro) go('history', '/history');
+    else openUpsell();
   };
+
+  /** Tiles mirror what the app can actually customise — no dead entries. */
+  const tiles: { label: string; art: ArtComponent; onPress: () => void; wide?: boolean }[] = [
+    { label: 'Topics you follow', art: Cards,       onPress: () => go('topics', '/topics') },
+    { label: 'Themes',            art: PhoneStack,  onPress: () => go('themes', '/themes') },
+    // Android only. iOS widgets are configured entirely in Apple's Edit Widget
+    // panel, so the in-app screen has nothing left to own.
+    ...(Platform.OS === 'ios'
+      ? []
+      : [{ label: 'Widgets', art: WidgetPhone, onPress: () => go('widgets', '/widgets') }]),
+    { label: 'Reminders',         art: Bell,        onPress: () => go('notifications', '/notifications'), wide: true },
+  ];
+
+  const content: { label: string; icon: IconName; onPress: () => void }[] = [
+    { label: 'Favorites',   icon: 'heart-outline',    onPress: () => go('favorites', '/favorites') },
+    { label: 'Collections', icon: 'bookmark-outline', onPress: () => go('collections', '/collections') },
+    { label: 'My quotes',  icon: 'feather',         onPress: () => go('myquotes', '/my-quotes') },
+    { label: 'History',    icon: 'history',         onPress: handleHistory },
+  ];
 
   return (
     <View style={[styles.root, { backgroundColor: theme.background }]}>
@@ -83,83 +82,102 @@ export default function ProfileScreen({ onClose }: { onClose?: () => void }) {
       )}
 
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={close} style={[styles.closeBtn, { backgroundColor: theme.surface }]}>
-            <Icon name="close" size={20} color={theme.textMuted} />
-          </TouchableOpacity>
-          <View style={{ flex: 1 }} />
-          <TouchableOpacity onPress={openSettings} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Text style={[styles.settingsLink, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>Settings</Text>
-          </TouchableOpacity>
-        </View>
+        <SheetHeader
+          title="Profile"
+          leading="close"
+          onLeadingPress={close}
+          actionLabel="Settings"
+          onActionPress={() => go('settings', '/settings')}
+        />
 
-        <ScrollView showsVerticalScrollIndicator={false}>
-          {/* Name */}
-          <View style={styles.nameSection}>
-            <Text style={[styles.name, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
-              Hey {preferences.name || 'Reader'}
-            </Text>
-          </View>
-
-          {/* Streak card */}
-          <View style={styles.streakWrapper}>
-            <StreakCard streakCount={streakCount} weekData={weekData} onShare={() => setShowStreakShare(true)} />
-          </View>
-
-          {/* Stats row */}
-          <View style={styles.statsRow}>
-            <StatCard label="Favorites" value={favorites.length} theme={theme} onPress={handleFavorites} />
-            <StatCard label="Quotes Read" value={totalQuotesRead} theme={theme} onPress={handleHistory} />
-          </View>
-
-          {/* Feature rows */}
-          <View style={styles.section}>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+          {/* Upsell banner — the one light surface on the screen */}
+          {!isPro && (
             <TouchableOpacity
-              style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border }]}
-              onPress={() => modal ? modal.openSheet('themes') : router.push('/themes')}
+              style={[styles.banner, { backgroundColor: theme.goldButton }]}
+              onPress={openUpsell}
+              activeOpacity={0.9}
+              accessibilityRole="button"
+              accessibilityLabel="Unlock all. Access every topic, theme and your full history."
             >
-              <Icon name="palette-outline" size={20} color={theme.gold} />
-              <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>Theme</Text>
-              <Icon name="chevron-right" size={18} color={theme.textMuted} />
+              <View style={styles.bannerText}>
+                <Text style={[styles.bannerTitle, { color: ON_GOLD }]}>Unlock all</Text>
+                <Text style={[styles.bannerSubtitle, { color: ON_GOLD }]}>
+                  Access every topic, every theme, and your full quote history.
+                </Text>
+              </View>
+              <View style={styles.bannerArt} pointerEvents="none">
+                <Crystals size={150} color={ON_GOLD} />
+              </View>
             </TouchableOpacity>
+          )}
 
-            <TouchableOpacity
-              style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border }]}
-              onPress={handleHistory}
-            >
-              <Icon name="history" size={20} color={theme.gold} />
-              <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>History</Text>
-              <Icon name="chevron-right" size={18} color={theme.textMuted} />
-            </TouchableOpacity>
+          {trackingEnabled && (
+            <StreakCard
+              title="Your streak"
+              streakCount={streakCount}
+              weekData={weekData}
+              onShare={() => setShowStreakShare(true)}
+              onMenu={() => go('streak', '/streak')}
+            />
+          )}
 
-            {/* Android only. iOS widgets are configured entirely in Apple's
-                Edit Widget panel, so the in-app screen has nothing left to own.
-                The queue itself is still topped up from app/_layout.tsx, which
-                does not depend on this screen. */}
-            {Platform.OS !== 'ios' && (
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>Customize the app</Text>
+
+          <View style={styles.grid}>
+            {tiles.map(({ label, art: Art, onPress, wide }) => (
               <TouchableOpacity
-                style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border }]}
-                onPress={() => modal ? modal.openSheet('widgets') : router.push('/widgets')}
+                key={label}
+                style={[
+                  styles.tile,
+                  {
+                    backgroundColor: theme.surface,
+                    // A wide tile spans both columns; fixing its height to one
+                    // column's width keeps it a 2:1 band rather than a very
+                    // tall square.
+                    width: wide ? TILE_W * 2 + GAP : TILE_W,
+                    aspectRatio: wide ? undefined : 1,
+                    height: wide ? TILE_W : undefined,
+                  },
+                ]}
+                onPress={onPress}
+                activeOpacity={0.8}
+                accessibilityRole="button"
               >
-                <Icon name="view-grid-plus-outline" size={20} color={theme.gold} />
-                <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>Widgets</Text>
-                <Icon name="chevron-right" size={18} color={theme.textMuted} />
+                <View style={styles.tileArt} pointerEvents="none">
+                  <Art size={TILE_W * 0.66} color={theme.text} />
+                </View>
+                <Text
+                  style={[styles.tileLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}
+                  numberOfLines={2}
+                >
+                  {label}
+                </Text>
               </TouchableOpacity>
-            )}
-
-            <TouchableOpacity
-              style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border }]}
-              onPress={() => modal ? modal.openSheet('notifications') : router.push('/notifications')}
-            >
-              <Icon name="bell-outline" size={20} color={theme.gold} />
-              <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>Notifications</Text>
-              <Icon name="chevron-right" size={18} color={theme.textMuted} />
-            </TouchableOpacity>
+            ))}
           </View>
 
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>My content</Text>
 
-          <View style={{ height: 40 }} />
+          <View style={styles.grid}>
+            {content.map(({ label, icon, onPress }) => (
+              <TouchableOpacity
+                key={label}
+                style={[styles.contentRow, { width: TILE_W, backgroundColor: theme.surface }]}
+                onPress={onPress}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+              >
+                <Text
+                  style={[styles.contentLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}
+                  numberOfLines={2}
+                >
+                  {label}
+                </Text>
+                <Icon name={icon} size={24} color={theme.text} />
+              </TouchableOpacity>
+            ))}
+          </View>
         </ScrollView>
       </SafeAreaView>
 
@@ -174,6 +192,7 @@ export default function ProfileScreen({ onClose }: { onClose?: () => void }) {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  safe: { flex: 1 },
   dragHandle: {
     alignItems: 'center',
     paddingTop: 10,
@@ -184,97 +203,90 @@ const styles = StyleSheet.create({
     height: 4,
     borderRadius: 2,
   },
-  safe: { flex: 1 },
-  header: {
+  scroll: {
+    paddingHorizontal: GUTTER,
+    paddingBottom: 40,
+    gap: SPACE.lg,
+  },
+
+  // ── Upsell banner ────────────────────────────────────────────────────────
+  banner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: RADIUS.tile,
+    paddingVertical: SPACE.xl,
+    paddingLeft: SPACE.xl,
+    paddingRight: SPACE.lg,
+    overflow: 'hidden',
+  },
+  bannerText: {
+    flex: 1,
+    gap: SPACE.xs,
+    zIndex: 1,
+  },
+  bannerTitle: {
+    fontSize: 22,
+    fontFamily: FONTS.display.bold,
+    lineHeight: 28,
+    includeFontPadding: false,
+  },
+  bannerSubtitle: {
+    fontSize: 13,
+    lineHeight: 18,
+    opacity: 0.75,
+  },
+  // Deliberately overflows the banner's right edge so the cluster is cropped,
+  // the way the reference art bleeds off the card.
+  bannerArt: {
+    position: 'absolute',
+    right: -22,
+    top: -12,
+  },
+
+  // ── Sections ─────────────────────────────────────────────────────────────
+  sectionTitle: {
+    fontSize: 24,
+    fontFamily: FONTS.display.bold,
+    lineHeight: 30,
+    includeFontPadding: false,
+    marginTop: SPACE.sm,
+    marginBottom: -SPACE.xs,
+  },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: GAP,
+  },
+
+  // ── Customize tiles ──────────────────────────────────────────────────────
+  tile: {
+    borderRadius: RADIUS.tile,
+    padding: SPACE.lg,
+    justifyContent: 'flex-end',
+  },
+  tileArt: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    bottom: 34,
+  },
+  tileLabel: {
+    fontSize: 15,
+  },
+
+  // ── My content rows ──────────────────────────────────────────────────────
+  contentRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 8,
+    minHeight: 64,
+    borderRadius: RADIUS.card,
+    paddingHorizontal: SPACE.lg,
+    paddingVertical: SPACE.md,
+    gap: SPACE.sm,
   },
-  closeBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  nameSection: {
-    paddingHorizontal: 24,
-    marginTop: 16,
-    marginBottom: 20,
-  },
-  name: {
-    fontSize: 32,
-    fontWeight: '700',
-  },
-  streakWrapper: {
-    marginHorizontal: 16,
-    marginBottom: 16,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    marginHorizontal: 16,
-    gap: 10,
-    marginBottom: 24,
-  },
-  statCard: {
-    flex: 1,
-    borderRadius: 18,
-    paddingVertical: 16,
-    paddingHorizontal: 8,
-    borderWidth: 1,
-    alignItems: 'center',
-    gap: 4,
-  },
-  statValue: {
-    fontSize: 20,
-    fontWeight: '700',
-    lineHeight: 24,
-  },
-  statLabel: {
-    fontSize: 10,
-    letterSpacing: 0.4,
-    textTransform: 'uppercase',
-    textAlign: 'center',
-  },
-  settingsLink: {
-    fontSize: 14,
-  },
-  section: {
-    paddingHorizontal: 16,
-    marginBottom: 24,
-    gap: 8,
-  },
-  menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: 1,
-    gap: 12,
-  },
-  menuText: {
+  contentLabel: {
     flex: 1,
     fontSize: 15,
-  },
-  devItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    gap: 12,
-  },
-  devText: {
-    flex: 1,
-    fontSize: 15,
-    color: '#B8975A',
-  },
-  devValue: {
-    fontSize: 12,
-    color: '#B8975A',
   },
 });

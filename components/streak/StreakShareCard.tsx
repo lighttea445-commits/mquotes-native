@@ -1,6 +1,9 @@
 import React from 'react';
 import { View, Text, Image, StyleSheet, ImageBackground } from 'react-native';
+import Svg from 'react-native-svg';
 import { Theme } from '../../constants/themes';
+import { Sparkle } from '../art/primitives';
+import { FONTS } from '../../constants/fonts';
 
 interface Props {
   streakCount: number;
@@ -9,132 +12,142 @@ interface Props {
   size: number;
 }
 
+/**
+ * Sparkle field behind the count, in fractions of the card's width/height so
+ * it scales with any preview size. Hand-placed to ring the numeral without
+ * crowding it.
+ */
+const SPARKS: { x: number; y: number; r: number; o: number }[] = [
+  { x: 0.50, y: 0.24, r: 0.030, o: 0.95 },
+  { x: 0.28, y: 0.30, r: 0.022, o: 0.75 },
+  { x: 0.72, y: 0.28, r: 0.026, o: 0.85 },
+  { x: 0.16, y: 0.38, r: 0.018, o: 0.55 },
+  { x: 0.86, y: 0.36, r: 0.020, o: 0.60 },
+  { x: 0.63, y: 0.40, r: 0.016, o: 0.70 },
+  { x: 0.35, y: 0.46, r: 0.024, o: 0.80 },
+  { x: 0.80, y: 0.50, r: 0.015, o: 0.50 },
+];
+
 export function StreakShareCard({ streakCount, theme, showWatermark = true, size }: Props) {
   const W = size;
   const H = Math.round(size * 1.25);
 
-  const countFontSize = Math.round(W * 0.32);
-  const labelFontSize = Math.round(W * 0.09);
-  const subtitleFontSize = Math.round(W * 0.052);
+  const countFontSize = Math.round(W * 0.34);
+  const labelFontSize = Math.round(W * 0.13);
+  const subtitleFontSize = Math.round(W * 0.055);
   const padding = Math.round(W * 0.1);
-  const brandFontSize = Math.round(W * 0.044);
-  const brandBoxHeight = Math.round(W * 0.11);
+  const brandFontSize = Math.round(W * 0.042);
+  const brandBoxHeight = Math.round(W * 0.1);
+
+  // On an image theme the art sits under a scrim, so the sparkles and rules
+  // key off white; on a flat theme they key off the theme's own off-white.
+  const accent = theme.backgroundImage ? '#E8E0D0' : theme.text;
 
   return (
     <View style={{ width: W, height: H, overflow: 'hidden' }}>
-      {/* Background */}
       {theme.backgroundImage ? (
-        <ImageBackground
-          source={theme.backgroundImage}
-          style={StyleSheet.absoluteFillObject}
-          resizeMode="cover"
-        />
+        <>
+          <ImageBackground
+            source={theme.backgroundImage}
+            style={StyleSheet.absoluteFillObject}
+            resizeMode="cover"
+          />
+          <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.52)' }]} />
+        </>
       ) : (
         <View style={[StyleSheet.absoluteFillObject, { backgroundColor: theme.background }]} />
       )}
 
-      {/* Dark scrim */}
-      <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.52)' }]} />
+      {/* Sparkle field */}
+      <Svg style={StyleSheet.absoluteFillObject} width={W} height={H}>
+        {SPARKS.map((s, i) => (
+          <Sparkle key={i} x={s.x * W} y={s.y * H} r={s.r * W} color={accent} opacity={s.o} />
+        ))}
+      </Svg>
 
-      {/* Content — centered */}
+      {/* Count + label, optically centred above the watermark */}
       <View
         style={{
           flex: 1,
           paddingHorizontal: padding,
-          paddingBottom: showWatermark
-            ? Math.round(padding * 0.75 + brandBoxHeight + padding * 0.4)
-            : padding,
           paddingTop: padding,
+          paddingBottom: showWatermark ? padding * 2 + brandBoxHeight : padding,
           justifyContent: 'center',
           alignItems: 'center',
-          gap: 0,
         }}
       >
         <Text
           style={{
             fontSize: countFontSize,
-            color: theme.text,
-            fontFamily: theme.quoteFontFamily,
-            fontWeight: '800',
-            lineHeight: countFontSize * 1.0,
-            letterSpacing: -2,
+            color: accent,
+            fontFamily: FONTS.display.bold,
+            lineHeight: Math.round(countFontSize * 1.05),
+            includeFontPadding: false,
           }}
         >
           {streakCount}
         </Text>
+
         <Text
           style={{
             fontSize: labelFontSize,
-            color: theme.text,
-            fontFamily: theme.quoteFontFamily,
-            fontWeight: '600',
-            letterSpacing: 3,
-            textTransform: 'uppercase',
-            marginTop: Math.round(W * 0.03),
+            color: accent,
+            fontFamily: FONTS.display.bold,
+            lineHeight: Math.round(labelFontSize * 1.2),
+            includeFontPadding: false,
+            marginTop: Math.round(W * 0.01),
           }}
         >
           day streak
         </Text>
-        <View
-          style={{
-            width: Math.round(W * 0.12),
-            height: 1,
-            backgroundColor: 'rgba(255,255,255,0.3)',
-            marginTop: Math.round(W * 0.06),
-            marginBottom: Math.round(W * 0.06),
-          }}
-        />
+
         <Text
           style={{
             fontSize: subtitleFontSize,
-            color: theme.text,
+            color: accent,
+            opacity: 0.75,
             fontFamily: theme.uiFontFamily,
             textAlign: 'center',
-            lineHeight: subtitleFontSize * 1.65,
-            letterSpacing: 0.3,
+            lineHeight: Math.round(subtitleFontSize * 1.5),
+            marginTop: Math.round(W * 0.05),
           }}
         >
-          {"I've made a habit of getting\nmotivated each day!"}
+          showing up for myself
         </Text>
       </View>
 
-      {/* Branding bar */}
+      {/* Watermark — a compact centred pill, not a full-width bar */}
       {showWatermark && (
         <View
           style={{
             position: 'absolute',
-            bottom: padding * 0.75,
-            left: padding,
-            right: padding,
+            bottom: padding,
+            alignSelf: 'center',
             height: brandBoxHeight,
-            borderRadius: 10,
-            backgroundColor: 'rgba(255,255,255,0.13)',
-            borderWidth: 1,
-            borderColor: 'rgba(255,255,255,0.18)',
+            borderRadius: brandBoxHeight / 2,
+            backgroundColor: 'rgba(0,0,0,0.28)',
             flexDirection: 'row',
             alignItems: 'center',
-            justifyContent: 'center',
-            gap: Math.round(W * 0.025),
-            paddingHorizontal: Math.round(W * 0.04),
+            gap: Math.round(W * 0.022),
+            paddingLeft: Math.round(W * 0.022),
+            paddingRight: Math.round(W * 0.045),
           }}
         >
           <Image
             source={require('../../assets/icon.png')}
             style={{
-              width: Math.round(brandBoxHeight * 0.54),
-              height: Math.round(brandBoxHeight * 0.54),
-              borderRadius: 4,
+              width: Math.round(brandBoxHeight * 0.72),
+              height: Math.round(brandBoxHeight * 0.72),
+              borderRadius: Math.round(brandBoxHeight * 0.2),
             }}
             resizeMode="cover"
           />
           <Text
             style={{
-              color: 'rgba(255,255,255,0.9)',
+              color: accent,
               fontFamily: theme.uiFontFamily,
               fontSize: brandFontSize,
-              fontWeight: '600',
-              letterSpacing: 1.4,
-              textTransform: 'uppercase',
+              letterSpacing: 0.4,
             }}
           >
             Quotable

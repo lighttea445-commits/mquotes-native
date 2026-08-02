@@ -3,8 +3,8 @@ import { Platform } from 'react-native';
 
 // iOS key: RevenueCat dashboard → (your iOS app) → API Keys → Public SDK Key (starts with appl_)
 const REVENUECAT_API_KEY = Platform.select({
-  ios: 'appl_PuOsvzMhWbwtEyiacGTvpQpPUBW',
-  android: 'goog_nBgUNhjUDilBhGkZPixZCobHSWu',
+  ios: 'appl_ZdEOrrPGxYzZwjTMVuoiWzQZNQm',
+  android: 'goog_fqnpPxNEvjAxDwwUmmLJkOnIofu',
 })!;
 
 /** Entitlement identifier for "Quotable Premium" subscription */

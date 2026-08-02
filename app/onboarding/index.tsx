@@ -18,7 +18,7 @@ import {
   canAskForPermissions,
   rescheduleAll,
 } from '../../lib/notifications';
-import { PaywallSheet } from '../../components/subscriptions/PaywallSheet';
+import TrialScreen from '../../components/subscriptions/TrialScreen';
 import {
   ONBOARDING_STEPS,
   TOTAL_STEPS,
@@ -59,7 +59,6 @@ export default function OnboardingScreen() {
   const [name, setLocalName] = useState('');
   const [answers, setAnswers] = useState<Answers>({});
   const [themeId, setLocalThemeId] = useState(useAppStore.getState().preferences.theme);
-  const [showPaywall, setShowPaywall] = useState(false);
 
   /**
    * Whether the OS has granted notification permission — drives whether the
@@ -280,24 +279,18 @@ export default function OnboardingScreen() {
   const handleThemeSelect = useCallback((id: string) => setLocalThemeId(id), []);
 
   /**
-   * The paywall step has no UI of its own — it raises the RevenueCat sheet.
-   *
-   * `PaywallSheet` renders nothing until RevenueCat has initialized with
-   * offerings (rendering earlier crashes natively), so this step would be a
-   * blank dead end if RC never becomes ready. Wait for init, then either show
-   * the sheet or move on — with a timeout so a hung SDK can't trap the user on
-   * the second-to-last screen of onboarding.
+   * The paywall step renders TrialScreen inline, and its CTA buys through the
+   * store's own billing sheet. TrialScreen needs offerings to have something
+   * to sell, so skip the step outright if RevenueCat never becomes ready —
+   * with a timeout so a hung SDK can't trap the user near the end of the flow.
    */
   const onPaywallStep = ONBOARDING_STEPS[step].id === 'paywall';
   useEffect(() => {
     if (!onPaywallStep) return;
-
     if (isInitialized) {
-      if (offerings) setShowPaywall(true);
-      else next();
+      if (!offerings) next();
       return;
     }
-
     const timer = setTimeout(next, 4000);
     return () => clearTimeout(timer);
   }, [onPaywallStep, isInitialized, offerings, next]);
@@ -446,9 +439,8 @@ export default function OnboardingScreen() {
         );
 
       case 'paywall':
-        // Raised by the effect above and rendered as a sheet outside the
-        // animated container. Nothing to draw underneath it.
-        return null;
+        // Skipped by the effect above when offerings never arrive.
+        return offerings ? <TrialScreen onContinue={next} onClose={next} /> : null;
 
       case 'widget':
         // Last screen — no back button; returning would re-raise the paywall.
@@ -465,13 +457,6 @@ export default function OnboardingScreen() {
         {current.kind === 'bespoke' ? bespoke() : configScreen}
       </Animated.View>
 
-      <PaywallSheet
-        visible={showPaywall}
-        onClose={() => {
-          setShowPaywall(false);
-          next();
-        }}
-      />
     </View>
   );
 }

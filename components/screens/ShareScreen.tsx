@@ -15,8 +15,12 @@ import * as ExpoSharing from 'expo-sharing';
 import { useBaseTheme } from '../../hooks/useTheme';
 import { useRevenueCat } from '../../hooks/useRevenueCat';
 import { useShareStore } from '../../store/useShareStore';
+import { useCollectionsStore } from '../../store/useCollectionsStore';
 import { useModal } from '../../contexts/ModalContext';
 import { ShareCard } from '../quotes/ShareCard';
+import { AddToCollectionSheet } from '../collections/AddToCollectionSheet';
+import { GUTTER, RADIUS, ON_GOLD } from '../ui/tokens';
+import { FONTS } from '../../constants/fonts';
 import { errorReporting } from '../../lib/errorReporting';
 import { analytics } from '../../lib/analytics';
 
@@ -35,10 +39,14 @@ export default function ShareScreen({ onClose }: { onClose?: () => void }) {
   const router = useRouter();
   const modal = useModal();
   const { isPro } = useRevenueCat();
-  const { quote, author, watermarkRemoved, setWatermarkRemoved } = useShareStore();
+  const { quoteId, quote, author, watermarkRemoved, setWatermarkRemoved } = useShareStore();
+  const collections = useCollectionsStore((s) => s.collections);
   const [copiedFeedback, setCopiedFeedback] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
+  const [showCollections, setShowCollections] = useState(false);
   const cardRef = useRef<View>(null);
+
+  const savedToAny = collections.some(c => c.quotes.some(q => q.id === quoteId));
 
   const close = onClose ?? (() => router.back());
   const cardPreviewWidth = Math.min(W - 80, 280);
@@ -88,18 +96,16 @@ export default function ShareScreen({ onClose }: { onClose?: () => void }) {
 
   return (
     <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom + 16 }]}>
-      {/* Header */}
+      {/* Header — close only, matching the streak share sheet */}
       <View style={styles.header}>
         <TouchableOpacity
           onPress={close}
-          style={[styles.closeBtn, { backgroundColor: theme.surfaceElevated ?? theme.surface }]}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel="Close"
         >
-          <Icon name="close" size={18} color={theme.textMuted} />
+          <Icon name="close" size={26} color={theme.text} />
         </TouchableOpacity>
-        <Text style={[styles.title, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
-          Share Quote
-        </Text>
-        <View style={styles.closeBtn} />
       </View>
 
 
@@ -129,6 +135,24 @@ export default function ShareScreen({ onClose }: { onClose?: () => void }) {
 
       {/* Extra action buttons */}
       <View style={styles.actions}>
+        <TouchableOpacity
+          onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowCollections(true); }}
+          style={styles.actionItem}
+          accessibilityRole="button"
+          accessibilityLabel="Add to collection"
+        >
+          <View style={[styles.actionCircle, { backgroundColor: theme.surface, borderColor: savedToAny ? theme.gold : theme.border }]}>
+            <Icon
+              name={savedToAny ? 'bookmark' : 'bookmark-outline'}
+              size={22}
+              color={savedToAny ? theme.gold : theme.text}
+            />
+          </View>
+          <Text style={[styles.actionLabel, { color: savedToAny ? theme.gold : theme.text, fontFamily: theme.uiFontFamily }]}>
+            {'Add to\ncollection'}
+          </Text>
+        </TouchableOpacity>
+
         <TouchableOpacity onPress={handleCopyText} style={styles.actionItem}>
           <View style={[styles.actionCircle, { backgroundColor: theme.surface, borderColor: copiedFeedback ? theme.gold : theme.border }]}>
             <Icon
@@ -160,15 +184,21 @@ export default function ShareScreen({ onClose }: { onClose?: () => void }) {
       <View style={styles.actionsArea}>
         <TouchableOpacity
           onPress={handleShare}
-          style={[styles.primaryBtn, { backgroundColor: theme.gold }]}
+          style={[styles.primaryBtn, { backgroundColor: theme.goldButton }]}
           activeOpacity={0.8}
         >
-          <Icon name="export-variant" size={20} color="#000" />
-          <Text style={[styles.primaryBtnText, { fontFamily: theme.uiFontFamily }]}>
+          <Icon name="export-variant" size={20} color={ON_GOLD} />
+          <Text style={[styles.primaryBtnText, { color: ON_GOLD }]}>
             Share
           </Text>
         </TouchableOpacity>
       </View>
+
+      <AddToCollectionSheet
+        visible={showCollections}
+        quote={{ id: quoteId, text: quote, author }}
+        onClose={() => setShowCollections(false)}
+      />
     </View>
   );
 }
@@ -180,22 +210,8 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 16,
-  },
-  title: {
-    flex: 1,
-    fontSize: 20,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  closeBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    justifyContent: 'center',
-    alignItems: 'center',
+    paddingHorizontal: GUTTER,
+    paddingBottom: 8,
   },
   previewArea: {
     flex: 1,
@@ -210,10 +226,12 @@ const styles = StyleSheet.create({
     shadowRadius: 24,
     elevation: 18,
   },
+  // Same row as the streak sheet, with a tighter gap because three circles at
+  // 28 overflow a narrow screen.
   actions: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 28,
+    gap: 18,
     paddingTop: 20,
     paddingBottom: 8,
   },
@@ -244,12 +262,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    height: 52,
-    borderRadius: 14,
+    height: 56,
+    borderRadius: RADIUS.pill,
   },
   primaryBtnText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000',
+    fontSize: 17,
+    fontFamily: FONTS.display.bold,
+    lineHeight: 24,
+    includeFontPadding: false,
   },
 });
