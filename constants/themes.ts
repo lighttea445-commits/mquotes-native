@@ -14,6 +14,8 @@ export interface Theme {
   accent: string;
   gold: string;
   goldButton: string;
+  /** Filled favorite heart. Themes that omit it get `gold`. */
+  favorite?: string;
   border: string;
   navBackground: string;
   // Typography — see constants/fonts.ts for the three roles.
@@ -43,6 +45,7 @@ export const THEMES: Theme[] = [
     accent: '#B8975A',
     gold: '#B8975A',
     goldButton: '#C4A35A',
+    favorite: '#FFFFFF',
     border: '#2A2520',
     navBackground: '#1C1A18',
     quoteFontFamily: FONTS.display.medium,

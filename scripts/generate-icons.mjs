@@ -61,7 +61,10 @@ const MAP = {
   'format-size': 'text-size',
   'hand-heart': 'heart-handshake',
   'head-snowflake': 'brain',
-  heart: 'heart',
+  // `heart` is the filled state of the favorite toggle, `heart-outline` the
+  // empty one — Tabler's plain `heart` is stroke-only, so both names pointing
+  // at it made the toggle look identical either way.
+  heart: 'heart-filled',
   'heart-multiple': 'hearts',
   'heart-outline': 'heart',
   'heart-pulse': 'heartbeat',

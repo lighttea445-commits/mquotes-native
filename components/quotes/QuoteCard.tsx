@@ -117,6 +117,9 @@ export function QuoteCard() {
     noteQuoteViewed();
   }, [converted?.id, noteQuoteViewed]);
 
+  // Favorited heart — white on Minimal, gold everywhere else.
+  const favoriteColor = theme.favorite ?? theme.gold;
+
   // Collection pill label + icon
   const activeCategoryName = activeCategory
     ? CATEGORIES.find(c => c.id === activeCategory)?.name ?? activeCategory
@@ -560,7 +563,7 @@ export function QuoteCard() {
                 </Text>
               ) : null}
               <Animated.View style={[styles.bigHeartOverlay, bigHeartAnimStyle]} pointerEvents="none">
-                <Icon name="heart" size={180} color={theme.gold} />
+                <Icon name="heart" size={180} color={favoriteColor} />
               </Animated.View>
             </View>
             <View style={styles.actionRow}>
@@ -571,7 +574,7 @@ export function QuoteCard() {
                 <Icon
                   name={favorited ? 'heart' : 'heart-outline'}
                   size={32}
-                  color={favorited ? theme.gold : theme.textMuted}
+                  color={favorited ? favoriteColor : theme.textMuted}
                 />
               </TouchableOpacity>
             </View>
