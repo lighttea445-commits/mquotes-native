@@ -16,6 +16,7 @@ import { useTheme } from '../../hooks/useTheme';
 import { FONTS } from '../../constants/fonts';
 import { GUTTER, SPACE } from '../ui/tokens';
 import { SheetHeader } from '../ui/SheetHeader';
+import { SHEET_CONTENT_TOP } from '../layout/BottomSheet';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -24,7 +25,7 @@ const BENEFITS = [
   { icon: 'history', label: 'Full Quote History', desc: "Every quote you've ever read, always within reach" },
   { icon: 'pencil-outline', label: 'Write Your Own Quotes', desc: "Add your own words alongside the world's greatest thinkers" },
   { icon: 'compass-outline', label: 'Every Topic Unlocked', desc: 'Follow every category, from wisdom to freedom, with no limits' },
-  { icon: 'bell-outline', label: 'Quote of the Day & Streak', desc: 'Daily reminders that keep your streak alive' },
+  { icon: 'bell-outline', label: 'Quote of the Day & Streak Reminder', desc: 'Daily reminders that keep your streak alive' },
   // Android only. On iOS the widget's appearance is configured in Apple's Edit
   // Widget panel, which cannot be gated per-entitlement, so those settings are
   // free there — advertising them as Pro would be inaccurate.
@@ -142,6 +143,7 @@ const styles = StyleSheet.create({
   },
   safe: {
     flex: 1,
+    paddingTop: SHEET_CONTENT_TOP,
   },
   scroll: {
     flex: 1,
