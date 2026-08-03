@@ -726,19 +726,21 @@ const ss = StyleSheet.create({
   permText: { flex: 1, fontSize: 13 },
 
   // ── Reminder card ──────────────────────────────────────────────────────
+  // Grown by padding rather than a fixed height, so the card still fits its
+  // content on a narrow screen where the day list wraps.
   reminderCard: {
-    borderRadius: 18,
+    borderRadius: 20,
     borderWidth: 1,
-    paddingHorizontal: 20,
-    paddingTop: 18,
-    paddingBottom: 16,
-    marginBottom: 12,
+    paddingHorizontal: 22,
+    paddingTop: 24,
+    paddingBottom: 22,
+    marginBottom: 14,
   },
   reminderCardTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 10,
+    marginBottom: 16,
   },
   reminderCardTitle: { fontSize: 18, fontWeight: '700', letterSpacing: -0.3, flex: 1, marginRight: 8 },
   reminderCardTime: { fontSize: 13, fontWeight: '600' },
