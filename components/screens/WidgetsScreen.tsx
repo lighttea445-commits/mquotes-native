@@ -39,6 +39,7 @@ import { useUserQuotesStore } from '../../store/useUserQuotesStore';
 import { useRevenueCat } from '../../hooks/useRevenueCat';
 import { useModal } from '../../contexts/ModalContext';
 import { useAppStore } from '../../store/useAppStore';
+import { ON_GOLD } from '../ui/tokens';
 
 const WIDGET_STORE_KEY = 'widget-store-v2';
 
@@ -97,7 +98,7 @@ function PickerModal<T extends string>({
       <TouchableOpacity style={pickerStyles.backdrop} activeOpacity={1} onPress={onClose} />
       <View style={[pickerStyles.sheet, { backgroundColor: theme.navBackground }]}>
         <View style={[pickerStyles.handle, { backgroundColor: theme.border }]} />
-        <Text style={[pickerStyles.title, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
+        <Text style={[pickerStyles.title, { color: theme.text, fontFamily: FONTS.display.bold }]}>
           {title}
         </Text>
         <FlatList
@@ -132,7 +133,7 @@ const pickerStyles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
   sheet: { maxHeight: '60%', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingBottom: 40 },
   handle: { width: 36, height: 4, borderRadius: 2, alignSelf: 'center', marginTop: 10, marginBottom: 4 },
-  title: { fontSize: 18, fontWeight: '700', paddingHorizontal: 20, paddingVertical: 14 },
+  title: { fontSize: 18, paddingHorizontal: 20, paddingVertical: 14 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -239,7 +240,7 @@ function WidgetCard({
       <View style={cardStyles.cardMain}>
         <View style={cardStyles.typeRow}>
           <Icon name={meta.icon} size={15} color={theme.gold} />
-          <Text style={[cardStyles.typeLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
+          <Text style={[cardStyles.typeLabel, { color: theme.text, fontFamily: FONTS.ui.bold }]}>
             {displayName}
           </Text>
         </View>
@@ -254,7 +255,7 @@ function WidgetCard({
         activeOpacity={0.8}
       >
         <Icon name="pencil-outline" size={14} color={theme.textMuted} />
-        <Text style={[cardStyles.editBtnText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+        <Text style={[cardStyles.editBtnText, { color: theme.textMuted, fontFamily: FONTS.ui.medium }]}>
           Edit
         </Text>
       </TouchableOpacity>
@@ -280,7 +281,7 @@ const cardStyles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
-  typeLabel: { fontSize: 14, fontWeight: '600' },
+  typeLabel: { fontSize: 14 },
   quoteSnippet: { fontSize: 13, lineHeight: 19 },
   editBtn: {
     flexDirection: 'row',
@@ -292,7 +293,7 @@ const cardStyles = StyleSheet.create({
     borderWidth: 1,
     flexShrink: 0,
   },
-  editBtnText: { fontSize: 12, fontWeight: '500' },
+  editBtnText: { fontSize: 12 },
 });
 
 // ── Empty state ───────────────────────────────────────────────────────────────
@@ -312,7 +313,7 @@ function EmptyState({ theme, onRefresh }: { theme: ReturnType<typeof useTheme>; 
   return (
     <View style={emptyStyles.container}>
       <Icon name="view-grid-plus-outline" size={48} color={theme.textMuted} style={{ opacity: 0.4 }} />
-      <Text style={[emptyStyles.title, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
+      <Text style={[emptyStyles.title, { color: theme.text, fontFamily: FONTS.display.bold }]}>
         No widgets yet
       </Text>
 
@@ -322,8 +323,8 @@ function EmptyState({ theme, onRefresh }: { theme: ReturnType<typeof useTheme>; 
         activeOpacity={0.82}
         disabled={adding}
       >
-        <Icon name="plus-circle-outline" size={18} color="#1A1208" />
-        <Text style={[emptyStyles.addBtnText, { fontFamily: theme.uiFontFamily }]}>
+        <Icon name="plus-circle-outline" size={18} color={ON_GOLD} />
+        <Text style={[emptyStyles.addBtnText, { fontFamily: FONTS.ui.bold, color: ON_GOLD }]}>
           {adding ? 'Opening…' : 'Add Widget'}
         </Text>
       </TouchableOpacity>
@@ -336,7 +337,7 @@ function EmptyState({ theme, onRefresh }: { theme: ReturnType<typeof useTheme>; 
         ].map((step, i) => (
           <View key={i} style={emptyStyles.stepRow}>
             <View style={[emptyStyles.stepBadge, { backgroundColor: theme.gold + '22' }]}>
-              <Text style={[emptyStyles.stepNum, { color: theme.gold, fontFamily: theme.uiFontFamily }]}>{i + 1}</Text>
+              <Text style={[emptyStyles.stepNum, { color: theme.gold, fontFamily: FONTS.ui.bold }]}>{i + 1}</Text>
             </View>
             <Text style={[emptyStyles.stepText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>{step}</Text>
           </View>
@@ -349,7 +350,7 @@ function EmptyState({ theme, onRefresh }: { theme: ReturnType<typeof useTheme>; 
         activeOpacity={0.7}
       >
         <Icon name="refresh" size={16} color={theme.textMuted} />
-        <Text style={[emptyStyles.refreshBtnText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+        <Text style={[emptyStyles.refreshBtnText, { color: theme.textMuted, fontFamily: FONTS.ui.medium }]}>
           Refresh
         </Text>
       </TouchableOpacity>
@@ -359,7 +360,7 @@ function EmptyState({ theme, onRefresh }: { theme: ReturnType<typeof useTheme>; 
 
 const emptyStyles = StyleSheet.create({
   container: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28, gap: 16 },
-  title: { fontSize: 20, fontWeight: '700', textAlign: 'center' },
+  title: { fontSize: 20, textAlign: 'center' },
   stepsCard: {
     width: '100%',
     borderRadius: 16,
@@ -376,7 +377,7 @@ const emptyStyles = StyleSheet.create({
     justifyContent: 'center',
     flexShrink: 0,
   },
-  stepNum: { fontSize: 13, fontWeight: '700' },
+  stepNum: { fontSize: 13 },
   stepText: { fontSize: 14, lineHeight: 20, flex: 1 },
   refreshBtn: {
     flexDirection: 'row',
@@ -387,7 +388,7 @@ const emptyStyles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
   },
-  refreshBtnText: { fontSize: 14, fontWeight: '500' },
+  refreshBtnText: { fontSize: 14 },
   addBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -396,7 +397,7 @@ const emptyStyles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 28,
   },
-  addBtnText: { fontSize: 16, fontWeight: '700', color: '#1A1208' },
+  addBtnText: { fontSize: 16 },
 });
 
 // ── iOS panel ─────────────────────────────────────────────────────────────────
@@ -475,7 +476,7 @@ function IOSWidgetPanel({
         {IOS_ADD_STEPS.map((step, i) => (
           <View key={i} style={emptyStyles.stepRow}>
             <View style={[emptyStyles.stepBadge, { backgroundColor: theme.gold + '22' }]}>
-              <Text style={[emptyStyles.stepNum, { color: theme.gold, fontFamily: theme.uiFontFamily }]}>{i + 1}</Text>
+              <Text style={[emptyStyles.stepNum, { color: theme.gold, fontFamily: FONTS.ui.bold }]}>{i + 1}</Text>
             </View>
             <Text style={[emptyStyles.stepText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>{step}</Text>
           </View>
@@ -488,8 +489,8 @@ function IOSWidgetPanel({
         activeOpacity={0.82}
         disabled={refreshing}
       >
-        <Icon name="refresh" size={18} color="#1A1208" />
-        <Text style={[emptyStyles.addBtnText, { fontFamily: theme.uiFontFamily }]}>
+        <Icon name="refresh" size={18} color={ON_GOLD} />
+        <Text style={[emptyStyles.addBtnText, { fontFamily: FONTS.ui.bold, color: ON_GOLD }]}>
           {refreshing ? 'Refreshing…' : 'Refresh now'}
         </Text>
       </TouchableOpacity>
@@ -782,7 +783,7 @@ export default function WidgetsScreen({ onClose, onBack, onContinue }: { onClose
             <TouchableOpacity onPress={back} style={[styles.backBtn, { backgroundColor: theme.surface }]} activeOpacity={0.7}>
               <Icon name="arrow-left" size={22} color={theme.textMuted} />
             </TouchableOpacity>
-            <Text style={[styles.headerTitle, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
+            <Text style={[styles.headerTitle, { color: theme.text, fontFamily: FONTS.display.bold }]}>
               Widgets
             </Text>
             <TouchableOpacity onPress={handleIOSRefresh} style={styles.backBtn} activeOpacity={0.7}>
@@ -805,7 +806,7 @@ export default function WidgetsScreen({ onClose, onBack, onContinue }: { onClose
                 onPress={onContinue}
                 activeOpacity={0.82}
               >
-                <Text style={[styles.saveBtnText, { fontFamily: theme.uiFontFamily, color: '#1A1208' }]}>
+                <Text style={[styles.saveBtnText, { fontFamily: FONTS.ui.bold, color: ON_GOLD }]}>
                   Continue
                 </Text>
               </TouchableOpacity>
@@ -853,7 +854,7 @@ export default function WidgetsScreen({ onClose, onBack, onContinue }: { onClose
             <TouchableOpacity onPress={handleEditorBack} style={[styles.backBtn, { backgroundColor: theme.surface }]} activeOpacity={0.7}>
               <Icon name="arrow-left" size={22} color={theme.textMuted} />
             </TouchableOpacity>
-            <Text style={[styles.headerTitle, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
+            <Text style={[styles.headerTitle, { color: theme.text, fontFamily: FONTS.display.bold }]}>
               Widget Editor
             </Text>
             <View style={[styles.typeBadge, { backgroundColor: theme.surface, borderColor: theme.border }]}>
@@ -866,7 +867,7 @@ export default function WidgetsScreen({ onClose, onBack, onContinue }: { onClose
 
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
             <View style={styles.nameContainer}>
-              <Text style={[styles.nameLabel, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+              <Text style={[styles.nameLabel, { color: theme.textMuted, fontFamily: FONTS.ui.bold }]}>
                 Widget Name
               </Text>
               <TextInput
@@ -946,7 +947,7 @@ export default function WidgetsScreen({ onClose, onBack, onContinue }: { onClose
               onPress={handleUpdateWidget}
               activeOpacity={0.82}
             >
-              <Text style={[styles.saveBtnText, { fontFamily: theme.uiFontFamily, color: '#1A1208' }]}>
+              <Text style={[styles.saveBtnText, { fontFamily: FONTS.ui.bold, color: ON_GOLD }]}>
                 Update Widget
               </Text>
             </TouchableOpacity>
@@ -1049,7 +1050,7 @@ export default function WidgetsScreen({ onClose, onBack, onContinue }: { onClose
               onPress={onContinue}
               activeOpacity={0.82}
             >
-              <Text style={[styles.saveBtnText, { fontFamily: theme.uiFontFamily, color: '#1A1208' }]}>
+              <Text style={[styles.saveBtnText, { fontFamily: FONTS.ui.bold, color: ON_GOLD }]}>
                 Continue
               </Text>
             </TouchableOpacity>
@@ -1081,7 +1082,6 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 22,
-    fontWeight: '700',
   },
   typeBadge: {
     flexDirection: 'row',
@@ -1100,7 +1100,6 @@ const styles = StyleSheet.create({
   },
   nameLabel: {
     fontSize: 13,
-    fontWeight: '600',
     marginBottom: 8,
     letterSpacing: 0.3,
     textTransform: 'uppercase',
@@ -1136,7 +1135,6 @@ const styles = StyleSheet.create({
   },
   saveBtnText: {
     fontSize: 16,
-    fontWeight: '700',
     letterSpacing: 0.2,
   },
   cardList: {
