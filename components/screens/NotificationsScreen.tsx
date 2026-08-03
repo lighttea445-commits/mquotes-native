@@ -16,6 +16,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Icon } from '../ui/Icon';
+import { SheetHeader } from '../ui/SheetHeader';
 import { useTheme } from '../../hooks/useTheme';
 import { useAppStore } from '../../store/useAppStore';
 import { useRevenueCat } from '../../hooks/useRevenueCat';
@@ -545,16 +546,18 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
           </View>
         )}
 
-        {/* Header */}
-        <View style={ss.header}>
-          <TouchableOpacity onPress={topBarBack} style={[ss.backBtn, { backgroundColor: theme.surface }]}>
-            <Icon name="arrow-left" size={20} color={theme.text} />
-          </TouchableOpacity>
-          <Text style={[ss.headerTitle, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>{topBarTitle}</Text>
-          <Animated.Text style={[ss.savedBadge, { color: theme.gold, fontFamily: theme.uiFontFamily, opacity: savedOpacity }]}>
-            ✓ Saved
-          </Animated.Text>
-        </View>
+        {/* Header. Shared with every other sheet, so the back arrow matches
+            Topics you follow: bare glyph, no circular surface behind it. */}
+        <SheetHeader
+          title={topBarTitle}
+          leading="back"
+          onLeadingPress={topBarBack}
+          right={
+            <Animated.Text style={[ss.savedBadge, { color: theme.gold, fontFamily: theme.uiFontFamily, opacity: savedOpacity }]}>
+              ✓ Saved
+            </Animated.Text>
+          }
+        />
 
         {/* ── Edit view ──────────────────────────────────────────────────── */}
         {categoryTarget !== null ? (
@@ -695,20 +698,7 @@ const ss = StyleSheet.create({
   progressFill: { height: 3, borderRadius: 2 },
 
   // ── Header ─────────────────────────────────────────────────────────────
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 6,
-    paddingBottom: 10,
-    gap: 12,
-  },
-  backBtn: {
-    width: 36, height: 36, borderRadius: 18,
-    justifyContent: 'center', alignItems: 'center',
-  },
-  headerTitle: { flex: 1, fontSize: 22, fontWeight: '700', letterSpacing: -0.4 },
-  savedBadge: { fontSize: 11, fontWeight: '600', letterSpacing: 0.5 },
+  savedBadge: { fontSize: 11, letterSpacing: 0.5 },
 
   // ── Subtitle ───────────────────────────────────────────────────────────
   subtitle: { fontSize: 15, lineHeight: 22, marginBottom: 20, marginTop: 4, textAlign: 'center' },
