@@ -25,6 +25,7 @@ import { useUserQuotesStore } from '../../store/useUserQuotesStore';
 import { useWidgetStore } from '../../store/useWidgetStore';
 import { useModal } from '../../contexts/ModalContext';
 import { ConfirmSheet } from '../ui/ConfirmSheet';
+import { useRevenueCat, setForcePro } from '../../hooks/useRevenueCat';
 
 export default function SettingsScreen({ onClose, onBack }: { onClose?: () => void; onBack?: () => void }) {
   const theme = useTheme();
@@ -33,6 +34,7 @@ export default function SettingsScreen({ onClose, onBack }: { onClose?: () => vo
   const { preferences, setName, setPreferences, resetApp } = useAppStore();
   const [nameValue, setNameValue] = useState(preferences.name || '');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const { isPro } = useRevenueCat();
   const clearFavorites = useFavoritesStore((s) => s.clearFavorites);
   const clearHistory = useHistoryStore((s) => s.clearHistory);
   const resetTopics = useTopicsStore((s) => s.resetTopics);
@@ -172,6 +174,27 @@ export default function SettingsScreen({ onClose, onBack }: { onClose?: () => vo
               <Icon name="chevron-right" size={18} color={theme.textMuted} />
             </TouchableOpacity>
           </View>
+
+          {/* Developer */}
+          {__DEV__ && (
+            <View style={styles.section}>
+              <Text style={[styles.sectionLabel, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+                DEVELOPER
+              </Text>
+              <View style={[styles.toggleItem, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                <Icon name="crown-outline" size={20} color={theme.gold} />
+                <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
+                  Free Pro
+                </Text>
+                <Switch
+                  value={isPro}
+                  onValueChange={(v) => setForcePro(v ? true : null)}
+                  trackColor={{ false: theme.border, true: theme.gold }}
+                  thumbColor="#fff"
+                />
+              </View>
+            </View>
+          )}
 
           {/* Danger zone */}
           <View style={styles.section}>
