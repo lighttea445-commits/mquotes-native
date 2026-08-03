@@ -17,6 +17,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Icon, IconName } from '../ui/Icon';
+import { IconButton } from '../ui/IconButton';
+import { SheetHeader } from '../ui/SheetHeader';
 import { useTheme } from '../../hooks/useTheme';
 import {
   useWidgetStore,
@@ -39,7 +41,7 @@ import { useUserQuotesStore } from '../../store/useUserQuotesStore';
 import { useRevenueCat } from '../../hooks/useRevenueCat';
 import { useModal } from '../../contexts/ModalContext';
 import { useAppStore } from '../../store/useAppStore';
-import { ON_GOLD } from '../ui/tokens';
+import { GUTTER, SPACE, RADIUS, ON_GOLD } from '../ui/tokens';
 
 const WIDGET_STORE_KEY = 'widget-store-v2';
 
@@ -178,10 +180,10 @@ function SettingsRow({
 }
 
 const rowStyles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 15, gap: 12 },
+  row: { flexDirection: 'row', alignItems: 'center', minHeight: 64, paddingHorizontal: SPACE.lg, paddingVertical: SPACE.md, gap: SPACE.sm },
   label: { flex: 1, fontSize: 15 },
   value: { fontSize: 13, maxWidth: 160, textAlign: 'right', fontFamily: FONTS.ui.regular },
-  separator: { height: StyleSheet.hairlineWidth, marginHorizontal: 16 },
+  separator: { height: StyleSheet.hairlineWidth, marginHorizontal: SPACE.lg },
 });
 
 // ── Toggle row ────────────────────────────────────────────────────────────────
@@ -268,12 +270,12 @@ const cardStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    borderRadius: 20,
+    borderRadius: RADIUS.card,
     borderWidth: 1,
     paddingVertical: 14,
-    paddingHorizontal: 16,
-    marginBottom: 12,
-    gap: 12,
+    paddingHorizontal: SPACE.lg,
+    marginBottom: SPACE.md,
+    gap: SPACE.md,
   },
   cardMain: { flex: 1, gap: 6 },
   typeRow: {
@@ -385,7 +387,7 @@ const emptyStyles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 18,
     paddingVertical: 10,
-    borderRadius: 20,
+    borderRadius: RADIUS.pill,
     borderWidth: 1,
   },
   refreshBtnText: { fontSize: 14 },
@@ -395,7 +397,7 @@ const emptyStyles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 28,
     paddingVertical: 14,
-    borderRadius: 28,
+    borderRadius: RADIUS.pill,
   },
   addBtnText: { fontSize: 16 },
 });
@@ -499,9 +501,9 @@ function IOSWidgetPanel({
 }
 
 const iosStyles = StyleSheet.create({
-  content: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 120, gap: 12 },
+  content: { paddingHorizontal: GUTTER, paddingTop: SPACE.lg, paddingBottom: 120, gap: SPACE.md },
   preview: {
-    borderRadius: 20,
+    borderRadius: RADIUS.card,
     borderWidth: 1,
     padding: 20,
     gap: 8,
@@ -512,7 +514,7 @@ const iosStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 12,
-    borderRadius: 16,
+    borderRadius: RADIUS.card,
     borderWidth: 1,
     padding: 16,
   },
@@ -523,7 +525,7 @@ const iosStyles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     paddingVertical: 15,
-    borderRadius: 28,
+    borderRadius: RADIUS.pill,
     marginTop: 4,
   },
 });
@@ -779,17 +781,18 @@ export default function WidgetsScreen({ onClose, onBack, onContinue }: { onClose
     return (
       <View style={{ flex: 1, backgroundColor: theme.background }}>
         <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-          <View style={styles.header}>
-            <TouchableOpacity onPress={back} style={[styles.backBtn, { backgroundColor: theme.surface }]} activeOpacity={0.7}>
-              <Icon name="arrow-left" size={22} color={theme.textMuted} />
-            </TouchableOpacity>
-            <Text style={[styles.headerTitle, { color: theme.text, fontFamily: FONTS.display.bold }]}>
-              Widgets
-            </Text>
-            <TouchableOpacity onPress={handleIOSRefresh} style={styles.backBtn} activeOpacity={0.7}>
-              <Icon name="refresh" size={20} color={theme.textMuted} />
-            </TouchableOpacity>
-          </View>
+          <SheetHeader
+            title="Widgets"
+            leading="back"
+            onLeadingPress={back}
+            right={
+              <IconButton
+                icon="refresh"
+                onPress={handleIOSRefresh}
+                accessibilityLabel="Refresh widget"
+              />
+            }
+          />
 
           <IOSWidgetPanel
             theme={theme}
@@ -850,20 +853,19 @@ export default function WidgetsScreen({ onClose, onBack, onContinue }: { onClose
     return (
       <View style={{ flex: 1, backgroundColor: theme.background }}>
         <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-          <View style={styles.header}>
-            <TouchableOpacity onPress={handleEditorBack} style={[styles.backBtn, { backgroundColor: theme.surface }]} activeOpacity={0.7}>
-              <Icon name="arrow-left" size={22} color={theme.textMuted} />
-            </TouchableOpacity>
-            <Text style={[styles.headerTitle, { color: theme.text, fontFamily: FONTS.display.bold }]}>
-              Widget Editor
-            </Text>
-            <View style={[styles.typeBadge, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-              <Icon name={meta.icon} size={13} color={theme.gold} />
-              <Text style={[styles.typeBadgeText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-                {meta.label}
-              </Text>
-            </View>
-          </View>
+          <SheetHeader
+            title="Widget Editor"
+            leading="back"
+            onLeadingPress={handleEditorBack}
+            right={
+              <View style={[styles.typeBadge, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                <Icon name={meta.icon} size={13} color={theme.gold} />
+                <Text style={[styles.typeBadgeText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+                  {meta.label}
+                </Text>
+              </View>
+            }
+          />
 
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
             <View style={styles.nameContainer}>
@@ -999,17 +1001,18 @@ export default function WidgetsScreen({ onClose, onBack, onContinue }: { onClose
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={back} style={[styles.backBtn, { backgroundColor: theme.surface }]} activeOpacity={0.7}>
-            <Icon name="arrow-left" size={22} color={theme.textMuted} />
-          </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
-            Widgets
-          </Text>
-          <TouchableOpacity onPress={loadActiveWidgets} style={styles.backBtn} activeOpacity={0.7}>
-            <Icon name="refresh" size={20} color={theme.textMuted} />
-          </TouchableOpacity>
-        </View>
+        <SheetHeader
+          title="Widgets"
+          leading="back"
+          onLeadingPress={back}
+          right={
+            <IconButton
+              icon="refresh"
+              onPress={loadActiveWidgets}
+              accessibilityLabel="Refresh widgets"
+            />
+          }
+        />
 
         {loadingList ? (
           <View style={styles.centered}>
@@ -1065,24 +1068,6 @@ export default function WidgetsScreen({ onClose, onBack, onContinue }: { onClose
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 4,
-  },
-  backBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 22,
-  },
   typeBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1094,28 +1079,28 @@ const styles = StyleSheet.create({
   },
   typeBadgeText: { fontSize: 12 },
   nameContainer: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 24,
+    paddingHorizontal: GUTTER,
+    paddingTop: SPACE.lg,
+    paddingBottom: SPACE.xl,
   },
   nameLabel: {
     fontSize: 13,
-    marginBottom: 8,
+    marginBottom: SPACE.sm,
     letterSpacing: 0.3,
     textTransform: 'uppercase',
   },
   nameInput: {
     fontSize: 16,
-    borderRadius: 14,
+    borderRadius: RADIUS.row,
     borderWidth: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingHorizontal: SPACE.lg,
+    paddingVertical: SPACE.md,
   },
   settingsCard: {
-    marginHorizontal: 16,
-    borderRadius: 20,
+    marginHorizontal: GUTTER,
+    borderRadius: RADIUS.card,
     borderWidth: 1,
-    marginBottom: 12,
+    marginBottom: SPACE.md,
     overflow: 'hidden',
   },
   saveBtnWrapper: {
@@ -1123,12 +1108,12 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    paddingHorizontal: 20,
+    paddingHorizontal: GUTTER,
     paddingBottom: 32,
-    paddingTop: 12,
+    paddingTop: SPACE.md,
   },
   saveBtn: {
-    borderRadius: 28,
+    borderRadius: RADIUS.pill,
     paddingVertical: 17,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1138,8 +1123,8 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   cardList: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingHorizontal: GUTTER,
+    paddingTop: SPACE.lg,
     paddingBottom: 40,
   },
   hintText: {
