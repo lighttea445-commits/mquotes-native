@@ -20,6 +20,14 @@ import { useTheme } from '../../hooks/useTheme';
 import { useAppStore } from '../../store/useAppStore';
 import { useRevenueCat } from '../../hooks/useRevenueCat';
 import { useModal } from '../../contexts/ModalContext';
+import { useCollectionsStore } from '../../store/useCollectionsStore';
+import { SOURCE_FOLLOWING, COLLECTION_PREFIX } from '../../lib/notificationQuotes';
+import {
+  CATEGORIES,
+  TOPIC_FAVORITES,
+  TOPIC_MYQUOTES,
+  TOPIC_GENERAL,
+} from '../../constants/categories';
 import {
   requestPermissions,
   getPermissionStatus,
@@ -50,13 +58,18 @@ function describeDays(days: number[]): string {
 // ── Types ──────────────────────────────────────────────────────────────────
 type PickerTarget = 'startTime' | 'endTime' | 'qodTime' | 'streakTime';
 type ActiveCard = null | 'quotes' | 'qod' | 'streak';
+/** Which reminder's category list is open on top of its edit view. */
+type CategoryTarget = null | 'quotes' | 'qod';
 interface Settings {
   enabled: boolean; days: number[];
   quotesEnabled: boolean; showAuthor: boolean;
   count: number; startTime: string; endTime: string;
   qodEnabled: boolean; qodTime: string;
   streakEnabled: boolean; streakTime: string;
+  quoteSource: string; qodSource: string;
 }
+
+interface SourceOption { id: string; label: string; }
 
 const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
 const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
@@ -87,10 +100,29 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
   const [qodTime, setQodTime] = useState(pref.qodTime ?? '08:00');
   const [streakEnabled, setStreakEnabled] = useState(pref.streakEnabled ?? true);
   const [streakTime, setStreakTime] = useState(pref.streakTime ?? '21:00');
+  // Each reminder picks its own category, so Quote of the Day can sit on
+  // Favorites while the daily drip stays on everything you follow.
+  const [quoteSource, setQuoteSource] = useState(pref.notifQuoteSource ?? SOURCE_FOLLOWING);
+  const [qodSource, setQodSource] = useState(pref.notifQodSource ?? SOURCE_FOLLOWING);
+  const collections = useCollectionsStore((s) => s.collections);
+
+  /** Everything a reminder can draw from, in the order the picker shows them. */
+  const sourceOptions: SourceOption[] = [
+    { id: SOURCE_FOLLOWING, label: 'Topics you follow' },
+    { id: TOPIC_GENERAL, label: 'General' },
+    { id: TOPIC_FAVORITES, label: 'Favorites' },
+    { id: TOPIC_MYQUOTES, label: 'My quotes' },
+    ...collections.map(c => ({ id: COLLECTION_PREFIX + c.id, label: c.name })),
+    ...CATEGORIES.map(c => ({ id: c.id, label: c.name })),
+  ];
+
+  const labelForSource = (id: string) =>
+    sourceOptions.find(o => o.id === id)?.label ?? 'Topics you follow';
   const [permissionGranted, setPermissionGranted] = useState<boolean | null>(null);
   const [pickerTarget, setPickerTarget] = useState<PickerTarget | null>(null);
   const [pickerTempDate, setPickerTempDate] = useState<Date>(new Date());
   const [activeCard, setActiveCard] = useState<ActiveCard>(null);
+  const [categoryTarget, setCategoryTarget] = useState<CategoryTarget>(null);
 
   const savedOpacity = useRef(new Animated.Value(0)).current;
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -129,6 +161,7 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
       days, quotesEnabled, showAuthor, count, startTime, endTime,
       qodEnabled, qodTime,
       streakEnabled, streakTime,
+      quoteSource, qodSource,
       ...o,
     };
   }
@@ -147,6 +180,7 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
       notificationStartTime: s.startTime, notificationEndTime: s.endTime,
       notificationDays: s.days, quotesEnabled: s.quotesEnabled,
       notificationShowAuthor: s.showAuthor, qodEnabled: s.qodEnabled, qodTime: s.qodTime,
+      notifQuoteSource: s.quoteSource, notifQodSource: s.qodSource,
       streakEnabled: s.streakEnabled, streakTime: s.streakTime,
     });
     if (s.enabled) {
@@ -156,8 +190,8 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
         return rescheduleAll({
           enabled: s.enabled, days: s.days, quotesEnabled: s.quotesEnabled,
           showAuthor: s.showAuthor, quoteCount: s.count,
-          startHHMM: s.startTime, endHHMM: s.endTime,
-          qodEnabled: s.qodEnabled, qodTime: s.qodTime,
+          startHHMM: s.startTime, endHHMM: s.endTime, quoteSource: s.quoteSource,
+          qodEnabled: s.qodEnabled, qodTime: s.qodTime, qodSource: s.qodSource,
           streakEnabled: s.streakEnabled, streakTime: s.streakTime,
         }).then(() => setPreferences({ lastNotifScheduledAt: new Date().toISOString() }));
       }).catch(console.warn);
@@ -334,9 +368,67 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
   }
 
   // ── Edit views per card ────────────────────────────────────────────────
+
+  /** In-card entry point to that one reminder's category list. */
+  function CategoryRow({ value, onPress }: { value: string; onPress: () => void }) {
+    return (
+      <TouchableOpacity
+        style={[ss.editRow, { borderBottomColor: theme.border }]}
+        onPress={onPress}
+        activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel={`Quote category, currently ${labelForSource(value)}`}
+      >
+        <Text style={[ss.editRowLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
+          Quote category
+        </Text>
+        <View style={ss.categoryValue}>
+          <Text
+            style={[ss.categoryValueText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}
+            numberOfLines={1}
+          >
+            {labelForSource(value)}
+          </Text>
+          <Icon name="chevron-right" size={18} color={theme.textMuted} />
+        </View>
+      </TouchableOpacity>
+    );
+  }
+
+  function CategoryPicker({ value, onSelect }: { value: string; onSelect: (id: string) => void }) {
+    return (
+      <View style={[ss.editCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        {sourceOptions.map((opt, i) => (
+          <TouchableOpacity
+            key={opt.id}
+            style={[
+              ss.sourceRow,
+              i < sourceOptions.length - 1 && { borderBottomWidth: 1, borderBottomColor: theme.border },
+            ]}
+            onPress={() => onSelect(opt.id)}
+            accessibilityRole="button"
+            accessibilityState={{ selected: value === opt.id }}
+          >
+            <Text
+              style={[
+                ss.sourceLabel,
+                { color: value === opt.id ? theme.text : theme.textMuted, fontFamily: theme.uiFontFamily },
+              ]}
+              numberOfLines={1}
+            >
+              {opt.label}
+            </Text>
+            {value === opt.id && <Icon name="check" size={20} color={theme.gold} />}
+          </TouchableOpacity>
+        ))}
+      </View>
+    );
+  }
+
   function QuotesEdit() {
     return (
       <View style={[ss.editCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        <CategoryRow value={quoteSource} onPress={() => setCategoryTarget('quotes')} />
         <EditRow label="How many">
           <Stepper
             display={`${count}×`}
@@ -367,13 +459,16 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
     );
   }
 
-  function SingleTimeEdit({ timeValue, setTimeValue, pickerTgt }: {
+  function SingleTimeEdit({ timeValue, setTimeValue, pickerTgt, categoryRow }: {
     timeValue: string;
     setTimeValue: (v: string) => void;
     pickerTgt: PickerTarget;
+    /** Omitted for the streak reminder, which carries no quote. */
+    categoryRow?: React.ReactNode;
   }) {
     return (
       <View style={[ss.editCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        {categoryRow}
         <EditRow label="Time">
           <TimeButton hhmm={timeValue} target={pickerTgt} />
         </EditRow>
@@ -428,8 +523,14 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
   );
 
   // ── Render ─────────────────────────────────────────────────────────────
-  const topBarBack = activeCard !== null ? () => setActiveCard(null) : back;
-  const topBarTitle = activeCard !== null ? EDIT_META[activeCard].title : 'Reminders';
+  const topBarBack =
+    categoryTarget !== null ? () => setCategoryTarget(null)
+    : activeCard !== null ? () => setActiveCard(null)
+    : back;
+  const topBarTitle =
+    categoryTarget !== null ? 'Quote category'
+    : activeCard !== null ? EDIT_META[activeCard].title
+    : 'Reminders';
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -459,11 +560,33 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
         </View>
 
         {/* ── Edit view ──────────────────────────────────────────────────── */}
-        {activeCard !== null ? (
+        {categoryTarget !== null ? (
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={ss.scroll} showsVerticalScrollIndicator={false}>
+            <CategoryPicker
+              value={categoryTarget === 'quotes' ? quoteSource : qodSource}
+              onSelect={id => {
+                if (categoryTarget === 'quotes') {
+                  setQuoteSource(id);
+                  debouncedApply(buildSettings({ quoteSource: id }));
+                } else {
+                  setQodSource(id);
+                  debouncedApply(buildSettings({ qodSource: id }));
+                }
+                setCategoryTarget(null);
+              }}
+            />
+          </ScrollView>
+
+        ) : activeCard !== null ? (
           <ScrollView style={{ flex: 1 }} contentContainerStyle={ss.scroll} showsVerticalScrollIndicator={false}>
             {activeCard === 'quotes'  && <QuotesEdit />}
             {activeCard === 'qod'     && (
-              <SingleTimeEdit timeValue={qodTime} setTimeValue={setQodTime} pickerTgt="qodTime" />
+              <SingleTimeEdit
+                timeValue={qodTime}
+                setTimeValue={setQodTime}
+                pickerTgt="qodTime"
+                categoryRow={<CategoryRow value={qodSource} onPress={() => setCategoryTarget('qod')} />}
+              />
             )}
             {activeCard === 'streak'  && (
               <SingleTimeEdit timeValue={streakTime} setTimeValue={setStreakTime} pickerTgt="streakTime" />
@@ -514,9 +637,14 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
               title="Quote of the Day"
               timeLabel={formatHHMMto12h(qodTime)}
               countLabel="1×"
-              isEnabled={qodEnabled}
-              onToggle={v => { setQodEnabled(v); debouncedApply(buildSettings({ qodEnabled: v })); }}
-              onPress={() => setActiveCard('qod')}
+              isEnabled={isPro && qodEnabled}
+              onToggle={v => {
+                if (!isPro) { if (!onContinue) openPaywall(); return; }
+                setQodEnabled(v);
+                debouncedApply(buildSettings({ qodEnabled: v }));
+              }}
+              onPress={() => { if (!isPro) { if (!onContinue) openPaywall(); return; } setActiveCard('qod'); }}
+              locked={!isPro}
             />
 
             <ReminderCard
@@ -525,9 +653,14 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
               title="Streak Reminder"
               timeLabel={formatHHMMto12h(streakTime)}
               countLabel="1×"
-              isEnabled={streakEnabled}
-              onToggle={v => { setStreakEnabled(v); debouncedApply(buildSettings({ streakEnabled: v })); }}
-              onPress={() => setActiveCard('streak')}
+              isEnabled={isPro && streakEnabled}
+              onToggle={v => {
+                if (!isPro) { if (!onContinue) openPaywall(); return; }
+                setStreakEnabled(v);
+                debouncedApply(buildSettings({ streakEnabled: v }));
+              }}
+              onPress={() => { if (!isPro) { if (!onContinue) openPaywall(); return; } setActiveCard('streak'); }}
+              locked={!isPro}
             />
           </ScrollView>
         )}
@@ -627,6 +760,14 @@ const ss = StyleSheet.create({
   editCard: {
     borderRadius: 18, borderWidth: 1, overflow: 'hidden', marginBottom: 16,
   },
+  // ── Quote category ────────────────────────────────────────────────────
+  categoryValue: { flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 1 },
+  categoryValueText: { fontSize: 14, flexShrink: 1 },
+  sourceRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 20, paddingVertical: 15, gap: 12,
+  },
+  sourceLabel: { flex: 1, fontSize: 15 },
   editRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 20, paddingVertical: 14,

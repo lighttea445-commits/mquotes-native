@@ -1,6 +1,6 @@
 import React from 'react';
 import Svg, { G, Path, Rect } from 'react-native-svg';
-import { Sparkle, STROKE } from './primitives';
+import { strokeFor } from './primitives';
 
 interface Props {
   size?: number;
@@ -8,7 +8,6 @@ interface Props {
 }
 
 const VB = 200;
-const W = STROKE * 1.6;
 
 /**
  * Tilted phone carrying two home-screen widgets — the art for the Widgets tile.
@@ -17,6 +16,8 @@ const W = STROKE * 1.6;
  * actually ships, with text rules inside the wide one so it reads as a quote.
  */
 export function WidgetPhone({ size = 200, color }: Props) {
+  const W = strokeFor(size, VB);
+  const STROKE = strokeFor(size, VB, true);
   return (
     <Svg width={size} height={size} viewBox={`0 0 ${VB} ${VB}`}>
       <G transform="rotate(-11, 100, 100)">
@@ -42,10 +43,6 @@ export function WidgetPhone({ size = 200, color }: Props) {
           stroke={color} strokeWidth={STROKE} strokeLinecap="round" fill="none" opacity={0.7}
         />
       </G>
-
-      <Sparkle x={172} y={40} r={7} color={color} />
-      <Sparkle x={26} y={140} r={4.5} color={color} opacity={0.7} />
-      <Sparkle x={180} y={162} r={4} color={color} opacity={0.6} />
     </Svg>
   );
 }

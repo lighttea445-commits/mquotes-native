@@ -1,6 +1,9 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
-import { fetchQuotesForNotifications } from './quotesApi';
+// `./notificationQuotes` and `../hooks/useRevenueCat` are required lazily
+// inside rescheduleAll rather than imported here. Both drag in the zustand
+// stores and the RevenueCat SDK, and this module is also used in contexts that
+// only need its pure helpers (formatting, permissions).
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -15,9 +18,16 @@ export interface RescheduleOptions {
   startHHMM: string;
   endHHMM: string;
   showAuthor: boolean;     // include "— Author" in notification body
+  /**
+   * Which quotes the daily reminders draw from: `following`, a topic id,
+   * `_favorites`, `_myquotes`, or `collection:<id>`.
+   */
+  quoteSource?: string;
   // Quote of the Day
   qodEnabled: boolean;
   qodTime: string;         // HH:mm
+  /** Same vocabulary as `quoteSource`, chosen independently. */
+  qodSource?: string;
   // Streak reminder
   streakEnabled: boolean;
   streakTime: string;      // HH:mm
@@ -187,13 +197,21 @@ export async function rescheduleAll(opts: RescheduleOptions): Promise<void> {
     }
   }
 
-  // Count how many repeating-trigger slots the static types will consume
-  // so we know how many DATE slots remain for daily quotes.
+  const { resolveNotificationQuotes, SOURCE_FOLLOWING } = require('./notificationQuotes') as typeof import('./notificationQuotes');
+  const { getIsPro } = require('../hooks/useRevenueCat') as typeof import('../hooks/useRevenueCat');
+
+  // Quote of the Day and the streak reminder are Premium features. Gated here
+  // rather than only in the UI, so a stored preference from before an
+  // entitlement lapsed cannot keep scheduling them.
+  const isPro = getIsPro();
+  const qodEnabled = opts.qodEnabled && isPro;
+  const streakEnabled = opts.streakEnabled && isPro;
+
   const repeatingSlots = (() => {
     let n = 0;
     const multiplier = specificDays ? specificDays.length : 1;
-    if (opts.qodEnabled) n += multiplier;
-    if (opts.streakEnabled) n += multiplier;
+    if (qodEnabled) n += multiplier;
+    if (streakEnabled) n += multiplier;
     return n;
   })();
   const quoteDateSlots = Math.max(0, IOS_NOTIF_LIMIT - repeatingSlots);
@@ -228,13 +246,10 @@ export async function rescheduleAll(opts: RescheduleOptions): Promise<void> {
 
     const totalQuotesNeeded = futureDates.length * slotsPerDay;
 
-    let quotes: { content: string; author: string; id: string }[] = [];
-    try {
-      const fetched = await fetchQuotesForNotifications(Math.min(totalQuotesNeeded + 10, 100));
-      quotes = fetched.map(q => ({ content: q.content, author: q.author, id: q._id }));
-    } catch {
-      quotes = [{ content: 'The only way to do great work is to love what you do.', author: 'Steve Jobs', id: 'fallback' }];
-    }
+    const quotes = await resolveNotificationQuotes(
+      opts.quoteSource ?? SOURCE_FOLLOWING,
+      Math.min(totalQuotesNeeded + 10, 100),
+    );
     if (gen !== _scheduleGen) return;
 
     let quoteIdx = 0;
@@ -279,15 +294,28 @@ export async function rescheduleAll(opts: RescheduleOptions): Promise<void> {
   }
 
   // ── 2. Quote of the Day (repeating — static content) ──────────────────
-  if (opts.qodEnabled) {
+  if (qodEnabled) {
     if (gen !== _scheduleGen) return;
     const [hour, minute] = opts.qodTime.split(':').map(Number);
+
+    // Carries a real quote from its own chosen category rather than generic
+    // copy. Repeating triggers hold static content, so this is the same quote
+    // until the next reschedule: the app tops up every few hours on foreground.
+    const [qod] = await resolveNotificationQuotes(opts.qodSource ?? SOURCE_FOLLOWING, 1);
+    if (gen !== _scheduleGen) return;
+
+    const qodTitle = qod && qod.content.length > MAX_TITLE
+      ? qod.content.slice(0, MAX_TITLE - 1) + '…'
+      : qod?.content;
+
     await schedRepeating(
       {
-        title: 'Quote of the Day',
-        body: 'Tap to read today\'s quote',
+        title: qodTitle ?? 'Quote of the Day',
+        body: qod ? (opts.showAuthor ? qod.author : 'Quote of the Day') : 'Tap to read today\'s quote',
         sound: true,
-        data: { category: 'qod' as NotifCategory },
+        data: qod
+          ? { category: 'qod' as NotifCategory, quoteId: qod.id, quoteText: qod.content, quoteAuthor: qod.author }
+          : { category: 'qod' as NotifCategory },
         ...(Platform.OS === 'android' && { channelId: 'daily-quotes' }),
       },
       { hour, minute },
@@ -295,7 +323,7 @@ export async function rescheduleAll(opts: RescheduleOptions): Promise<void> {
   }
 
   // ── 3. Streak Reminder (repeating — static content) ───────────────────
-  if (opts.streakEnabled) {
+  if (streakEnabled) {
     if (gen !== _scheduleGen) return;
     const [hour, minute] = opts.streakTime.split(':').map(Number);
     await schedRepeating(

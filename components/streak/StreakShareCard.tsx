@@ -18,7 +18,8 @@ interface Props {
  * crowding it.
  */
 const SPARKS: { x: number; y: number; r: number; o: number }[] = [
-  { x: 0.50, y: 0.24, r: 0.030, o: 0.95 },
+  // Nothing at x 0.50: the numeral sits dead centre, so a sparkle there lands
+  // on the glyph rather than around it.
   { x: 0.28, y: 0.30, r: 0.022, o: 0.75 },
   { x: 0.72, y: 0.28, r: 0.026, o: 0.85 },
   { x: 0.16, y: 0.38, r: 0.018, o: 0.55 },

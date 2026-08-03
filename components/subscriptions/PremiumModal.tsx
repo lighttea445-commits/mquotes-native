@@ -100,9 +100,15 @@ export function PremiumModal({ visible, onClose }: PremiumModalProps) {
           showsVerticalScrollIndicator={false}
         >
           {BENEFITS.map((b) => (
-            <View key={b.icon} style={[styles.benefitRow, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-              <View style={[styles.benefitIcon, { backgroundColor: `${theme.gold}1A` }]}>
-                <Icon name={b.icon as any} size={20} color={theme.gold} />
+            <View
+              key={b.icon}
+              style={[
+                styles.benefitRow,
+                { backgroundColor: theme.surfaceElevated, shadowColor: theme.gold },
+              ]}
+            >
+              <View style={[styles.benefitIcon, { backgroundColor: `${theme.gold}20` }]}>
+                <Icon name={b.icon as any} size={22} color={theme.gold} />
               </View>
               <View style={styles.benefitText}>
                 <Text style={[styles.benefitLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
@@ -112,7 +118,9 @@ export function PremiumModal({ visible, onClose }: PremiumModalProps) {
                   {b.desc}
                 </Text>
               </View>
-              <Icon name="check-circle" size={18} color={theme.gold} />
+              <View style={[styles.benefitCheck, { backgroundColor: theme.gold }]}>
+                <Icon name="check" size={12} color={theme.background} />
+              </View>
             </View>
           ))}
         </ScrollView>
@@ -189,15 +197,18 @@ const styles = StyleSheet.create({
   benefitRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 14,
-    borderRadius: 14,
-    borderWidth: 1,
-    gap: 12,
+    padding: 16,
+    borderRadius: 18,
+    gap: 14,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 2,
   },
   benefitIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -212,6 +223,13 @@ const styles = StyleSheet.create({
   benefitDesc: {
     fontSize: 12,
     lineHeight: 16,
+  },
+  benefitCheck: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   closeBtn: {
     marginTop: 16,

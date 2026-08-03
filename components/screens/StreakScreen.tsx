@@ -55,6 +55,8 @@ export default function StreakScreen({ onClose, onBack }: Props) {
             endHHMM: p.notificationEndTime ?? '22:00',
             qodEnabled: p.qodEnabled ?? true,
             qodTime: p.qodTime ?? '08:00',
+            quoteSource: p.notifQuoteSource,
+            qodSource: p.notifQodSource,
             streakEnabled: next,
             streakTime: p.streakTime ?? '21:00',
           }).then(() => {

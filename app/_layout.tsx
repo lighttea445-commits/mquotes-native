@@ -204,6 +204,8 @@ function RootLayoutInner() {
           endHHMM: prefs.notificationEndTime ?? '22:00',
           qodEnabled: prefs.qodEnabled ?? true,
           qodTime: prefs.qodTime ?? '08:00',
+          quoteSource: prefs.notifQuoteSource,
+          qodSource: prefs.notifQodSource,
           streakEnabled: prefs.streakEnabled ?? true,
           streakTime: prefs.streakTime ?? '21:00',
         }).then(() => {

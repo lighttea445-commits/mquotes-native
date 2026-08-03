@@ -44,6 +44,25 @@ jest.mock('../../lib/quotesApi', () => ({
   ]),
 }));
 
+// rescheduleAll resolves quotes through this module, which reaches into the
+// zustand stores (and so AsyncStorage). Mocked so these tests stay focused on
+// scheduling behaviour rather than store wiring.
+jest.mock('../../lib/notificationQuotes', () => ({
+  SOURCE_FOLLOWING: 'following',
+  COLLECTION_PREFIX: 'collection:',
+  resolveNotificationQuotes: jest.fn().mockResolvedValue([
+    { content: 'Quote one', author: 'Author A', id: 'q1' },
+    { content: 'Quote two', author: 'Author B', id: 'q2' },
+    { content: 'Quote three', author: 'Author C', id: 'q3' },
+  ]),
+}));
+
+// Quote of the Day and the streak reminder are Premium-gated inside
+// rescheduleAll; these tests assert the scheduling itself, so run as a member.
+jest.mock('../../hooks/useRevenueCat', () => ({
+  getIsPro: () => true,
+}));
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /** iOS hard cap on scheduled notifications */
@@ -421,7 +440,7 @@ describe('rescheduleAll — notification content', () => {
     expect(title.endsWith('…')).toBe(true);
   });
 
-  it('QOD notification has the correct title', async () => {
+  it('QOD notification carries a real quote from its chosen category', async () => {
     const { rescheduleAll } = require('../../lib/notifications');
     await rescheduleAll({
       ...ALL_TYPES_OPTS,
@@ -430,7 +449,10 @@ describe('rescheduleAll — notification content', () => {
       streakEnabled: false,
     });
 
-    expect(mockSchedule.mock.calls[0][0].content.title).toBe('✨ Quote of the Day');
+    const content = mockSchedule.mock.calls[0][0].content;
+    expect(content.title).toBe('Quote one');
+    expect(content.data.category).toBe('qod');
+    expect(content.data.quoteId).toBe('q1');
   });
 
   it('streak notification has the correct title', async () => {

@@ -19,6 +19,13 @@ export interface UserPreferences {
   notificationShowAuthor: boolean; // show author under quote notification, default false
   qodEnabled: boolean;         // quote of the day
   qodTime: string;             // HH:mm, default "08:00"
+  /**
+   * Which quotes each reminder is drawn from: 'following', a topic id,
+   * '_favorites', '_myquotes', or 'collection:<id>'. Chosen per reminder, so
+   * the daily drip and Quote of the Day can sit on different categories.
+   */
+  notifQuoteSource: string;
+  notifQodSource: string;
   streakEnabled: boolean;      // streak reminder
   streakTime: string;          // HH:mm, default "21:00"
   /** Master switch for streak counting. Off = no count, no banner, no card. */
@@ -100,6 +107,8 @@ const defaultPreferences: UserPreferences = {
   notificationShowAuthor: false,
   qodEnabled: true,
   qodTime: '08:00',
+  notifQuoteSource: 'following',
+  notifQodSource: 'following',
   streakEnabled: true,
   streakTime: '21:00',
   streakTrackingEnabled: true,

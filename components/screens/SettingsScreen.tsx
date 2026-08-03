@@ -26,6 +26,7 @@ import { useWidgetStore } from '../../store/useWidgetStore';
 import { useModal } from '../../contexts/ModalContext';
 import { ConfirmSheet } from '../ui/ConfirmSheet';
 import { useRevenueCat, setForcePro } from '../../hooks/useRevenueCat';
+import { ON_GOLD } from '../ui/tokens';
 
 export default function SettingsScreen({ onClose, onBack }: { onClose?: () => void; onBack?: () => void }) {
   const theme = useTheme();
@@ -115,10 +116,11 @@ export default function SettingsScreen({ onClose, onBack }: { onClose?: () => vo
               <Icon name="vibrate" size={20} color={theme.gold} />
               <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>Haptics</Text>
               <Switch
+                style={styles.switch}
                 value={preferences.hapticsEnabled}
                 onValueChange={(v) => setPreferences({ hapticsEnabled: v })}
                 trackColor={{ false: theme.border, true: theme.gold }}
-                thumbColor="#fff"
+                thumbColor={preferences.hapticsEnabled ? ON_GOLD : theme.text}
               />
             </View>
 
@@ -126,10 +128,11 @@ export default function SettingsScreen({ onClose, onBack }: { onClose?: () => vo
               <Icon name="account-outline" size={20} color={theme.gold} />
               <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>Show author</Text>
               <Switch
+                style={styles.switch}
                 value={preferences.showAuthor}
                 onValueChange={(v) => setPreferences({ showAuthor: v })}
                 trackColor={{ false: theme.border, true: theme.gold }}
-                thumbColor="#fff"
+                thumbColor={preferences.showAuthor ? ON_GOLD : theme.text}
               />
             </View>
 
@@ -187,10 +190,11 @@ export default function SettingsScreen({ onClose, onBack }: { onClose?: () => vo
                   Free Pro
                 </Text>
                 <Switch
+                  style={styles.switch}
                   value={isPro}
                   onValueChange={(v) => setForcePro(v ? true : null)}
                   trackColor={{ false: theme.border, true: theme.gold }}
-                  thumbColor="#fff"
+                  thumbColor={isPro ? ON_GOLD : theme.text}
                 />
               </View>
             </View>
@@ -263,7 +267,8 @@ const styles = StyleSheet.create({
   nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
+    minHeight: 56,
+    paddingHorizontal: 16,
     borderRadius: 16,
     borderWidth: 1,
     gap: 12,
@@ -276,7 +281,8 @@ const styles = StyleSheet.create({
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
+    minHeight: 56,
+    paddingHorizontal: 16,
     borderRadius: 16,
     borderWidth: 1,
     gap: 12,
@@ -284,7 +290,8 @@ const styles = StyleSheet.create({
   toggleItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
+    minHeight: 56,
+    paddingHorizontal: 16,
     borderRadius: 16,
     borderWidth: 1,
     gap: 12,
@@ -293,5 +300,11 @@ const styles = StyleSheet.create({
   menuText: {
     flex: 1,
     fontSize: 15,
+  },
+  // Android's native Switch reserves ~8px of invisible touch padding around
+  // the track, which reads as the knob sitting short of the card's edge next
+  // to the flush chevrons on menuItem rows. Pull it back so both line up.
+  switch: {
+    marginRight: -8,
   },
 });

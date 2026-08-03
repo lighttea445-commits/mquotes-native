@@ -1,6 +1,7 @@
 import React from 'react';
 import Svg, { G, Path, Circle } from 'react-native-svg';
-import { Sparkle, STROKE } from './primitives';
+import { Sparkle } from './primitives';
+import { strokeFor } from '../../art/primitives';
 
 interface Props {
   size?: number;
@@ -18,6 +19,7 @@ const VB = 200;
  * composition so the weights match and the elements relate.
  */
 export function BellMoon({ size = 200, color }: Props) {
+  const STROKE = strokeFor(size, VB) / 1.5; // paths below multiply by 1.5
   return (
     <Svg width={size} height={size} viewBox={`0 0 ${VB} ${VB}`}>
       {/* Crescent moon, upper left */}

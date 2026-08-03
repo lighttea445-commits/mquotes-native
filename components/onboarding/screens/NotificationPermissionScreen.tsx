@@ -5,7 +5,7 @@ import { useTheme } from '../../../hooks/useTheme';
 import { getPermissionStatus, canAskForPermissions } from '../../../lib/notifications';
 import { OnboardingHeader } from '../OnboardingHeader';
 import { ContinueButton } from '../ContinueButton';
-import { BellMoon } from '../art/BellMoon';
+import { Bell } from '../../art/Bell';
 import { OB } from '../tokens';
 
 interface Props {
@@ -111,7 +111,7 @@ export function NotificationPermissionScreen({
         </View>
 
         <View style={np.art}>
-          <BellMoon size={230} color={theme.gold} />
+          <Bell size={230} color={theme.gold} />
         </View>
 
         <View style={np.footer}>

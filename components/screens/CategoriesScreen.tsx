@@ -143,16 +143,16 @@ export default function CategoriesScreen({ onClose }: { onClose?: () => void }) 
               onPress={openPaywall}
               activeOpacity={0.9}
               accessibilityRole="button"
-              accessibilityLabel="Unlock everything. Access every topic, theme and your full history."
+              accessibilityLabel="Unlock everything. Access all categories, quotes, and themes to unlock discipline and motivation."
             >
               <View style={styles.bannerText}>
                 <Text style={[styles.bannerTitle, { color: ON_GOLD }]}>Unlock everything</Text>
                 <Text style={[styles.bannerSubtitle, { color: ON_GOLD }]}>
-                  Access every topic, every theme, and your full quote history.
+                  Access all categories, quotes, and themes to unlock discipline and motivation!
                 </Text>
               </View>
               <View style={styles.bannerArt} pointerEvents="none">
-                <Crystals size={150} color={ON_GOLD} />
+                <Crystals size={130} color={ON_GOLD} />
               </View>
             </TouchableOpacity>
           )}
@@ -216,7 +216,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderRadius: RADIUS.tile,
-    paddingVertical: SPACE.xl,
+    // Not a token: the banner's height is set here rather than by the type,
+    // so the card can be tuned without touching the text sizes. The content
+    // itself is 59px, so 10.5 top and bottom lands the card at 80. Padding
+    // rather than a fixed height, so the card grows instead of clipping if the
+    // subtitle ever wraps to a third line on a narrow screen.
+    paddingVertical: 10.5,
     paddingLeft: SPACE.xl,
     paddingRight: SPACE.lg,
     overflow: 'hidden',
@@ -227,22 +232,27 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   bannerTitle: {
-    fontSize: 22,
+    fontSize: 19,
     fontFamily: FONTS.display.bold,
-    lineHeight: 28,
+    lineHeight: 25,
     includeFontPadding: false,
   },
+  // Capped at the point where the art begins, so the copy never runs beneath
+  // the crystals. Font size alone cannot do this: the text block is flex:1, so
+  // its lines reach the full width whatever size the type is.
   bannerSubtitle: {
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 10,
+    lineHeight: 15,
+    maxWidth: '57%',
     opacity: 0.75,
   },
-  // Deliberately overflows the banner's right edge so the cluster is cropped,
-  // the way the reference art bleeds off the card.
+  // Still overflows the banner's right edge so the cluster is cropped, the way
+  // the reference art bleeds off the card, but pulled left so more of the
+  // drawing sits inside it. Keeps 35px clear of where the subtitle ends.
   bannerArt: {
     position: 'absolute',
-    right: -22,
-    top: -12,
+    right: -6,
+    top: -17,
   },
 
   // ── Sections ─────────────────────────────────────────────────────────────

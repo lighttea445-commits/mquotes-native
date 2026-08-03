@@ -1,6 +1,7 @@
 import React from 'react';
 import Svg, { G, Path, Rect, Circle, Text as SvgText } from 'react-native-svg';
-import { Sparkle, STROKE } from './primitives';
+import { Sparkle } from './primitives';
+import { strokeFor } from '../../art/primitives';
 
 interface Props {
   size?: number;
@@ -21,6 +22,7 @@ const VB = 200;
  * bad one costs more than the missing detail is worth.
  */
 export function PhoneReminder({ size = 200, color, time = '11:11', fontFamily }: Props) {
+  const STROKE = strokeFor(size, VB) / 1.5; // paths below multiply by 1.4–1.5
   return (
     <Svg width={size} height={size} viewBox={`0 0 ${VB} ${VB}`}>
       <G transform="rotate(-6, 112, 100)">
