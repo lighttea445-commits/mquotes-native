@@ -323,22 +323,19 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
             opacity: locked ? 0.6 : 1,
           }]}
         >
-          {/* Top row: title + time + pro badge */}
+          {/* Top row: title + time. Locked cards read the same as the rest,
+              with the lock glyph below carrying the state on its own. */}
           <View style={ss.reminderCardTop}>
             <Text style={[ss.reminderCardTitle, {
               color: locked ? theme.textMuted : isEnabled ? theme.text : theme.textMuted,
               fontFamily: theme.quoteFontFamily,
             }]}>{title}</Text>
-            {locked ? (
-              <View style={[ss.proBadge, { backgroundColor: theme.gold + '22', borderColor: theme.gold + '55' }]}>
-                <Icon name="crown" size={10} color={theme.gold} style={{ marginRight: 3 }} />
-                <Text style={[ss.proBadgeText, { color: theme.gold, fontFamily: theme.uiFontFamily }]}>Pro</Text>
-              </View>
-            ) : (
-              <Text style={[ss.reminderCardTime, { color: isEnabled ? theme.gold : theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-                {timeLabel}
-              </Text>
-            )}
+            <Text style={[ss.reminderCardTime, {
+              color: !locked && isEnabled ? theme.gold : theme.textMuted,
+              fontFamily: theme.uiFontFamily,
+            }]}>
+              {timeLabel}
+            </Text>
           </View>
 
           {/* Bottom row: count+days + toggle/lock */}
@@ -748,15 +745,6 @@ const ss = StyleSheet.create({
   reminderCardMeta: { flexDirection: 'row', alignItems: 'center' },
   reminderCardCount: { fontSize: 15, fontWeight: '700' },
   reminderCardDays: { fontSize: 13 },
-  proBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  proBadgeText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
 
   // ── Edit card ──────────────────────────────────────────────────────────
   editCard: {

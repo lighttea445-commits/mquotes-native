@@ -269,6 +269,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     minHeight: 56,
     paddingHorizontal: 16,
+    paddingVertical: 16,
     borderRadius: 16,
     borderWidth: 1,
     gap: 12,
@@ -283,6 +284,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     minHeight: 56,
     paddingHorizontal: 16,
+    paddingVertical: 16,
     borderRadius: 16,
     borderWidth: 1,
     gap: 12,
@@ -292,6 +294,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     minHeight: 56,
     paddingHorizontal: 16,
+    paddingVertical: 16,
     borderRadius: 16,
     borderWidth: 1,
     gap: 12,
@@ -305,6 +308,7 @@ const styles = StyleSheet.create({
   // the track, which reads as the knob sitting short of the card's edge next
   // to the flush chevrons on menuItem rows. Pull it back so both line up.
   switch: {
+    alignSelf: 'center',
     marginRight: -8,
   },
 });

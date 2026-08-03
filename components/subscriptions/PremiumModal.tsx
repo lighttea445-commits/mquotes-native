@@ -8,23 +8,27 @@ import {
   Animated,
   ScrollView,
   Platform,
+  Dimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon } from '../ui/Icon';
 import { useTheme } from '../../hooks/useTheme';
+import { FONTS } from '../../constants/fonts';
+import { GUTTER, SPACE } from '../ui/tokens';
+
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 const BENEFITS = [
-  { icon: 'history', label: 'Unlimited Quote History', desc: 'Every quote you read, saved forever' },
-  { icon: 'playlist-music', label: 'Unlimited Mixes', desc: 'Combine any topics into a custom feed' },
-  { icon: 'palette-outline', label: 'All Themes Unlocked', desc: 'Every color theme and visual style' },
-  { icon: 'shape-outline', label: 'All Topics Unlocked', desc: 'Access every quote category' },
-  { icon: 'pencil-outline', label: 'Write Your Own Quotes', desc: 'Add personal quotes to your collection' },
+  { icon: 'palette-outline', label: 'All 18 Themes', desc: 'From soft minimal to deep dark, find your reading mood' },
+  { icon: 'history', label: 'Full Quote History', desc: "Every quote you've ever read, always within reach" },
+  { icon: 'pencil-outline', label: 'Write Your Own Quotes', desc: "Add your own words alongside the world's greatest thinkers" },
+  { icon: 'compass-outline', label: 'Every Topic Unlocked', desc: 'Follow every category, from wisdom to freedom, with no limits' },
   // Android only. On iOS the widget's appearance is configured in Apple's Edit
   // Widget panel, which cannot be gated per-entitlement, so those settings are
   // free there — advertising them as Pro would be inaccurate.
   ...(Platform.OS === 'ios'
     ? []
-    : [{ icon: 'view-grid-outline', label: 'Widget Editor', desc: 'Customize widget category, refresh rate & text size' }]),
+    : [{ icon: 'view-grid-outline', label: 'Widget Editor', desc: 'Customize your widget: category, refresh rate & text size' }]),
 ];
 
 interface PremiumModalProps {
@@ -36,7 +40,7 @@ export function PremiumModal({ visible, onClose }: PremiumModalProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const [rendered, setRendered] = useState(false);
-  const translateY = useRef(new Animated.Value(600)).current;
+  const translateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const backdropOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -45,14 +49,14 @@ export function PremiumModal({ visible, onClose }: PremiumModalProps) {
     } else if (rendered) {
       Animated.parallel([
         Animated.timing(backdropOpacity, { toValue: 0, duration: 280, useNativeDriver: true }),
-        Animated.timing(translateY, { toValue: 600, duration: 320, useNativeDriver: true }),
+        Animated.timing(translateY, { toValue: SCREEN_HEIGHT, duration: 320, useNativeDriver: true }),
       ]).start(() => setRendered(false));
     }
   }, [visible]);
 
   useEffect(() => {
     if (rendered) {
-      translateY.setValue(600);
+      translateY.setValue(SCREEN_HEIGHT);
       backdropOpacity.setValue(0);
       Animated.parallel([
         Animated.timing(backdropOpacity, { toValue: 1, duration: 260, useNativeDriver: true }),
@@ -70,70 +74,68 @@ export function PremiumModal({ visible, onClose }: PremiumModalProps) {
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
       </Animated.View>
 
-      {/* Sheet */}
+      {/* Sheet — full height, flush with the top of the screen */}
       <Animated.View
         style={[
           styles.sheet,
           { backgroundColor: theme.background, paddingBottom: insets.bottom + 16, transform: [{ translateY }] },
         ]}
       >
-        {/* Drag pill */}
-        <View style={[styles.pill, { backgroundColor: theme.border }]} />
-
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={[styles.crownWrap, { backgroundColor: `${theme.gold}1F` }]}>
-            <Icon name="crown" size={36} color={theme.gold} />
-          </View>
-          <Text style={[styles.congrats, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
-            Congrats!
-          </Text>
-          <Text style={[styles.subtitle, { color: theme.gold, fontFamily: theme.uiFontFamily }]}>
-            You're a Premium member
-          </Text>
+        {/* Close */}
+        <View style={[styles.topRow, { paddingTop: insets.top + SPACE.sm }]}>
+          <Pressable
+            onPress={onClose}
+            hitSlop={12}
+            style={[styles.closeBtn, { backgroundColor: theme.surface }]}
+            accessibilityRole="button"
+            accessibilityLabel="Close"
+          >
+            <Icon name="close" size={20} color={theme.textMuted} />
+          </Pressable>
         </View>
 
-        {/* Benefits */}
         <ScrollView
           style={styles.scroll}
-          contentContainerStyle={styles.benefitsList}
+          contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {BENEFITS.map((b) => (
-            <View
-              key={b.icon}
-              style={[
-                styles.benefitRow,
-                { backgroundColor: theme.surfaceElevated, shadowColor: theme.gold },
-              ]}
-            >
-              <View style={[styles.benefitIcon, { backgroundColor: `${theme.gold}20` }]}>
-                <Icon name={b.icon as any} size={22} color={theme.gold} />
-              </View>
-              <View style={styles.benefitText}>
-                <Text style={[styles.benefitLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
-                  {b.label}
-                </Text>
-                <Text style={[styles.benefitDesc, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-                  {b.desc}
-                </Text>
-              </View>
-              <View style={[styles.benefitCheck, { backgroundColor: theme.gold }]}>
-                <Icon name="check" size={12} color={theme.background} />
-              </View>
+          {/* Header */}
+          <View style={styles.header}>
+            <View style={[styles.crownWrap, { backgroundColor: `${theme.gold}1F` }]}>
+              <Icon name="crown" size={36} color={theme.gold} />
             </View>
-          ))}
-        </ScrollView>
+            <Text style={[styles.congrats, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
+              Congrats!
+            </Text>
+            <Text style={[styles.subtitle, { color: theme.gold, fontFamily: theme.uiFontFamily }]}>
+              You're a Premium member
+            </Text>
+          </View>
 
-        {/* Close button */}
-        <Pressable
-          style={[styles.closeBtn, { backgroundColor: theme.text }]}
-          onPress={onClose}
-        >
-          <Text style={[styles.closeBtnText, { color: theme.background, fontFamily: theme.uiFontFamily }]}>
-            Okay
-          </Text>
-        </Pressable>
+          {/* Benefits — flush list with hairline dividers, no card chrome */}
+          <View style={styles.benefitsList}>
+            {BENEFITS.map((b, i) => (
+              <View
+                key={b.icon}
+                style={[
+                  styles.benefitRow,
+                  i < BENEFITS.length - 1 && { borderBottomWidth: 1, borderBottomColor: theme.border },
+                ]}
+              >
+                <Icon name={b.icon as any} size={22} color={theme.gold} />
+                <View style={styles.benefitText}>
+                  <Text style={[styles.benefitLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
+                    {b.label}
+                  </Text>
+                  <Text style={[styles.benefitDesc, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+                    {b.desc}
+                  </Text>
+                </View>
+                <Icon name="check" size={16} color={theme.gold} />
+              </View>
+            ))}
+          </View>
+        </ScrollView>
       </Animated.View>
     </Modal>
   );
@@ -145,30 +147,32 @@ const styles = StyleSheet.create({
   },
   sheet: {
     position: 'absolute',
+    top: 0,
     bottom: 0,
     left: 0,
     right: 0,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingTop: 12,
-    paddingHorizontal: 20,
-    maxHeight: '88%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 20,
-    elevation: 24,
   },
-  pill: {
+  topRow: {
+    paddingHorizontal: GUTTER,
+    paddingBottom: SPACE.sm,
+  },
+  closeBtn: {
     width: 36,
-    height: 4,
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginBottom: 20,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  scroll: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingHorizontal: GUTTER,
+    paddingBottom: SPACE.lg,
   },
   header: {
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: SPACE.xl,
   },
   crownWrap: {
     width: 72,
@@ -180,65 +184,34 @@ const styles = StyleSheet.create({
   },
   congrats: {
     fontSize: 28,
-    fontWeight: '700',
+    fontFamily: FONTS.display.bold,
+    lineHeight: 34,
+    includeFontPadding: false,
     marginBottom: 4,
   },
   subtitle: {
     fontSize: 15,
     fontWeight: '600',
   },
-  scroll: {
-    flexGrow: 0,
-  },
   benefitsList: {
-    gap: 10,
-    paddingBottom: 4,
+    paddingTop: SPACE.xs,
   },
   benefitRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    borderRadius: 18,
-    gap: 14,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  benefitIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
+    paddingVertical: SPACE.lg,
+    gap: SPACE.md,
   },
   benefitText: {
     flex: 1,
     gap: 2,
   },
   benefitLabel: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
   },
   benefitDesc: {
     fontSize: 12,
     lineHeight: 16,
-  },
-  benefitCheck: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  closeBtn: {
-    marginTop: 16,
-    paddingVertical: 15,
-    borderRadius: 16,
-    alignItems: 'center',
-  },
-  closeBtnText: {
-    fontSize: 16,
-    fontWeight: '600',
   },
 });
