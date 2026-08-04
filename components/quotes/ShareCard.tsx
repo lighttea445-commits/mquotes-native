@@ -53,6 +53,9 @@ export const ShareCard = forwardRef<View, Props>(({ quote, author, theme, size, 
         }}
       >
         <Text
+          adjustsFontSizeToFit
+          minimumFontScale={0.5}
+          numberOfLines={12}
           style={{
             color: theme.text,
             fontFamily: theme.quoteFontFamily,
