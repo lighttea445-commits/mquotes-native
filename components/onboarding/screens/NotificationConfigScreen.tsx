@@ -1,16 +1,14 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  PanResponder,
   Platform,
   Modal,
   ScrollView,
   AppState,
   Linking,
-  LayoutChangeEvent,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -24,8 +22,6 @@ import { OB, ON_GOLD } from '../tokens';
 
 const MIN_COUNT = 0;
 const MAX_COUNT = 20;
-/** Slider knob diameter — also halved to centre it on the fill. */
-const THUMB = 18;
 
 export interface NotificationConfig {
   count: number;
@@ -58,7 +54,7 @@ function dateToHHMM(d: Date): string {
 }
 
 /**
- * Count slider + delivery window.
+ * Count stepper + delivery window.
  *
  * Deliberately lighter than the in-app `NotificationsScreen`, which is a
  * four-card surface with drill-downs and Pro gating — but backed by the same
@@ -86,19 +82,13 @@ export function NotificationConfigScreen({ onSave, onSkip, next, back, progress 
    * button has to say so rather than silently doing nothing.
    */
   const [canAsk, setCanAsk] = useState(true);
-  const [trackWidth, setTrackWidth] = useState(0);
   const [picker, setPicker] = useState<null | 'start' | 'end'>(null);
   const [tempDate, setTempDate] = useState<Date>(new Date());
-
-  // PanResponder reads these through refs so the gesture closure never goes stale.
-  const widthRef = useRef(0);
-  const countRef = useRef(value.count);
-  countRef.current = value.count;
 
   const onChange = setValue;
 
   // Refs so the AppState listener (subscribed once) always sees the latest
-  // values without re-subscribing on every slider/time change.
+  // values without re-subscribing on every count/time change.
   const valueRef = useRef(value);
   valueRef.current = value;
   const onSaveRef = useRef(onSave);
@@ -162,43 +152,18 @@ export function NotificationConfigScreen({ onSave, onSkip, next, back, progress 
 
   const setCount = useCallback(
     (n: number) => {
-      const clamped = Math.max(MIN_COUNT, Math.min(MAX_COUNT, Math.round(n)));
-      if (clamped !== countRef.current) {
-        countRef.current = clamped;
+      const clamped = Math.max(MIN_COUNT, Math.min(MAX_COUNT, n));
+      setValue((v) => {
+        if (clamped === v.count) return v;
         haptics.selection();
-        setValue((v) => ({ ...v, count: clamped }));
-      }
+        return { ...v, count: clamped };
+      });
     },
     [haptics],
   );
 
-  const pan = useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponder: () => true,
-        // The track sits inside a ScrollView, which would otherwise claim the
-        // gesture the moment the drag picks up any vertical component.
-        onStartShouldSetPanResponderCapture: () => true,
-        onMoveShouldSetPanResponderCapture: () => true,
-        onPanResponderTerminationRequest: () => false,
-        onPanResponderGrant: (e) => {
-          if (!widthRef.current) return;
-          setCount((e.nativeEvent.locationX / widthRef.current) * MAX_COUNT);
-        },
-        onPanResponderMove: (e) => {
-          if (!widthRef.current) return;
-          setCount((e.nativeEvent.locationX / widthRef.current) * MAX_COUNT);
-        },
-      }),
-    [setCount],
-  );
-
-  const onTrackLayout = (e: LayoutChangeEvent) => {
-    const w = e.nativeEvent.layout.width;
-    widthRef.current = w;
-    setTrackWidth(w);
-  };
+  const decrementCount = useCallback(() => setCount(value.count - 1), [setCount, value.count]);
+  const incrementCount = useCallback(() => setCount(value.count + 1), [setCount, value.count]);
 
   const commitPicker = (d: Date) => {
     const hhmm = dateToHHMM(d);
@@ -209,8 +174,6 @@ export function NotificationConfigScreen({ onSave, onSkip, next, back, progress 
     setTempDate(hhmmToDate(which === 'start' ? value.startTime : value.endTime));
     setPicker(which);
   };
-
-  const fillWidth = trackWidth * (value.count / MAX_COUNT);
 
   return (
     <View style={[nc.root, { backgroundColor: theme.background }]}>
@@ -246,44 +209,46 @@ export function NotificationConfigScreen({ onSave, onSkip, next, back, progress 
             </View>
           </View>
 
-          {/* Count slider */}
+          {/* Count stepper */}
           <View style={[nc.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             <View style={nc.cardRow}>
               <Text style={[nc.cardLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
                 How many
               </Text>
-              <Text style={[nc.cardValue, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
-                {value.count}x
-              </Text>
-            </View>
-
-            <View
-              style={nc.trackHit}
-              onLayout={onTrackLayout}
-              {...pan.panHandlers}
-              accessibilityRole="adjustable"
-              accessibilityLabel="Quotes per day"
-              accessibilityValue={{ min: MIN_COUNT, max: MAX_COUNT, now: value.count }}
-            >
-              <View style={[nc.track, { backgroundColor: theme.background }]}>
-                <View style={[nc.trackFill, { width: fillWidth, backgroundColor: theme.gold }]} />
-              </View>
               <View
-                style={[
-                  nc.thumb,
-                  { left: Math.max(0, fillWidth - THUMB / 2), backgroundColor: theme.gold },
-                ]}
-                pointerEvents="none"
-              />
-            </View>
-
-            <View style={nc.cardRow}>
-              <Text style={[nc.bound, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-                {MIN_COUNT}
-              </Text>
-              <Text style={[nc.bound, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-                {MAX_COUNT}
-              </Text>
+                style={nc.stepper}
+                accessibilityRole="adjustable"
+                accessibilityLabel="Quotes per day"
+                accessibilityValue={{ min: MIN_COUNT, max: MAX_COUNT, now: value.count }}
+              >
+                <TouchableOpacity
+                  onPress={decrementCount}
+                  disabled={value.count <= MIN_COUNT}
+                  hitSlop={8}
+                  style={[
+                    nc.stepBtn,
+                    { backgroundColor: theme.background },
+                    value.count <= MIN_COUNT && nc.stepBtnDisabled,
+                  ]}
+                >
+                  <Text style={[nc.stepBtnText, { color: theme.text }]}>−</Text>
+                </TouchableOpacity>
+                <Text style={[nc.stepValue, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
+                  {value.count}x
+                </Text>
+                <TouchableOpacity
+                  onPress={incrementCount}
+                  disabled={value.count >= MAX_COUNT}
+                  hitSlop={8}
+                  style={[
+                    nc.stepBtn,
+                    { backgroundColor: theme.background },
+                    value.count >= MAX_COUNT && nc.stepBtnDisabled,
+                  ]}
+                >
+                  <Text style={[nc.stepBtnText, { color: theme.text }]}>+</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
 
@@ -397,13 +362,12 @@ const nc = StyleSheet.create({
   card: { borderRadius: 16, borderWidth: 1, paddingHorizontal: 20, paddingVertical: 18 },
   cardRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   cardLabel: { fontSize: 12 },
-  cardValue: { fontSize: 12, fontWeight: '600' },
-  bound: { fontSize: 10 },
 
-  trackHit: { height: 30, justifyContent: 'center', marginVertical: 10 },
-  track: { height: 4, borderRadius: 2, overflow: 'hidden' },
-  trackFill: { height: 4, borderRadius: 2 },
-  thumb: { position: 'absolute', width: THUMB, height: THUMB, borderRadius: THUMB / 2 },
+  stepper: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  stepBtn: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  stepBtnDisabled: { opacity: 0.35 },
+  stepBtnText: { fontSize: 16, fontWeight: '600', lineHeight: 18 },
+  stepValue: { fontSize: 12, fontWeight: '600', minWidth: 26, textAlign: 'center' },
 
   timeRow: {
     flexDirection: 'row',
