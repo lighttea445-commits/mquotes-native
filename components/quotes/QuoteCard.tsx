@@ -15,6 +15,7 @@ import Animated, {
   withSpring,
   withSequence,
   withDelay,
+  withRepeat,
   runOnJS,
   Easing,
 } from 'react-native-reanimated';
@@ -100,6 +101,34 @@ export function QuoteCard() {
   }, [chromeHidden, chromeOpacity]);
 
   const chromeStyle = useAnimatedStyle(() => ({ opacity: chromeOpacity.value }));
+
+  // Swipe-up hint — a bouncing arrow, no text, shown only until the user's
+  // first swipe during the stripped-down post-onboarding window.
+  const [hasSwiped, setHasSwiped] = useState(false);
+  const showSwipeHint = chromeHidden && !hasSwiped;
+  const swipeHintOpacity = useSharedValue(0);
+  const swipeHintTranslateY = useSharedValue(0);
+
+  useEffect(() => {
+    if (showSwipeHint) {
+      swipeHintOpacity.value = withDelay(600, withTiming(1, { duration: 400 }));
+      swipeHintTranslateY.value = withRepeat(
+        withSequence(
+          withTiming(-14, { duration: 650, easing: Easing.out(Easing.quad) }),
+          withTiming(0, { duration: 650, easing: Easing.in(Easing.quad) }),
+        ),
+        -1,
+        false,
+      );
+    } else {
+      swipeHintOpacity.value = withTiming(0, { duration: 250 });
+    }
+  }, [showSwipeHint, swipeHintOpacity, swipeHintTranslateY]);
+
+  const swipeHintStyle = useAnimatedStyle(() => ({
+    opacity: swipeHintOpacity.value,
+    transform: [{ translateY: swipeHintTranslateY.value }],
+  }));
 
   // Counts each distinct quote as it lands, including the first.
   const countedRef = useRef<string | null>(null);
@@ -273,6 +302,7 @@ export function QuoteCard() {
   };
 
   const goNext = useCallback(() => {
+    setHasSwiped(true);
     const nextIdx = currentIndex + 1;
     if (nextIdx >= buffer.length - 3) prefetchMore();
     if (nextIdx >= buffer.length) { loadQuotes(); return; }
@@ -297,6 +327,7 @@ export function QuoteCard() {
 
   const goPrev = useCallback(() => {
     if (currentIndex <= 0) return;
+    setHasSwiped(true);
     if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     animateOut('down', () => {
       setCurrentIndex(prev => prev - 1);
@@ -550,6 +581,16 @@ export function QuoteCard() {
           </View>
         </Animated.View>
 
+        {/* ── SWIPE-UP HINT: bouncing arrow, no text, shown until the first swipe ── */}
+        {showSwipeHint && (
+          <Animated.View
+            style={[styles.swipeHint, { bottom: BTN_BOTTOM + 16 }, swipeHintStyle]}
+            pointerEvents="none"
+          >
+            <Icon name="chevron-up" size={30} color={theme.textMuted} />
+          </Animated.View>
+        )}
+
         {/* ── BOTTOM BAR: hidden until the first-run reveal ── */}
         <Animated.View
           style={[StyleSheet.absoluteFill, chromeStyle]}
@@ -751,6 +792,14 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  // Swipe-up hint — centered, bottom applied inline (dynamic safe-area offset)
+  swipeHint: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
     alignItems: 'center',
   },
 
