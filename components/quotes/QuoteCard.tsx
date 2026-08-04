@@ -364,13 +364,15 @@ export function QuoteCard() {
       }
     });
 
-  // Long-press on the quote text opens the share sheet — a faster path than
-  // reaching for the share icon. Runs simultaneously with the pan gesture so
-  // it doesn't block swiping.
+  // Long-press anywhere on the quote screen (the quote text or the empty
+  // space around it) opens the share sheet — a faster path than reaching for
+  // the share icon. Composed with the pan gesture so a hold doesn't block a
+  // swipe, and vice versa.
   const longPressGesture = Gesture.LongPress()
     .minDuration(500)
-    .onStart(() => { runOnJS(handleShare)(); })
-    .simultaneousWithExternalGesture(panGesture);
+    .onStart(() => { runOnJS(handleShare)(); });
+
+  const composedGesture = Gesture.Simultaneous(panGesture, longPressGesture);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [
@@ -515,26 +517,24 @@ export function QuoteCard() {
         {/* ── QUOTE ONLY — this is what animates ── */}
         <Animated.View style={[styles.quoteAnimated, animatedStyle]}>
           <View style={[styles.quoteBody, { paddingBottom: QUOTE_BODY_PB }]}>
-            <GestureDetector gesture={longPressGesture}>
-              <View style={styles.quoteWrapper}>
-                <Text
-                  style={[styles.quoteText, { color: theme.text, fontFamily: theme.quoteFontFamily, fontSize: QUOTE_FONT_SIZE, lineHeight: QUOTE_LINE_HEIGHT }]}
-                  accessible={true}
-                  accessibilityRole="text"
-                  accessibilityLabel={`Quote by ${converted?.author ?? 'Unknown'}: ${converted?.text}`}
-                >
-                  {converted?.text}
+            <View style={styles.quoteWrapper}>
+              <Text
+                style={[styles.quoteText, { color: theme.text, fontFamily: theme.quoteFontFamily, fontSize: QUOTE_FONT_SIZE, lineHeight: QUOTE_LINE_HEIGHT }]}
+                accessible={true}
+                accessibilityRole="text"
+                accessibilityLabel={`Quote by ${converted?.author ?? 'Unknown'}: ${converted?.text}`}
+              >
+                {converted?.text}
+              </Text>
+              {showAuthor && converted?.author ? (
+                <Text style={[styles.authorText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+                  — {converted.author}
                 </Text>
-                {showAuthor && converted?.author ? (
-                  <Text style={[styles.authorText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-                    — {converted.author}
-                  </Text>
-                ) : null}
-                <Animated.View style={[styles.bigHeartOverlay, bigHeartAnimStyle]} pointerEvents="none">
-                  <Icon name="heart" size={180} color={favoriteColor} />
-                </Animated.View>
-              </View>
-            </GestureDetector>
+              ) : null}
+              <Animated.View style={[styles.bigHeartOverlay, bigHeartAnimStyle]} pointerEvents="none">
+                <Icon name="heart" size={180} color={favoriteColor} />
+              </Animated.View>
+            </View>
             <View style={styles.actionRow}>
               <TouchableOpacity onPress={handleShare} hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}>
                 <Icon name="share-variant" size={32} color={theme.textMuted} />
@@ -582,7 +582,7 @@ export function QuoteCard() {
 
   return (
     <>
-      <GestureDetector gesture={panGesture}>
+      <GestureDetector gesture={composedGesture}>
         {containerContent}
       </GestureDetector>
       <PremiumModal visible={showPremiumModal} onClose={() => setShowPremiumModal(false)} />
