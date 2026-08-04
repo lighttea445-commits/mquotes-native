@@ -18,6 +18,8 @@ import Animated, {
   withRepeat,
   runOnJS,
   Easing,
+  interpolate,
+  Extrapolate,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useRouter } from 'expo-router';
@@ -106,48 +108,46 @@ export function QuoteCard() {
   // first swipe during the stripped-down post-onboarding window.
   const [hasSwiped, setHasSwiped] = useState(false);
   const showSwipeHint = chromeHidden && !hasSwiped;
-  const swipeHintOpacity = useSharedValue(0);
-  const swipeHintTranslateY = useSharedValue(0);
+  // A single driver for both opacity and position — two independent
+  // withRepeat loops can drift a frame apart on restart, which showed up as
+  // the hint reappearing mid-air before snapping down to the bottom.
+  const swipeHintProgress = useSharedValue(0);
+  const FADE_IN_MS = 400;
+  const RISE_MS = 1100;
+  const HOLD_MS = 400;
+  const CYCLE_MS = FADE_IN_MS + RISE_MS + HOLD_MS;
 
   useEffect(() => {
     if (showSwipeHint) {
-      // Appears at the bottom, rises while fading out, then snaps back to
-      // the bottom (opacity 0) to fade in again — reads as continuous
-      // upward motion rather than a bounce.
-      swipeHintOpacity.value = withDelay(
+      // Appears at the bottom, rises while fading out, holds invisible,
+      // then snaps back to the bottom to fade in again.
+      swipeHintProgress.value = withDelay(
         600,
         withRepeat(
           withSequence(
-            withTiming(1, { duration: 400, easing: Easing.out(Easing.quad) }),
-            withTiming(0, { duration: 1100, easing: Easing.in(Easing.quad) }),
-            withTiming(0, { duration: 400 }),
-          ),
-          -1,
-          false,
-        ),
-      );
-      swipeHintTranslateY.value = withDelay(
-        600,
-        withRepeat(
-          withSequence(
+            withTiming(1, { duration: CYCLE_MS, easing: Easing.linear }),
             withTiming(0, { duration: 0 }),
-            withTiming(0, { duration: 400 }),
-            withTiming(-20, { duration: 1100, easing: Easing.out(Easing.cubic) }),
-            withTiming(-20, { duration: 400 }),
           ),
           -1,
           false,
         ),
       );
     } else {
-      swipeHintOpacity.value = withTiming(0, { duration: 250 });
+      swipeHintProgress.value = withTiming(0, { duration: 250 });
     }
-  }, [showSwipeHint, swipeHintOpacity, swipeHintTranslateY]);
+  }, [showSwipeHint, swipeHintProgress]);
 
-  const swipeHintStyle = useAnimatedStyle(() => ({
-    opacity: swipeHintOpacity.value,
-    transform: [{ translateY: swipeHintTranslateY.value }],
-  }));
+  const swipeHintStyle = useAnimatedStyle(() => {
+    const p = swipeHintProgress.value;
+    const fadeInEnd = FADE_IN_MS / CYCLE_MS;
+    const riseEnd = (FADE_IN_MS + RISE_MS) / CYCLE_MS;
+    return {
+      opacity: interpolate(p, [0, fadeInEnd, riseEnd, 1], [0, 1, 0, 0], Extrapolate.CLAMP),
+      transform: [
+        { translateY: interpolate(p, [0, fadeInEnd, riseEnd, 1], [0, 0, -20, -20], Extrapolate.CLAMP) },
+      ],
+    };
+  });
 
   // Counts each distinct quote as it lands, including the first.
   const countedRef = useRef<string | null>(null);
