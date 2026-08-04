@@ -118,8 +118,9 @@ export function QuoteCard() {
         600,
         withRepeat(
           withSequence(
-            withTiming(1, { duration: 220, easing: Easing.out(Easing.quad) }),
-            withTiming(0, { duration: 480, easing: Easing.in(Easing.quad) }),
+            withTiming(1, { duration: 400, easing: Easing.out(Easing.quad) }),
+            withTiming(0, { duration: 1100, easing: Easing.in(Easing.quad) }),
+            withTiming(0, { duration: 400 }),
           ),
           -1,
           false,
@@ -130,8 +131,9 @@ export function QuoteCard() {
         withRepeat(
           withSequence(
             withTiming(0, { duration: 0 }),
-            withTiming(0, { duration: 220 }),
-            withTiming(-20, { duration: 480, easing: Easing.out(Easing.cubic) }),
+            withTiming(0, { duration: 400 }),
+            withTiming(-20, { duration: 1100, easing: Easing.out(Easing.cubic) }),
+            withTiming(-20, { duration: 400 }),
           ),
           -1,
           false,
