@@ -111,14 +111,31 @@ export function QuoteCard() {
 
   useEffect(() => {
     if (showSwipeHint) {
-      swipeHintOpacity.value = withDelay(600, withTiming(1, { duration: 400 }));
-      swipeHintTranslateY.value = withRepeat(
-        withSequence(
-          withTiming(-14, { duration: 650, easing: Easing.out(Easing.quad) }),
-          withTiming(0, { duration: 650, easing: Easing.in(Easing.quad) }),
+      // Appears at the bottom, rises while fading out, then snaps back to
+      // the bottom (opacity 0) to fade in again — reads as continuous
+      // upward motion rather than a bounce.
+      swipeHintOpacity.value = withDelay(
+        600,
+        withRepeat(
+          withSequence(
+            withTiming(1, { duration: 220, easing: Easing.out(Easing.quad) }),
+            withTiming(0, { duration: 480, easing: Easing.in(Easing.quad) }),
+          ),
+          -1,
+          false,
         ),
-        -1,
-        false,
+      );
+      swipeHintTranslateY.value = withDelay(
+        600,
+        withRepeat(
+          withSequence(
+            withTiming(0, { duration: 0 }),
+            withTiming(0, { duration: 220 }),
+            withTiming(-20, { duration: 480, easing: Easing.out(Easing.cubic) }),
+          ),
+          -1,
+          false,
+        ),
       );
     } else {
       swipeHintOpacity.value = withTiming(0, { duration: 250 });
