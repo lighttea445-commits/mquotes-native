@@ -141,12 +141,23 @@ export function QuoteCard() {
     const p = swipeHintProgress.value;
     const fadeInEnd = FADE_IN_MS / CYCLE_MS;
     const riseEnd = (FADE_IN_MS + RISE_MS) / CYCLE_MS;
-    return {
-      opacity: interpolate(p, [0, fadeInEnd, riseEnd, 1], [0, 1, 0, 0], Extrapolate.CLAMP),
-      transform: [
-        { translateY: interpolate(p, [0, fadeInEnd, riseEnd, 1], [0, 0, -20, -20], Extrapolate.CLAMP) },
-      ],
-    };
+
+    let opacity = 0;
+    let translateY = 0;
+    if (p <= fadeInEnd) {
+      opacity = interpolate(p, [0, fadeInEnd], [0, 1], Extrapolate.CLAMP);
+    } else if (p <= riseEnd) {
+      // Ease-in on the rise itself — the arrow starts moving slowly and
+      // picks up speed, rather than rising at a constant rate.
+      const t = interpolate(p, [fadeInEnd, riseEnd], [0, 1], Extrapolate.CLAMP);
+      const eased = Easing.in(Easing.cubic)(t);
+      opacity = 1 - t;
+      translateY = -20 * eased;
+    } else {
+      translateY = -20;
+    }
+
+    return { opacity, transform: [{ translateY }] };
   });
 
   // Counts each distinct quote as it lands, including the first.
