@@ -1,7 +1,7 @@
 import React from 'react';
 import Svg, { G, Path, Rect, Circle, Text as SvgText } from 'react-native-svg';
-import { Sparkle } from './primitives';
 import { strokeFor } from '../../art/primitives';
+import { Bell } from '../../art/Bell';
 
 interface Props {
   size?: number;
@@ -83,37 +83,11 @@ export function PhoneReminder({ size = 200, color, time = '11:11', fontFamily }:
         />
       </G>
 
-      {/* Bell, overlapping the lower left of the handset */}
-      <G transform="rotate(-20, 62, 128)">
-        <Path
-          d="M 55 92 C 54 85, 66 85, 65 92"
-          stroke={color}
-          strokeWidth={STROKE * 1.5}
-          strokeLinecap="round"
-          fill="none"
-        />
-        <Path
-          d="M 34 146 C 34 122, 41 104, 60 92 C 79 104, 86 122, 86 146"
-          stroke={color}
-          strokeWidth={STROKE * 1.5}
-          strokeLinecap="round"
-          fill="none"
-        />
-        <Path
-          d="M 28 146 C 45 153, 75 153, 92 146"
-          stroke={color}
-          strokeWidth={STROKE * 1.5}
-          strokeLinecap="round"
-          fill="none"
-        />
-        <Circle cx={60} cy={158} r={6.5} stroke={color} strokeWidth={STROKE * 1.5} fill="none" />
+      {/* Bell, overlapping the lower left of the handset — same mark used on
+          the Reminders tile and the onboarding notification screen. */}
+      <G transform="rotate(-80, 62, 128) translate(5.5, 71.5)">
+        <Bell size={113} color={color} />
       </G>
-
-      <Sparkle x={38} y={58} r={6} color={color} />
-      <Sparkle x={168} y={40} r={5} color={color} opacity={0.85} />
-      <Sparkle x={178} y={128} r={6.5} color={color} opacity={0.9} />
-      <Sparkle x={22} y={104} r={4} color={color} opacity={0.7} />
-      <Sparkle x={152} y={176} r={4.5} color={color} opacity={0.7} />
     </Svg>
   );
 }

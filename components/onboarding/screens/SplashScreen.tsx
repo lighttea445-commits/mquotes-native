@@ -4,8 +4,6 @@ import { View, Text, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../../hooks/useTheme';
 import { ContinueButton } from '../ContinueButton';
-import Svg from 'react-native-svg';
-import { Sparkle } from '../art/primitives';
 import { ReviewCarousel, type Review } from '../ReviewCarousel';
 import { OB } from '../tokens';
 
@@ -51,11 +49,6 @@ export function SplashScreen({ next }: Props) {
               <Image source={require('../../../assets/icon.png')}
                      style={{ width: 170, height: 170 }} resizeMode="contain" /> */}
           <View style={sp.markBox}>
-            <Svg style={StyleSheet.absoluteFill} viewBox="0 0 300 120">
-              <Sparkle x={26} y={30} r={13} color={theme.text} />
-              <Sparkle x={278} y={64} r={7} color={theme.text} opacity={0.9} />
-              <Sparkle x={44} y={98} r={5} color={theme.text} opacity={0.6} />
-            </Svg>
             <Text
               numberOfLines={1}
               adjustsFontSizeToFit

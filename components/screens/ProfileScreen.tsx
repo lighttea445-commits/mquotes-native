@@ -177,7 +177,7 @@ export default function ProfileScreen({ onClose }: { onClose?: () => void }) {
                 >
                   {label}
                 </Text>
-                <Icon name={icon} size={24} color={theme.text} />
+                <Icon name={icon} size={28} color={theme.text} />
               </TouchableOpacity>
             ))}
           </View>
@@ -292,7 +292,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    minHeight: 64,
+    minHeight: 76,
     borderRadius: RADIUS.card,
     paddingHorizontal: SPACE.lg,
     paddingVertical: SPACE.md,
@@ -300,6 +300,6 @@ const styles = StyleSheet.create({
   },
   contentLabel: {
     flex: 1,
-    fontSize: 15,
+    fontSize: 17,
   },
 });

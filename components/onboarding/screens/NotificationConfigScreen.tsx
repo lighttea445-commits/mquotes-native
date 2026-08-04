@@ -17,7 +17,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { useTheme } from '../../../hooks/useTheme';
 import { useHaptics } from '../../../hooks/useHaptics';
 import { useAppStore } from '../../../store/useAppStore';
-import { canAskForPermissions } from '../../../lib/notifications';
+import { canAskForPermissions, getPermissionStatus } from '../../../lib/notifications';
 import { OnboardingHeader } from '../OnboardingHeader';
 import { ContinueButton } from '../ContinueButton';
 import { OB, ON_GOLD } from '../tokens';
@@ -97,12 +97,42 @@ export function NotificationConfigScreen({ onSave, onSkip, next, back, progress 
 
   const onChange = setValue;
 
-  // Re-checked on focus so returning from Settings flips the button back.
+  // Refs so the AppState listener (subscribed once) always sees the latest
+  // values without re-subscribing on every slider/time change.
+  const valueRef = useRef(value);
+  valueRef.current = value;
+  const onSaveRef = useRef(onSave);
+  onSaveRef.current = onSave;
+  const nextRef = useRef(next);
+  nextRef.current = next;
+  const advancedRef = useRef(false);
+
+  // Re-checked whenever the app comes back to the foreground — which is how
+  // returning from a Settings deep-link is detected. A grant found there
+  // persists the settings and moves straight to the next screen; anything
+  // else just flips the button between "Allow" and "Continue".
   useEffect(() => {
     let alive = true;
-    const check = () => canAskForPermissions().then((v) => alive && setCanAsk(v));
-    check();
-    const sub = AppState.addEventListener('change', (s) => s === 'active' && check());
+    const recheckCanAsk = () => canAskForPermissions().then((v) => alive && setCanAsk(v));
+    recheckCanAsk();
+
+    const sub = AppState.addEventListener('change', async (s) => {
+      if (s !== 'active' || advancedRef.current) return;
+      const status = await getPermissionStatus();
+      if (!alive) return;
+      if (status === 'granted') {
+        advancedRef.current = true;
+        setSaving(true);
+        try {
+          await onSaveRef.current(valueRef.current);
+        } finally {
+          if (alive) setSaving(false);
+        }
+        nextRef.current();
+        return;
+      }
+      recheckCanAsk();
+    });
     return () => {
       alive = false;
       sub.remove();
@@ -285,7 +315,7 @@ export function NotificationConfigScreen({ onSave, onSkip, next, back, progress 
         <View style={nc.footer}>
           <ContinueButton
             onPress={handleSave}
-            label={saving ? 'Asking…' : canAsk ? 'Allow' : 'Open Settings'}
+            label={saving ? 'Asking…' : canAsk ? 'Allow' : 'Continue'}
             disabled={saving}
           />
           <ContinueButton onPress={handleSkip} label="Skip" variant="ghost" disabled={saving} />

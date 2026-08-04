@@ -15,6 +15,7 @@ import * as StoreReview from 'expo-store-review';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Icon } from '../ui/Icon';
+import { SheetHeader } from '../ui/SheetHeader';
 import { useTheme } from '../../hooks/useTheme';
 import { useAppStore } from '../../store/useAppStore';
 import { useFavoritesStore } from '../../store/useFavoritesStore';
@@ -74,16 +75,7 @@ export default function SettingsScreen({ onClose, onBack }: { onClose?: () => vo
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={back} style={[styles.backBtn, { backgroundColor: theme.surface }]}>
-            <Icon name="arrow-left" size={20} color={theme.textMuted} />
-          </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: theme.text, fontFamily: theme.quoteFontFamily }]}>
-            Settings
-          </Text>
-          <View style={{ width: 36 }} />
-        </View>
+        <SheetHeader title="Settings" leading="back" onLeadingPress={back} />
 
         <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           {/* Name */}
@@ -235,25 +227,6 @@ export default function SettingsScreen({ onClose, onBack }: { onClose?: () => vo
 const styles = StyleSheet.create({
   root: { flex: 1 },
   safe: { flex: 1 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 8,
-  },
-  backBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-  },
   section: {
     paddingHorizontal: 16,
     marginBottom: 28,

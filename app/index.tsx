@@ -9,6 +9,7 @@ import { BottomSheet } from '../components/layout/BottomSheet';
 import { StreakBanner } from '../components/layout/StreakBanner';
 import { useStreak } from '../hooks/useStreak';
 import { useTheme } from '../hooks/useTheme';
+import { useAppStore, QUOTES_BEFORE_REVEAL } from '../store/useAppStore';
 import { ModalProvider, useModal } from '../contexts/ModalContext';
 import { useDeepLinkStore } from '../store/useDeepLinkStore';
 import type { WidgetInstanceConfig } from '../store/useWidgetStore';
@@ -33,6 +34,11 @@ function HomeScreenInner() {
   // True when switching between sheets (not a fresh open/close) — used to skip animations
   const isSwitching = previousSheet !== null;
   const { streakCount, weekData, showStreakBanner, dismissStreakBanner } = useStreak();
+  // Matches QuoteCard's first-run reveal — the streak card shouldn't drop in
+  // over the stripped-down post-onboarding screen before the user has
+  // scrolled through the staged quotes.
+  const quoteViews = useAppStore((s) => s.postOnboardingQuoteViews);
+  const chromeHidden = quoteViews !== undefined && quoteViews <= QUOTES_BEFORE_REVEAL;
 
   // ── Old-format widget tap fallback (Expo Router v6 / index route params) ──
   //
@@ -102,7 +108,7 @@ function HomeScreenInner() {
       </SafeAreaView>
 
       <StreakBanner
-        visible={showStreakBanner}
+        visible={showStreakBanner && !chromeHidden}
         streakCount={streakCount}
         weekData={weekData}
         onDismiss={dismissStreakBanner}

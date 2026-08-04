@@ -456,23 +456,25 @@ export function QuoteCard() {
           {/* Center: favorites progress nudge */}
           <View style={styles.topBarCenter}>
             {favorites.length < 5 && (
-              <View style={[styles.progressPill, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                <Icon name="heart" size={13} color={theme.gold} />
-                <Text style={[styles.progressText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-                  {progressNumerator}/{progressDenominator}
-                </Text>
-                <View style={styles.progressTrack}>
-                  <View
-                    style={[
-                      styles.progressFill,
-                      {
-                        backgroundColor: theme.gold,
-                        width: `${Math.round(progressFraction * 100)}%`,
-                      } as any,
-                    ]}
-                  />
+              <Animated.View style={chromeStyle} pointerEvents={chromeHidden ? 'none' : 'auto'}>
+                <View style={[styles.progressPill, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                  <Icon name="heart" size={13} color={theme.gold} />
+                  <Text style={[styles.progressText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+                    {progressNumerator}/{progressDenominator}
+                  </Text>
+                  <View style={styles.progressTrack}>
+                    <View
+                      style={[
+                        styles.progressFill,
+                        {
+                          backgroundColor: theme.gold,
+                          width: `${Math.round(progressFraction * 100)}%`,
+                        } as any,
+                      ]}
+                    />
+                  </View>
                 </View>
-              </View>
+              </Animated.View>
             )}
           </View>
 

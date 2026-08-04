@@ -92,7 +92,7 @@ export function NotificationPermissionScreen({
     }
   };
 
-  const primaryLabel = asking ? 'Asking…' : hardDenied ? 'Open Settings' : 'Allow';
+  const primaryLabel = asking ? 'Asking…' : hardDenied ? 'Continue' : 'Allow';
 
   return (
     <View style={[np.root, { backgroundColor: theme.background }]}>

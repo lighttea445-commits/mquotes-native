@@ -32,7 +32,7 @@ export function TrialPromiseScreen({ next, back, progress }: Props) {
         </View>
 
         <View style={tp.art}>
-          <PhoneReminder size={250} color={theme.gold} fontFamily={theme.quoteFontFamily} />
+          <PhoneReminder size={320} color={theme.gold} fontFamily={theme.quoteFontFamily} />
         </View>
 
         <ContinueButton onPress={next} label="Try it for free" />
@@ -47,5 +47,5 @@ const tp = StyleSheet.create({
   heads: { paddingHorizontal: OB.gutter, paddingTop: 20, paddingBottom: 24 },
   headline: { fontSize: 28, lineHeight: 36, textAlign: 'center' },
   subhead: { fontSize: 15, lineHeight: 21, textAlign: 'center', marginTop: 10 },
-  art: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  art: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingBottom: 40 },
 });

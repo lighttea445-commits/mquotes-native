@@ -182,6 +182,7 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
     headline: 'How have you been feeling lately, {name}?',
     subhead: 'Choose a mood to personalize your content',
     dataKey: 'mood',
+    skippable: true,
     options: [
       { value: 'awesome',  label: 'Awesome',  icon: 'emoticon-excited-outline' },
       { value: 'good',     label: 'Good',     icon: 'emoticon-happy-outline'   },
@@ -198,6 +199,7 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
     headline: "What's making you feel that way?",
     subhead: 'You can select more than one option',
     dataKey: 'moodReasons',
+    skippable: true,
     options: [
       { value: 'Family',  label: 'Family',  icon: 'home-heart'    },
       { value: 'Friends', label: 'Friends', icon: 'hand-heart'    },
@@ -334,6 +336,7 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
     headline: 'What do you want to improve?',
     subhead: 'Choose at least one to tailor your content so it resonates with you',
     dataKey: 'improveAreas',
+    skippable: true,
     options: [
       { value: 'Personal growth',   label: 'Personal growth'   },
       { value: 'Positive thinking', label: 'Positive thinking' },

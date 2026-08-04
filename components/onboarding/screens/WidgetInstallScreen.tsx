@@ -6,6 +6,7 @@ import { WidgetBridge } from '../../../modules/widget-bridge';
 import { ConfirmSheet } from '../../ui/ConfirmSheet';
 import { OnboardingHeader } from '../OnboardingHeader';
 import { ContinueButton } from '../ContinueButton';
+import { PhoneFrame } from '../art/PhoneFrame';
 import { OB } from '../tokens';
 
 interface Props {
@@ -54,20 +55,23 @@ export function WidgetInstallScreen({ next, back, progress }: Props) {
         </View>
 
         <View style={wg.art}>
-          <View style={[wg.phone, { borderColor: theme.border, backgroundColor: theme.surface }]}>
-            <View style={[wg.widget, { backgroundColor: theme.surfaceElevated }]}>
-              <Text
-                numberOfLines={3}
-                adjustsFontSizeToFit
-                style={[wg.widgetText, { color: theme.text, fontFamily: theme.quoteFontFamily }]}
-              >
-                Everything is fine.
-              </Text>
-            </View>
-            <View style={wg.appGrid}>
-              {Array.from({ length: 8 }).map((_, i) => (
-                <View key={i} style={[wg.appIcon, { backgroundColor: theme.text + '1a' }]} />
-              ))}
+          <View style={wg.phone}>
+            <PhoneFrame width={200} height={320} color={theme.text} style={StyleSheet.absoluteFill} />
+            <View style={wg.phoneContent}>
+              <View style={[wg.widget, { backgroundColor: theme.surfaceElevated }]}>
+                <Text
+                  numberOfLines={3}
+                  adjustsFontSizeToFit
+                  style={[wg.widgetText, { color: theme.text, fontFamily: theme.quoteFontFamily }]}
+                >
+                  Everything is fine.
+                </Text>
+              </View>
+              <View style={wg.appGrid}>
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <View key={i} style={[wg.appIcon, { backgroundColor: theme.text + '1a' }]} />
+                ))}
+              </View>
             </View>
           </View>
         </View>
@@ -107,8 +111,9 @@ const wg = StyleSheet.create({
   phone: {
     width: 200,
     height: 320,
-    borderRadius: 32,
-    borderWidth: 2,
+  },
+  phoneContent: {
+    flex: 1,
     padding: 16,
     alignItems: 'center',
   },

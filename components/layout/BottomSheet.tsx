@@ -19,7 +19,7 @@ const SHEET_TOP_GAP = 0;
 // already pads itself by the top safe-area inset, which stops exactly at the
 // bottom of the status bar — without this the close button sits flush against
 // the clock.
-export const SHEET_CONTENT_TOP = 14;
+const SHEET_CONTENT_TOP = 14;
 
 interface BottomSheetProps {
   visible: boolean;

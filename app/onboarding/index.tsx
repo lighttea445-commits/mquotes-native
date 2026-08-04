@@ -280,23 +280,6 @@ export default function OnboardingScreen() {
    */
   const handleThemeSelect = useCallback((id: string) => setLocalThemeId(id), []);
 
-  /**
-   * The paywall step renders TrialScreen inline, and its CTA buys through the
-   * store's own billing sheet. TrialScreen needs offerings to have something
-   * to sell, so skip the step outright if RevenueCat never becomes ready —
-   * with a timeout so a hung SDK can't trap the user near the end of the flow.
-   */
-  const onPaywallStep = ONBOARDING_STEPS[step].id === 'paywall';
-  useEffect(() => {
-    if (!onPaywallStep) return;
-    if (isInitialized) {
-      if (!offerings) next();
-      return;
-    }
-    const timer = setTimeout(next, 4000);
-    return () => clearTimeout(timer);
-  }, [onPaywallStep, isInitialized, offerings, next]);
-
   // ── Rendering ─────────────────────────────────────────────────────────────
 
   const current = ONBOARDING_STEPS[step];
@@ -441,8 +424,11 @@ export default function OnboardingScreen() {
         );
 
       case 'paywall':
-        // Skipped by the effect above when offerings never arrive.
-        return offerings ? <TrialScreen onContinue={next} onClose={next} /> : null;
+        // Always renders — the in-app paywall, not a RevenueCat-hosted screen.
+        // TrialScreen buys straight through native billing and degrades
+        // gracefully with no offerings (advertised fallback price, and moves
+        // on rather than dead-ending Continue if there's truly nothing to buy).
+        return <TrialScreen onContinue={next} onClose={next} />;
 
       case 'widget':
         // Last screen — no back button; returning would re-raise the paywall.
