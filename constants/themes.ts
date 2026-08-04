@@ -421,7 +421,7 @@ export const DEFAULT_THEME_ID = 'minimal';
 export const ONBOARDING_THEME_IDS = [
   'minimal',
   'seashore',
-  'ember',
+  'blush',
   'crescent',
   'botanical',
   'lunar',
