@@ -36,6 +36,7 @@ const MAP = {
   'check-circle-outline': 'circle-check',
   'chevron-left': 'chevron-left',
   'chevron-right': 'chevron-right',
+  'chevron-up': 'chevron-up',
   circle: 'circle',
   'circle-opacity': 'circle-half-2',
   'clock-outline': 'clock',
