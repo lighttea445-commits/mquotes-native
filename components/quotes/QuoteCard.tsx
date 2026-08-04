@@ -304,6 +304,12 @@ export function QuoteCard() {
     });
   }, [currentIndex]);
 
+  const handleShare = useCallback(() => {
+    if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setShareQuote(converted?.id ?? '', converted?.text ?? '', converted?.author ?? '');
+    modal ? modal.openSheet('share') : router.push('/share');
+  }, [converted, hapticsEnabled, setShareQuote, modal, router]);
+
   const handleFavorite = useCallback(() => {
     if (!converted) return;
     if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -357,6 +363,14 @@ export function QuoteCard() {
         opacity.value = withTiming(1, { duration: 120 });
       }
     });
+
+  // Long-press on the quote text opens the share sheet — a faster path than
+  // reaching for the share icon. Runs simultaneously with the pan gesture so
+  // it doesn't block swiping.
+  const longPressGesture = Gesture.LongPress()
+    .minDuration(500)
+    .onStart(() => { runOnJS(handleShare)(); })
+    .simultaneousWithExternalGesture(panGesture);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [
@@ -501,26 +515,28 @@ export function QuoteCard() {
         {/* ── QUOTE ONLY — this is what animates ── */}
         <Animated.View style={[styles.quoteAnimated, animatedStyle]}>
           <View style={[styles.quoteBody, { paddingBottom: QUOTE_BODY_PB }]}>
-            <View style={styles.quoteWrapper}>
-              <Text
-                style={[styles.quoteText, { color: theme.text, fontFamily: theme.quoteFontFamily, fontSize: QUOTE_FONT_SIZE, lineHeight: QUOTE_LINE_HEIGHT }]}
-                accessible={true}
-                accessibilityRole="text"
-                accessibilityLabel={`Quote by ${converted?.author ?? 'Unknown'}: ${converted?.text}`}
-              >
-                {converted?.text}
-              </Text>
-              {showAuthor && converted?.author ? (
-                <Text style={[styles.authorText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-                  — {converted.author}
+            <GestureDetector gesture={longPressGesture}>
+              <View style={styles.quoteWrapper}>
+                <Text
+                  style={[styles.quoteText, { color: theme.text, fontFamily: theme.quoteFontFamily, fontSize: QUOTE_FONT_SIZE, lineHeight: QUOTE_LINE_HEIGHT }]}
+                  accessible={true}
+                  accessibilityRole="text"
+                  accessibilityLabel={`Quote by ${converted?.author ?? 'Unknown'}: ${converted?.text}`}
+                >
+                  {converted?.text}
                 </Text>
-              ) : null}
-              <Animated.View style={[styles.bigHeartOverlay, bigHeartAnimStyle]} pointerEvents="none">
-                <Icon name="heart" size={180} color={favoriteColor} />
-              </Animated.View>
-            </View>
+                {showAuthor && converted?.author ? (
+                  <Text style={[styles.authorText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+                    — {converted.author}
+                  </Text>
+                ) : null}
+                <Animated.View style={[styles.bigHeartOverlay, bigHeartAnimStyle]} pointerEvents="none">
+                  <Icon name="heart" size={180} color={favoriteColor} />
+                </Animated.View>
+              </View>
+            </GestureDetector>
             <View style={styles.actionRow}>
-              <TouchableOpacity onPress={() => { if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShareQuote(converted?.id ?? '', converted?.text ?? '', converted?.author ?? ''); modal ? modal.openSheet('share') : router.push('/share'); }} hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}>
+              <TouchableOpacity onPress={handleShare} hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}>
                 <Icon name="share-variant" size={32} color={theme.textMuted} />
               </TouchableOpacity>
               <TouchableOpacity onPress={handleFavorite} hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}>
