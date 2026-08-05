@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Modal, View, Text, StyleSheet, ScrollView, Platform } from 'react-native';
+import { Modal, View, Text, StyleSheet, ScrollView } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { Icon } from '../ui/Icon';
 import { useTheme } from '../../hooks/useTheme';
@@ -19,12 +19,7 @@ const BENEFITS = [
   { icon: 'pencil-outline', label: 'Write Your Own Quotes', desc: "Add your own words alongside the world's greatest thinkers" },
   { icon: 'compass-outline', label: 'All categories unlocked', desc: 'Follow every category, from wisdom to freedom, with no limits' },
   { icon: 'bell-outline', label: 'Quote of the Day & Streak Reminder', desc: 'Daily reminders that keep your streak alive' },
-  // Android only. On iOS the widget's appearance is configured in Apple's Edit
-  // Widget panel, which cannot be gated per-entitlement, so those settings are
-  // free there — advertising them as Pro would be inaccurate.
-  ...(Platform.OS === 'ios'
-    ? []
-    : [{ icon: 'view-grid-outline', label: 'Widget Editor', desc: 'Customize your widget: category, refresh rate & text size' }]),
+  { icon: 'view-grid-outline', label: 'Widget Editor', desc: 'Customize your widget: category, refresh rate, text size & border' },
 ];
 
 interface PremiumModalProps {

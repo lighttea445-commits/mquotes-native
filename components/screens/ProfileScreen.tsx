@@ -5,7 +5,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  Platform,
   useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -56,17 +55,11 @@ export default function ProfileScreen({ onClose }: { onClose?: () => void }) {
   };
 
   /** Tiles mirror what the app can actually customise — no dead entries. */
-  const tiles: { label: string; art: ArtComponent; onPress: () => void; wide?: boolean }[] = [
+  const tiles: { label: string; art: ArtComponent; onPress: () => void }[] = [
     { label: 'Topics you follow', art: Cards,       onPress: () => go('topics', '/topics') },
     { label: 'Themes',            art: PhoneStack,  onPress: () => go('themes', '/themes') },
-    // Android only. iOS widgets are configured entirely in Apple's Edit Widget
-    // panel, so the in-app screen has nothing left to own.
-    ...(Platform.OS === 'ios'
-      ? []
-      : [{ label: 'Widgets', art: WidgetPhone, onPress: () => go('widgets', '/widgets') }]),
-    // Wide on iOS to balance the grid without a Widgets tile; Android has
-    // four tiles already, so Reminders stays a single square there.
-    { label: 'Reminders',         art: Bell,        onPress: () => go('notifications', '/notifications'), wide: Platform.OS === 'ios' },
+    { label: 'Widgets',           art: WidgetPhone, onPress: () => go('widgets', '/widgets') },
+    { label: 'Reminders',         art: Bell,        onPress: () => go('notifications', '/notifications') },
   ];
 
   const content: { label: string; icon: IconName; onPress: () => void }[] = [
@@ -128,20 +121,12 @@ export default function ProfileScreen({ onClose }: { onClose?: () => void }) {
           <Text style={[styles.sectionTitle, { color: theme.text }]}>Customize the app</Text>
 
           <View style={styles.grid}>
-            {tiles.map(({ label, art: Art, onPress, wide }) => (
+            {tiles.map(({ label, art: Art, onPress }) => (
               <TouchableOpacity
                 key={label}
                 style={[
                   styles.tile,
-                  {
-                    backgroundColor: theme.surface,
-                    // A wide tile spans both columns; fixing its height to one
-                    // column's width keeps it a 2:1 band rather than a very
-                    // tall square.
-                    width: wide ? TILE_W * 2 + GAP : TILE_W,
-                    aspectRatio: wide ? undefined : 1,
-                    height: wide ? TILE_W : undefined,
-                  },
+                  { backgroundColor: theme.surface, width: TILE_W, aspectRatio: 1 },
                 ]}
                 onPress={onPress}
                 activeOpacity={0.8}
