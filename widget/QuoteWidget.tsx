@@ -1,85 +1,20 @@
 import React from 'react';
-import { FlexWidget, TextWidget, ImageWidget, OverlapWidget } from 'react-native-android-widget';
+import { FlexWidget, TextWidget } from 'react-native-android-widget';
 import type { WidgetInfo } from 'react-native-android-widget';
 import type { WidgetInstanceConfig } from '../store/useWidgetStore';
 
-// ── Static image map — require() calls must be top-level for Metro ────────────
+// ── Widget appearance ─────────────────────────────────────────────────────────
+//
+// One fixed look, matching the app's Minimal theme. Themes used to select one of
+// eighteen palettes and a full-bleed photo background, but iOS discards widget
+// colours entirely in accented rendering, so the setting could never mean the
+// same thing on both platforms. The border is the one appearance control left,
+// and it is a stroke rather than a fill for the same reason.
 
-// Natural pixel dimensions of each source image (used for cover-crop math).
-const THEME_IMAGE_NATURAL: Record<string, { w: number; h: number }> = {
-  galaxy:     { w: 1536, h: 2752 },
-  orbit:      { w: 1536, h: 2752 },
-  tempest:    { w: 1536, h: 2752 },
-  seashore:   { w: 1536, h: 2752 },
-  apex:       { w: 1536, h: 2752 },
-  ember:      { w: 1080, h: 1920 },
-  daybreak:   { w: 1536, h: 2752 },
-  crescent:   { w: 1536, h: 2752 },
-  shore:      { w: 1536, h: 2752 },
-  'rose-sky': { w: 1080, h: 1920 },
-  dusk:       { w: 1080, h: 1920 },
-  blush:      { w: 1536, h: 2752 },
-  woodland:   { w: 1536, h: 2752 },
-  botanical:  { w: 1536, h: 2752 },
-  lunar:      { w: 1536, h: 2752 },
-  alpine:     { w: 1536, h: 2752 },
-  obsidian:   { w: 1536, h: 2752 },
-};
-
-const THEME_IMAGES: Record<string, number | null> = {
-  minimal:    null,
-  galaxy:     require('../assets/themes/galaxy-bg.jpg'),
-  orbit:      require('../assets/themes/orbit-bg.jpg'),
-  tempest:    require('../assets/themes/tempest-bg.jpg'),
-  seashore:   require('../assets/themes/golden-shore-bg.jpg'),
-  apex:       require('../assets/themes/lion-bg.jpg'),
-  ember:      require('../assets/themes/sunset-bg.jpg'),
-  daybreak:   require('../assets/themes/daybreak-bg.jpg'),
-  crescent:   require('../assets/themes/crescent-bg.jpg'),
-  shore:      require('../assets/themes/shore-bg.jpg'),
-  'rose-sky': require('../assets/themes/sakura-bg.jpg'),
-  dusk:       require('../assets/themes/lavender-bg.jpg'),
-  blush:      require('../assets/themes/cotton-candy-bg.jpg'),
-  woodland:   require('../assets/themes/woodland-bg.jpg'),
-  botanical:  require('../assets/themes/plant-bg.jpg'),
-  lunar:      require('../assets/themes/lunar-bg.jpg'),
-  alpine:     require('../assets/themes/alpine-bg.jpg'),
-  obsidian:   require('../assets/themes/obsidian-bg.jpg'),
-};
-
-// ── Widget-safe theme text/color map ──────────────────────────────────────────
-
-type WidgetThemeStyle = {
-  background: `#${string}`;
-  text: `#${string}`;
-  textMuted: `#${string}`;
-  fontFamily: 'serif' | 'sans-serif';
-};
-
-const WIDGET_THEMES: Record<string, WidgetThemeStyle> = {
-  minimal:    { background: '#0D0D0D', text: '#E8E0D0', textMuted: '#9A9590', fontFamily: 'serif' },
-  galaxy:     { background: '#030408', text: '#d8d0f8', textMuted: '#9088c8', fontFamily: 'serif' },
-  orbit:      { background: '#010306', text: '#b8d8f8', textMuted: '#6098c8', fontFamily: 'serif' },
-  tempest:    { background: '#05080f', text: '#d0d8f0', textMuted: '#7888b8', fontFamily: 'serif' },
-  seashore:   { background: '#0e0804', text: '#fce8c8', textMuted: '#c8a070', fontFamily: 'serif' },
-  apex:       { background: '#060606', text: '#f0f0f0', textMuted: '#a0a0a0', fontFamily: 'serif' },
-  ember:      { background: '#120400', text: '#ffe8d0', textMuted: '#c07050', fontFamily: 'serif' },
-  daybreak:   { background: '#160804', text: '#fde4cc', textMuted: '#c87848', fontFamily: 'serif' },
-  crescent:   { background: '#060c10', text: '#d0e8f0', textMuted: '#60a8b8', fontFamily: 'serif' },
-  shore:      { background: '#0c1520', text: '#e8f4f8', textMuted: '#80a8c0', fontFamily: 'serif' },
-  'rose-sky': { background: '#140810', text: '#fce4ec', textMuted: '#d080a8', fontFamily: 'serif' },
-  dusk:       { background: '#0e0818', text: '#f0d8ff', textMuted: '#a870d0', fontFamily: 'serif' },
-  blush:      { background: '#180c16', text: '#fce0ee', textMuted: '#c878a8', fontFamily: 'serif' },
-  woodland:   { background: '#060d08', text: '#cce8c0', textMuted: '#609858', fontFamily: 'serif' },
-  botanical:  { background: '#050c06', text: '#d0f0d4', textMuted: '#58b068', fontFamily: 'serif' },
-  lunar:      { background: '#080910', text: '#e4e8ec', textMuted: '#808898', fontFamily: 'serif' },
-  alpine:     { background: '#07101a', text: '#d8e8f4', textMuted: '#6890c0', fontFamily: 'serif' },
-  obsidian:   { background: '#070707', text: '#e0e0e0', textMuted: '#808080', fontFamily: 'serif' },
-};
-
-function resolveWidgetTheme(name?: string): WidgetThemeStyle {
-  return WIDGET_THEMES[name ?? 'minimal'] ?? WIDGET_THEMES.minimal;
-}
+const WIDGET_BACKGROUND = '#0D0D0D' as const;
+const WIDGET_TEXT = '#E8E0D0' as const;
+const WIDGET_BORDER = '#2A2520' as const;
+const WIDGET_FONT = 'serif' as const;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -91,7 +26,7 @@ export interface QuoteData {
 
 interface Props {
   quote: QuoteData;
-  config: Pick<WidgetInstanceConfig, 'showAuthor' | 'transparentBg' | 'textSize' | 'widgetTheme'>;
+  config: Pick<WidgetInstanceConfig, 'showAuthor' | 'showBorder' | 'textSize'>;
   widgetInfo: WidgetInfo;
 }
 
@@ -187,22 +122,6 @@ function fitQuoteSize(
   return { fontSize: fs, maxLines: Math.min(spec.quoteMaxLinesCap, linesAvail) };
 }
 
-function coverCrop(
-  natural: { w: number; h: number },
-  widgetW: number,
-  widgetH: number,
-): { renderW: number; renderH: number; marginLeft: number; marginTop: number } {
-  const scale = Math.max(widgetW / natural.w, widgetH / natural.h);
-  const renderW = Math.ceil(natural.w * scale);
-  const renderH = Math.ceil(natural.h * scale);
-  return {
-    renderW,
-    renderH,
-    marginLeft: -Math.floor((renderW - widgetW) / 2),
-    marginTop:  -Math.floor((renderH - widgetH) / 2),
-  };
-}
-
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function QuoteWidget({ quote, config, widgetInfo }: Props) {
@@ -232,18 +151,16 @@ export function QuoteWidget({ quote, config, widgetInfo }: Props) {
   const { fontSize: quoteSize, maxLines: quoteMaxLines } =
     fitQuoteSize(quote.text.length, innerW, quoteH, spec, config.textSize);
 
-  const tapUri  = `quotable://widget-open?widgetId=${widgetInfo.widgetId}`;
-  const wTheme  = resolveWidgetTheme(config.widgetTheme);
-  const bgImage = config.transparentBg ? null : (THEME_IMAGES[config.widgetTheme ?? 'minimal'] ?? null);
+  const tapUri = `quotable://widget-open?widgetId=${widgetInfo.widgetId}`;
 
   const quoteText = (
     <TextWidget
       text={quote.text}
       style={{
         width: 'match_parent',
-        color: wTheme.text,
+        color: WIDGET_TEXT,
         fontSize: quoteSize,
-        fontFamily: wTheme.fontFamily,
+        fontFamily: WIDGET_FONT,
         fontWeight: 'bold',
         textAlign: 'center',
       }}
@@ -260,9 +177,9 @@ export function QuoteWidget({ quote, config, widgetInfo }: Props) {
       text="-"
       style={{
         width: 'match_parent',
-        color: wTheme.text,
+        color: WIDGET_TEXT,
         fontSize: dashSize,
-        fontFamily: wTheme.fontFamily,
+        fontFamily: WIDGET_FONT,
         fontWeight: 'bold',
         textAlign: 'center',
         marginTop: spec.dashGap,
@@ -279,9 +196,9 @@ export function QuoteWidget({ quote, config, widgetInfo }: Props) {
       text={quote.author}
       style={{
         width: 'match_parent',
-        color: wTheme.text,
+        color: WIDGET_TEXT,
         fontSize: authorSize,
-        fontFamily: wTheme.fontFamily,
+        fontFamily: WIDGET_FONT,
         fontWeight: 'bold',
         textAlign: 'center',
         marginTop: spec.authorGap,
@@ -294,73 +211,25 @@ export function QuoteWidget({ quote, config, widgetInfo }: Props) {
     />
   ) : null;
 
-  // Solid-background path: minimal theme or transparent mode.
-  if (!bgImage) {
-    const bgColor = config.transparentBg ? ('#00000000' as `#${string}`) : wTheme.background;
-    return (
-      <FlexWidget
-        style={{
-          width: widgetInfo.width,
-          height: widgetInfo.height,
-          justifyContent: 'center',
-          alignItems: 'center',
-          padding,
-          borderRadius: 16,
-          backgroundColor: bgColor,
-          overflow: 'hidden',
-        }}
-        clickAction="OPEN_URI"
-        clickActionData={{ uri: tapUri }}
-      >
-        {quoteText}
-        {dashText}
-        {authorText}
-      </FlexWidget>
-    );
-  }
-
-  // Photo-background path: OverlapWidget stacks image → scrim+text.
-  const natural = THEME_IMAGE_NATURAL[config.widgetTheme ?? 'minimal'];
-  const crop = natural
-    ? coverCrop(natural, widgetInfo.width, widgetInfo.height)
-    : { renderW: widgetInfo.width, renderH: widgetInfo.height, marginLeft: 0, marginTop: 0 };
-
   return (
-    <OverlapWidget
+    <FlexWidget
       style={{
         width: widgetInfo.width,
         height: widgetInfo.height,
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding,
         borderRadius: 16,
+        backgroundColor: WIDGET_BACKGROUND,
         overflow: 'hidden',
+        ...(config.showBorder ? { borderWidth: 1, borderColor: WIDGET_BORDER } : {}),
       }}
       clickAction="OPEN_URI"
       clickActionData={{ uri: tapUri }}
     >
-      {/* Layer 1: background photo — cover-scaled and center-cropped */}
-      <ImageWidget
-        image={bgImage}
-        imageWidth={crop.renderW}
-        imageHeight={crop.renderH}
-        style={{ width: crop.renderW, height: crop.renderH, marginLeft: crop.marginLeft, marginTop: crop.marginTop }}
-      />
-
-      {/* Layer 2: dark scrim + text */}
-      <FlexWidget
-        style={{
-          width: 'match_parent',
-          height: 'match_parent',
-          justifyContent: 'center',
-          alignItems: 'center',
-          padding,
-          backgroundColor: '#00000050',
-        }}
-        clickAction="OPEN_URI"
-        clickActionData={{ uri: tapUri }}
-      >
-        {quoteText}
-        {dashText}
-        {authorText}
-      </FlexWidget>
-    </OverlapWidget>
+      {quoteText}
+      {dashText}
+      {authorText}
+    </FlexWidget>
   );
 }

@@ -117,11 +117,10 @@ if (TaskManager) {
           widgetId,
           quote,
           config: {
-            showAuthor:    config.showAuthor,
-            transparentBg: config.transparentBg,
-            textSize:      config.textSize,
+            showAuthor: config.showAuthor,
+            showBorder: config.showBorder,
+            textSize:   config.textSize,
           },
-          themeName: config.widgetTheme ?? 'minimal',
         });
 
         // Persist cachedQuote/lastRefreshed AFTER the widget has re-rendered so

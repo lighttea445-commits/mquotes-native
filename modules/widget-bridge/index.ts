@@ -40,16 +40,17 @@ export interface IOSQueuePayload {
   quotes: WidgetQuote[];
   /** Minutes between rotations. Floored at 15 by the widget extension. */
   rotateMinutes: number;
-  /** Gates theme / text size / author, which are configured in Apple's UI. */
+  /** Gates every appearance setting below, all of which are Pro-only. */
   isPro: boolean;
+  textSize: WidgetInstanceConfig['textSize'];
+  showAuthor: boolean;
+  showBorder: boolean;
 }
 
 export interface RenderPayload {
   widgetId: number;
   quote: QuoteData;
-  config: Pick<WidgetInstanceConfig, 'showAuthor' | 'transparentBg' | 'textSize'>;
-  /** iOS only — passed to WidgetBridgeModule so the native widget can match the app theme. */
-  themeName?: string;
+  config: Pick<WidgetInstanceConfig, 'showAuthor' | 'showBorder' | 'textSize'>;
 }
 
 class WidgetBridgeClass {
@@ -118,9 +119,9 @@ class WidgetBridgeClass {
             quoteText:   payload.quote.text,
             authorText:  payload.quote.author,
             showAuthor:  payload.config.showAuthor,
+            showBorder:  payload.config.showBorder,
             widgetType:  'basic',
             streakCount: 0,
-            themeName:   payload.themeName ?? 'minimal',
             textSize:    payload.config.textSize,
           }),
         );
@@ -143,7 +144,7 @@ class WidgetBridgeClass {
         renderWidget: (info) =>
           React.createElement(QuoteWidget, {
             quote: payload.quote,
-            config: { ...payload.config, widgetTheme: payload.themeName ?? 'minimal' },
+            config: payload.config,
             widgetInfo: info,
           }),
       });
@@ -186,6 +187,9 @@ class WidgetBridgeClass {
           quotes: payload.quotes.map((q) => ({ text: q.text, author: q.author, id: q.id ?? '' })),
           rotateMinutes: payload.rotateMinutes,
           isPro: payload.isPro,
+          textSize: payload.textSize,
+          showAuthor: payload.showAuthor,
+          showBorder: payload.showBorder,
           widgetType: 'basic',
         }),
       );
@@ -255,7 +259,7 @@ class WidgetBridgeClass {
             ? { id: cached.quoteId, text: cached.text, author: cached.author }
             : { id: '', text: 'The only way to do great work is to love what you do.', author: 'Steve Jobs' };
           rendered.push({ widgetId: info.widgetId, quote });
-          return React.createElement(QuoteWidget, { quote, config: { ...config, widgetTheme: config.widgetTheme ?? 'minimal' }, widgetInfo: info });
+          return React.createElement(QuoteWidget, { quote, config, widgetInfo: info });
         },
       });
 

@@ -67,12 +67,11 @@ function defaultConfig(): WidgetInstanceConfig {
   return {
     type: 'basic',
     name: '',
-    transparentBg: false,
     showAuthor: false,
+    showBorder: false,
     updateInterval: 'hourly',
     quoteType: 'general',
     textSize: 'large',
-    widgetTheme: 'minimal',
     cachedQuote: null,
     lastRefreshed: null,
   };
@@ -119,7 +118,7 @@ async function widgetTaskHandler(props: WidgetTaskHandlerProps) {
       quote = FALLBACK_WIDGET_QUOTE;
     }
 
-    renderWidget(React.createElement(QuoteWidget, { quote, config: { ...config, widgetTheme: config.widgetTheme ?? 'minimal' }, widgetInfo }));
+    renderWidget(React.createElement(QuoteWidget, { quote, config, widgetInfo }));
 
     // Persist what is now rendered on screen so widget-open.tsx reads the
     // correct quote regardless of background-refresh race conditions.

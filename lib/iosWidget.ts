@@ -8,8 +8,9 @@
  *   • All iOS widgets share one config, stored under IOS_WIDGET_CONFIG_ID.
  *   • The app pre-writes a batch of quotes into the App Group; the widget
  *     extension walks that queue on its own timeline (QuotesWidget.swift).
- *   • Appearance (theme / text size / author) is configured in Apple's Edit
- *     Widget panel, not here — this file only supplies data.
+ *   • Appearance rides along in the same payload. Apple's Edit Widget panel is
+ *     deliberately empty: it cannot see entitlements and its choices could never
+ *     be mirrored back into the app, so the app owns every setting.
  */
 
 import { Platform } from 'react-native';
@@ -88,17 +89,14 @@ async function run({ force = false }: { force?: boolean }): Promise<boolean> {
   // rather than blanking the widget.
   if (quotes.length === 0) return false;
 
-  // Imported lazily so react-native-purchases stays out of the root layout's
-  // startup import graph — this runs from app/_layout.tsx on every foreground.
-  let isPro = false;
-  try {
-    isPro = (await import('../hooks/useRevenueCat')).getIsPro();
-  } catch {
-    // Treat an unavailable entitlement state as free; the widget renders
-    // default appearance rather than nothing.
-  }
-
-  await WidgetBridge.updateIOSQueue({ quotes, rotateMinutes, isPro });
+  await WidgetBridge.updateIOSQueue({
+    quotes,
+    rotateMinutes,
+    isPro: await readIsPro(),
+    textSize: config.textSize,
+    showAuthor: config.showAuthor,
+    showBorder: config.showBorder,
+  });
 
   setIOSWidgetConfig({
     cachedQuote: { text: quotes[0].text, author: quotes[0].author, quoteId: quotes[0].id },
@@ -109,18 +107,28 @@ async function run({ force = false }: { force?: boolean }): Promise<boolean> {
 }
 
 /**
- * Rewrites only the Pro flag the widget's render path gates appearance on,
- * reusing the queue already on disk — no network call.
- *
- * Called when entitlement state flips (see hooks/useRevenueCat). At launch the
- * top-up usually runs before RevenueCat has resolved, writing isPro:false; this
- * corrects it without refetching 48 quotes.
+ * Imported lazily so react-native-purchases stays out of the root layout's
+ * startup import graph — refreshIOSWidget runs from app/_layout.tsx on every
+ * foreground. An unavailable entitlement state reads as free, so the widget
+ * renders default appearance rather than nothing.
  */
-export async function setIOSWidgetPro(isPro: boolean): Promise<void> {
-  if (Platform.OS !== 'ios') return;
+async function readIsPro(): Promise<boolean> {
+  try {
+    return (await import('../hooks/useRevenueCat')).getIsPro();
+  } catch {
+    return false;
+  }
+}
 
+/**
+ * Rewrites the settings the widget renders from, reusing the queue already on
+ * disk — no network call.
+ *
+ * Falls back to a full refresh when no queue has been written yet, since there
+ * would be nothing for the new settings to apply to.
+ */
+async function rewriteQueue(isPro: boolean): Promise<void> {
   const config = getIOSWidgetConfig();
-  const rotateMinutes = REFRESH_FREQUENCY_MINUTES[config.updateInterval] ?? 60;
 
   let quotes: WidgetQuote[] = [];
   try {
@@ -132,11 +140,37 @@ export async function setIOSWidgetPro(isPro: boolean): Promise<void> {
     // Fall through to a full refresh below.
   }
 
-  // No queue written yet — nothing to re-flag, so do the real thing instead.
   if (quotes.length === 0) {
-    await refreshIOSWidget();
+    await refreshIOSWidget({ force: true });
     return;
   }
 
-  await WidgetBridge.updateIOSQueue({ quotes, rotateMinutes, isPro });
+  await WidgetBridge.updateIOSQueue({
+    quotes,
+    rotateMinutes: REFRESH_FREQUENCY_MINUTES[config.updateInterval] ?? 60,
+    isPro,
+    textSize: config.textSize,
+    showAuthor: config.showAuthor,
+    showBorder: config.showBorder,
+  });
+}
+
+/**
+ * Called when entitlement state flips (see hooks/useRevenueCat). At launch the
+ * top-up usually runs before RevenueCat has resolved, writing isPro:false; this
+ * corrects it without refetching 48 quotes.
+ */
+export async function setIOSWidgetPro(isPro: boolean): Promise<void> {
+  if (Platform.OS !== 'ios') return;
+  await rewriteQueue(isPro);
+}
+
+/**
+ * Pushes an appearance or interval change from the Widgets screen. The quotes
+ * themselves are unchanged, so the queue on disk is reused rather than refetched
+ * — only a category change needs refreshIOSWidget.
+ */
+export async function pushIOSWidgetAppearance(): Promise<void> {
+  if (Platform.OS !== 'ios') return;
+  await rewriteQueue(await readIsPro());
 }

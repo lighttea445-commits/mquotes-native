@@ -30,7 +30,7 @@ describe('defaultInstanceConfig', () => {
     const cfg = defaultInstanceConfig('basic');
 
     expect(cfg.type).toBe('basic');
-    expect(cfg.transparentBg).toBe(false);
+    expect(cfg.showBorder).toBe(false);
     expect(cfg.updateInterval).toBe('hourly');
     expect(cfg.quoteType).toBe('general');
     expect(cfg.textSize).toBe('medium');
@@ -44,11 +44,11 @@ describe('defaultInstanceConfig', () => {
 describe('setWidgetConfig', () => {
   it('creates a new config entry from defaults when the widget is new', () => {
     const { useWidgetStore } = require('../../store/useWidgetStore');
-    useWidgetStore.getState().setWidgetConfig('42', { transparentBg: true });
+    useWidgetStore.getState().setWidgetConfig('42', { showBorder: true });
 
     const cfg = useWidgetStore.getState().widgetConfigs['42'];
     expect(cfg).toBeDefined();
-    expect(cfg.transparentBg).toBe(true);
+    expect(cfg.showBorder).toBe(true);
     // Default fields are preserved
     expect(cfg.type).toBe('basic');
     expect(cfg.updateInterval).toBe('hourly');
@@ -58,12 +58,12 @@ describe('setWidgetConfig', () => {
   it('merges partial updates into an existing config without losing other fields', () => {
     const { useWidgetStore } = require('../../store/useWidgetStore');
     useWidgetStore.getState().setWidgetConfig('10', { quoteType: 'wisdom', textSize: 'large' });
-    useWidgetStore.getState().setWidgetConfig('10', { transparentBg: true }); // second update
+    useWidgetStore.getState().setWidgetConfig('10', { showBorder: true }); // second update
 
     const cfg = useWidgetStore.getState().widgetConfigs['10'];
     expect(cfg.quoteType).toBe('wisdom');   // first update preserved
     expect(cfg.textSize).toBe('large');     // first update preserved
-    expect(cfg.transparentBg).toBe(true);  // second update applied
+    expect(cfg.showBorder).toBe(true);  // second update applied
   });
 
   it('updates the cachedQuote without overwriting other fields', () => {
@@ -93,7 +93,7 @@ describe('setWidgetConfig', () => {
 describe('removeWidgetConfig', () => {
   it('removes an existing widget config', () => {
     const { useWidgetStore } = require('../../store/useWidgetStore');
-    useWidgetStore.getState().setWidgetConfig('99', { transparentBg: false });
+    useWidgetStore.getState().setWidgetConfig('99', { showBorder: false });
     expect(useWidgetStore.getState().widgetConfigs['99']).toBeDefined();
 
     useWidgetStore.getState().removeWidgetConfig('99');
@@ -123,10 +123,10 @@ describe('removeWidgetConfig', () => {
     useWidgetStore.getState().removeWidgetConfig('55');
 
     // Re-create with a partial update — should default-fill missing fields
-    useWidgetStore.getState().setWidgetConfig('55', { transparentBg: true });
+    useWidgetStore.getState().setWidgetConfig('55', { showBorder: true });
     const cfg = useWidgetStore.getState().widgetConfigs['55'];
 
-    expect(cfg.transparentBg).toBe(true);
+    expect(cfg.showBorder).toBe(true);
     expect(cfg.textSize).toBe('medium');    // back to default, not 'large'
     expect(cfg.quoteType).toBe('general');  // back to default, not 'love'
   });

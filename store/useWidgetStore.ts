@@ -82,12 +82,11 @@ export const QUOTE_TYPE_LABELS: Record<WidgetQuoteType, string> = {
 export interface WidgetInstanceConfig {
   type: WidgetType;
   name: string;
-  transparentBg: boolean;
   showAuthor: boolean;
+  showBorder: boolean;
   updateInterval: WidgetRefreshFrequency;
   quoteType: WidgetQuoteType;
   textSize: WidgetTextSize;
-  widgetTheme: string;
   cachedQuote: { text: string; author: string; quoteId?: string } | null;
   lastRefreshed: string | null;
 }
@@ -96,12 +95,11 @@ export function defaultInstanceConfig(type: WidgetType): WidgetInstanceConfig {
   return {
     type,
     name: '',
-    transparentBg: false,
     showAuthor: false,
+    showBorder: false,
     updateInterval: 'hourly',
     quoteType: 'general',
     textSize: 'large',
-    widgetTheme: 'minimal',
     cachedQuote: null,
     lastRefreshed: null,
   };

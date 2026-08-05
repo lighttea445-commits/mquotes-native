@@ -1,6 +1,5 @@
 import WidgetKit
 import SwiftUI
-import AppIntents
 import os
 
 // MARK: - Constants
@@ -29,6 +28,7 @@ struct QuoteEntry: TimelineEntry {
   let quoteText: String
   let quoteAuthor: String
   let showAuthor: Bool
+  let showBorder: Bool
   let textSize: String     // "small" | "medium" | "large"
 }
 
@@ -54,99 +54,51 @@ private struct StoredQuote: Decodable {
   private enum CodingKeys: String, CodingKey { case text, author, id }
 }
 
-// MARK: - Widget configuration intent
-//
-// Everything the user can configure lives in Apple's own "Edit Widget" panel
-// (long-press the widget on the home screen), not in the app — iOS gives the
-// app no widget ids, so it cannot drive per-instance settings itself. The app
-// only supplies the quotes, via the App Group.
-//
-// The quote *source* is the one thing still fixed in the app. Offering it here
-// would mean pre-writing a queue for every category the user might pick, since
-// the extension cannot fetch.
-
-// Themes are deliberately not offered on iOS. The system discards widget
-// colours entirely in accented rendering (a Tinted or Clear Home Screen), so a
-// theme picked here would silently do nothing for those users — and the Edit
-// Widget panel cannot be gated on a Pro entitlement to warn them. The widget
-// uses the system's own colours and material instead.
-
-enum WidgetTextSizeOption: String, AppEnum {
-  case small, medium, large
-
-  static var typeDisplayRepresentation: TypeDisplayRepresentation { "Text Size" }
-
-  static var caseDisplayRepresentations: [WidgetTextSizeOption: DisplayRepresentation] {[
-    .small:  "Small",
-    .medium: "Medium",
-    .large:  "Large",
-  ]}
-}
-
-/// How often the widget advances to the next quote in the queue.
-///
-/// A fixed set, so it needs no dynamic options provider — unlike the quote
-/// source, which would require the app to pre-write a bucket per category.
-/// Values mirror REFRESH_FREQUENCY_MINUTES in store/useWidgetStore.ts.
-enum WidgetIntervalOption: String, AppEnum {
-  case hourly, twiceDaily, daily
-
-  /// Minutes between timeline entries. WidgetKit ignores anything under 15,
-  /// which none of these approach.
-  var minutes: Int {
-    switch self {
-    case .hourly:     return 60
-    case .twiceDaily: return 720
-    case .daily:      return 1440
-    }
-  }
-
-  static var typeDisplayRepresentation: TypeDisplayRepresentation { "Update Interval" }
-
-  static var caseDisplayRepresentations: [WidgetIntervalOption: DisplayRepresentation] {[
-    .hourly:     "Every hour",
-    .twiceDaily: "Twice a day",
-    .daily:      "Once a day",
-  ]}
-}
-
-struct QuoteWidgetIntent: WidgetConfigurationIntent {
-  static var title: LocalizedStringResource { "Quote Widget" }
-  static var description: IntentDescription {
-    IntentDescription("Choose how often the quote changes and how it looks.")
-  }
-
-  @Parameter(title: "Update Interval", default: .hourly)
-  var updateInterval: WidgetIntervalOption
-
-  @Parameter(title: "Text Size", default: .large)
-  var textSize: WidgetTextSizeOption
-
-  @Parameter(title: "Show Author", default: false)
-  var showAuthor: Bool
-
-  init() {}
-}
-
 // MARK: - Shared-container reads
+//
+// Every widget setting is owned by the app and travels through the App Group
+// alongside the quote queue. Apple's "Edit Widget" panel is deliberately empty:
+// iOS gives the app no widget ids, so a panel-owned setting could never be
+// mirrored back into the app, and the two menus disagreed.
+//
+// Themes are not offered at all. The system discards widget colours entirely in
+// accented rendering (a Tinted or Clear Home Screen), so a theme would silently
+// do nothing for those users. The border is a stroke rather than a fill, so it
+// survives that mode as a tinted outline.
 
-/// Resolved appearance, taken straight from Apple's Edit Widget panel.
-///
-/// These used to be gated on `mq_is_pro`. The panel has no way to know about
-/// entitlements and cannot hide or disable an option per-user, so a free user
-/// would flip a switch and the render path would silently discard it. Both
-/// settings are layout rather than colour, so unlike themes they work in every
-/// rendering mode — the gate was the only thing stopping them.
+/// Resolved appearance, read from the App Group keys the bridge writes.
 private struct Appearance {
   let textSize: String
   let showAuthor: Bool
+  let showBorder: Bool
 }
 
-private func resolveAppearance(_ configuration: QuoteWidgetIntent) -> Appearance {
-  Appearance(
-    textSize: configuration.textSize.rawValue,
-    showAuthor: configuration.showAuthor
+/// Free users get the default look. The app gates its own controls too, but a
+/// queue written while Pro was active outlives the entitlement, so the render
+/// path enforces the gate as well.
+private func resolveAppearance() -> Appearance {
+  guard let defaults = UserDefaults(suiteName: kAppGroupId) else {
+    return Appearance(textSize: "large", showAuthor: false, showBorder: false)
+  }
+
+  guard defaults.bool(forKey: "mq_is_pro") else {
+    return Appearance(textSize: "large", showAuthor: false, showBorder: false)
+  }
+
+  return Appearance(
+    textSize: defaults.string(forKey: "mq_text_size") ?? "large",
+    showAuthor: defaults.bool(forKey: "mq_show_author"),
+    showBorder: defaults.bool(forKey: "mq_show_border")
   )
+}
+
+/// Minutes between timeline entries, as chosen in the app. WidgetKit ignores
+/// anything under 15; the app only offers 60 / 720 / 1440. Mirrors
+/// REFRESH_FREQUENCY_MINUTES in store/useWidgetStore.ts.
+private func resolveRotateMinutes() -> Int {
+  guard let defaults = UserDefaults(suiteName: kAppGroupId) else { return 60 }
+  let stored = defaults.integer(forKey: "mq_rotate_minutes")
+  return stored >= 15 ? stored : 60
 }
 
 /// The quote queue the app pre-writes, so the widget can rotate on its own —
@@ -174,7 +126,7 @@ private func loadQuotes() -> [StoredQuote] {
 
 // MARK: - Timeline provider
 
-struct QuoteProvider: AppIntentTimelineProvider {
+struct QuoteProvider: TimelineProvider {
 
   func placeholder(in context: Context) -> QuoteEntry {
     QuoteEntry(
@@ -183,21 +135,28 @@ struct QuoteProvider: AppIntentTimelineProvider {
       quoteText: "Be yourself; everyone else is already taken.",
       quoteAuthor: "Oscar Wilde",
       showAuthor: true,
+      showBorder: false,
       textSize: "large"
     )
   }
 
-  func snapshot(for configuration: QuoteWidgetIntent, in context: Context) async -> QuoteEntry {
-    if context.isPreview { return placeholder(in: context) }
-    let appearance = resolveAppearance(configuration)
+  func getSnapshot(in context: Context, completion: @escaping (QuoteEntry) -> Void) {
+    if context.isPreview {
+      completion(placeholder(in: context))
+      return
+    }
     let quotes = loadQuotes()
-    return entry(at: 0, date: Date(), quote: quotes.first, appearance: appearance)
+    completion(entry(at: 0, date: Date(), quote: quotes.first, appearance: resolveAppearance()))
   }
 
-  func timeline(for configuration: QuoteWidgetIntent, in context: Context) async -> Timeline<QuoteEntry> {
-    let appearance = resolveAppearance(configuration)
+  func getTimeline(in context: Context, completion: @escaping (Timeline<QuoteEntry>) -> Void) {
+    completion(buildTimeline())
+  }
+
+  private func buildTimeline() -> Timeline<QuoteEntry> {
+    let appearance = resolveAppearance()
     let quotes = loadQuotes()
-    let minutes = configuration.updateInterval.minutes
+    let minutes = resolveRotateMinutes()
     let now = Date()
 
     kLog.info("timeline requested: \(quotes.count, privacy: .public) quote(s), rotate every \(minutes, privacy: .public) min, text size \(appearance.textSize, privacy: .public)")
@@ -236,6 +195,7 @@ struct QuoteProvider: AppIntentTimelineProvider {
       quoteText: quote?.text ?? kFallbackText,
       quoteAuthor: quote?.author ?? "",
       showAuthor: appearance.showAuthor,
+      showBorder: appearance.showBorder,
       textSize: appearance.textSize
     )
   }
@@ -353,6 +313,15 @@ struct QuoteWidgetView: View {
     // Stretch to the full container, so the quote centres on the card rather
     // than collapsing to its own height.
     .frame(maxWidth: .infinity, maxHeight: .infinity)
+    // Drawn as an overlay stroke rather than a filled shape. A stroke keeps its
+    // geometry in accented rendering, so the outline survives on a Tinted or
+    // Clear Home Screen where a coloured fill would be flattened away.
+    .overlay {
+      if entry.showBorder {
+        RoundedRectangle(cornerRadius: 22, style: .continuous)
+          .strokeBorder(Color.primary.opacity(0.35), lineWidth: 1)
+      }
+    }
     .widgetURL(tapURL(for: entry))
     // Clear, so the system's own widget material shows through — iOS 26 draws a
     // Liquid Glass container behind every home screen widget, and an opaque fill
@@ -436,7 +405,10 @@ struct QuotesWidget: Widget {
   let kind = "QuotesWidget"
 
   var body: some WidgetConfiguration {
-    AppIntentConfiguration(kind: kind, intent: QuoteWidgetIntent.self, provider: QuoteProvider()) { entry in
+    // Static, not AppIntent-configured: the app owns every setting and writes
+    // them through the App Group, so there is nothing left for Apple's Edit
+    // Widget panel to offer.
+    StaticConfiguration(kind: kind, provider: QuoteProvider()) { entry in
       QuoteWidgetView(entry: entry)
     }
     .configurationDisplayName("Quotes")
@@ -459,31 +431,31 @@ struct QuotesWidget: Widget {
 #Preview("Small – No author", as: .systemSmall) {
   QuotesWidget()
 } timeline: {
-  QuoteEntry(date: .now, index: 0, quoteText: "No one can make you feel inferior without your consent.", quoteAuthor: "Eleanor Roosevelt", showAuthor: false, textSize: "medium")
+  QuoteEntry(date: .now, index: 0, quoteText: "No one can make you feel inferior without your consent.", quoteAuthor: "Eleanor Roosevelt", showAuthor: false, showBorder: false, textSize: "medium")
 }
 
 #Preview("Medium – With author", as: .systemMedium) {
   QuotesWidget()
 } timeline: {
-  QuoteEntry(date: .now, index: 0, quoteText: "Live in the moment but prepare for your future.", quoteAuthor: "Unknown", showAuthor: true, textSize: "medium")
+  QuoteEntry(date: .now, index: 0, quoteText: "Live in the moment but prepare for your future.", quoteAuthor: "Unknown", showAuthor: true, showBorder: true, textSize: "medium")
 }
 
 #Preview("Large – Large text", as: .systemLarge) {
   QuotesWidget()
 } timeline: {
-  QuoteEntry(date: .now, index: 0, quoteText: "The secret of getting ahead is getting started.", quoteAuthor: "Mark Twain", showAuthor: true, textSize: "large")
+  QuoteEntry(date: .now, index: 0, quoteText: "The secret of getting ahead is getting started.", quoteAuthor: "Mark Twain", showAuthor: true, showBorder: true, textSize: "large")
 }
 
 #Preview("Lock Screen – Rectangular", as: .accessoryRectangular) {
   QuotesWidget()
 } timeline: {
-  QuoteEntry(date: .now, index: 0, quoteText: "The secret of getting ahead is getting started.", quoteAuthor: "Mark Twain", showAuthor: true, textSize: "medium")
-  QuoteEntry(date: .now, index: 1, quoteText: "Live in the moment but prepare for your future.", quoteAuthor: "Unknown", showAuthor: true, textSize: "medium")
+  QuoteEntry(date: .now, index: 0, quoteText: "The secret of getting ahead is getting started.", quoteAuthor: "Mark Twain", showAuthor: true, showBorder: true, textSize: "medium")
+  QuoteEntry(date: .now, index: 1, quoteText: "Live in the moment but prepare for your future.", quoteAuthor: "Unknown", showAuthor: true, showBorder: true, textSize: "medium")
 }
 
 #Preview("Lock Screen – Inline", as: .accessoryInline) {
   QuotesWidget()
 } timeline: {
-  QuoteEntry(date: .now, index: 0, quoteText: "The secret of getting ahead is getting started.", quoteAuthor: "Mark Twain", showAuthor: true, textSize: "medium")
-  QuoteEntry(date: .now, index: 1, quoteText: "Live in the moment but prepare for your future.", quoteAuthor: "Unknown", showAuthor: true, textSize: "medium")
+  QuoteEntry(date: .now, index: 0, quoteText: "The secret of getting ahead is getting started.", quoteAuthor: "Mark Twain", showAuthor: true, showBorder: true, textSize: "medium")
+  QuoteEntry(date: .now, index: 1, quoteText: "Live in the moment but prepare for your future.", quoteAuthor: "Unknown", showAuthor: true, showBorder: true, textSize: "medium")
 }

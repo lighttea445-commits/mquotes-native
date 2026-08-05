@@ -31,10 +31,9 @@ import {
   TEXT_SIZE_LABELS,
   defaultInstanceConfig,
 } from '../../store/useWidgetStore';
-import { THEMES } from '../../constants/themes';
 import { fetchQuotesByCategory, fetchMultipleRandomQuotes } from '../../lib/quotesApi';
 import { WidgetBridge, ActiveWidget, IOS_WIDGET_CONFIG_ID } from '../../modules/widget-bridge';
-import { refreshIOSWidget, setIOSWidgetConfig } from '../../lib/iosWidget';
+import { refreshIOSWidget, setIOSWidgetConfig, pushIOSWidgetAppearance } from '../../lib/iosWidget';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFavoritesStore } from '../../store/useFavoritesStore';
 import { useUserQuotesStore } from '../../store/useUserQuotesStore';
@@ -406,10 +405,8 @@ const emptyStyles = StyleSheet.create({
 //
 // iOS gives the app no widget ids and no way to enumerate placed widgets, so
 // there is no list to render and no per-instance editor. All iOS widgets share
-// one config and the app only owns the *data* side of it — which quotes, how
-// often they rotate. Appearance (theme, text size, author) is configured in
-// Apple's own Edit Widget panel, which reads the AppIntent declared in
-// targets/quotes-widget/QuotesWidget.swift.
+// one config, but the app owns every setting in it: the extension reads them
+// from the App Group, and Apple's Edit Widget panel is deliberately empty.
 
 const IOS_ADD_STEPS = [
   'Long-press an empty spot on your home screen',
@@ -421,12 +418,14 @@ function IOSWidgetPanel({
   theme,
   config,
   onOpenPicker,
+  onToggle,
   onRefresh,
   refreshing,
 }: {
   theme: ReturnType<typeof useTheme>;
   config: ReturnType<typeof defaultInstanceConfig>;
-  onOpenPicker: (picker: 'interval' | 'quoteType') => void;
+  onOpenPicker: (picker: 'interval' | 'quoteType' | 'textSize') => void;
+  onToggle: (key: 'showAuthor' | 'showBorder', value: boolean) => void;
   onRefresh: () => void;
   refreshing: boolean;
 }) {
@@ -463,15 +462,29 @@ function IOSWidgetPanel({
           value={REFRESH_FREQUENCY_LABELS[config.updateInterval]}
           onPress={() => onOpenPicker('interval')}
           theme={theme}
+        />
+        <SettingsRow
+          icon="format-size"
+          label="Text size"
+          value={TEXT_SIZE_LABELS[config.textSize]}
+          onPress={() => onOpenPicker('textSize')}
+          theme={theme}
+        />
+        <ToggleRow
+          icon="account-outline"
+          label="Show author"
+          value={config.showAuthor}
+          onToggle={(v) => onToggle('showAuthor', v)}
+          theme={theme}
+        />
+        <ToggleRow
+          icon="shape-outline"
+          label="Show border"
+          value={config.showBorder}
+          onToggle={(v) => onToggle('showBorder', v)}
+          theme={theme}
           isLast
         />
-      </View>
-
-      <View style={[iosStyles.hintCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-        <Icon name="palette-outline" size={18} color={theme.gold} />
-        <Text style={[iosStyles.hintText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-          For text size and author, long-press the widget on your home screen and tap Edit Widget.
-        </Text>
       </View>
 
       <View style={[emptyStyles.stepsCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
@@ -510,15 +523,6 @@ const iosStyles = StyleSheet.create({
   },
   previewQuote: { fontSize: 17, lineHeight: 25 },
   previewAuthor: { fontSize: 13, textAlign: 'right' },
-  hintCard: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-    borderRadius: RADIUS.card,
-    borderWidth: 1,
-    padding: 16,
-  },
-  hintText: { flex: 1, fontSize: 13, lineHeight: 19 },
   refreshBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -532,7 +536,7 @@ const iosStyles = StyleSheet.create({
 
 // ── Main screen ───────────────────────────────────────────────────────────────
 
-type ActivePicker = 'interval' | 'quoteType' | 'textSize' | 'theme' | null;
+type ActivePicker = 'interval' | 'quoteType' | 'textSize' | null;
 
 export default function WidgetsScreen({ onClose, onBack, onContinue }: { onClose?: () => void; onBack?: () => void; onContinue?: () => void }) {
   const theme = useTheme();
@@ -579,12 +583,14 @@ export default function WidgetsScreen({ onClose, onBack, onContinue }: { onClose
     }
   }, []);
 
-  // Any data-side change rewrites the queue immediately so the widget doesn't
-  // keep rotating through quotes from the old source.
+  // A category change needs a new batch of quotes. Everything else only rewrites
+  // the settings that travel alongside the queue already on disk, so it skips
+  // the network entirely.
   const updateIOSConfig = useCallback(
-    (updates: Partial<ReturnType<typeof defaultInstanceConfig>>) => {
+    (updates: Partial<ReturnType<typeof defaultInstanceConfig>>, refetch = false) => {
       setIOSWidgetConfig(updates);
-      refreshIOSWidget({ force: true }).catch(() => {});
+      const pushed = refetch ? refreshIOSWidget({ force: true }) : pushIOSWidgetAppearance();
+      pushed.catch(() => {});
     },
     [],
   );
@@ -738,11 +744,10 @@ export default function WidgetsScreen({ onClose, onBack, onContinue }: { onClose
       widgetId: editorId,
       quote,
       config: {
-        showAuthor:    editorConfig.showAuthor,
-        transparentBg: editorConfig.transparentBg,
-        textSize:      editorConfig.textSize,
+        showAuthor: editorConfig.showAuthor,
+        showBorder: editorConfig.showBorder,
+        textSize:   editorConfig.textSize,
       },
-      themeName: editorConfig.widgetTheme ?? 'minimal',
     });
 
     await WidgetBridge.reloadTimelines();
@@ -767,8 +772,6 @@ export default function WidgetsScreen({ onClose, onBack, onContinue }: { onClose
   const textSizeOptions = (
     Object.entries(TEXT_SIZE_LABELS) as [WidgetTextSize, string][]
   ).map(([value, label]) => ({ value, label }));
-
-  const themeOptions = THEMES.map((t) => ({ value: t.id, label: t.name }));
 
   // ── Pro-gate helper ────────────────────────────────────────────────────────
 
@@ -800,6 +803,7 @@ export default function WidgetsScreen({ onClose, onBack, onContinue }: { onClose
             refreshing={iosRefreshing}
             onRefresh={handleIOSRefresh}
             onOpenPicker={(picker) => { if (isPro) { setActivePicker(picker); } else { openPaywall(); } }}
+            onToggle={(key, value) => { if (isPro) { updateIOSConfig({ [key]: value }); } else { openPaywall(); } }}
           />
 
           {onContinue && (
@@ -822,7 +826,7 @@ export default function WidgetsScreen({ onClose, onBack, onContinue }: { onClose
           title="Quote Category"
           options={quoteTypeOptions}
           selected={iosConfig.quoteType}
-          onSelect={(v) => updateIOSConfig({ quoteType: v })}
+          onSelect={(v) => updateIOSConfig({ quoteType: v }, true)}
           onClose={() => setActivePicker(null)}
           theme={theme}
         />
@@ -832,6 +836,15 @@ export default function WidgetsScreen({ onClose, onBack, onContinue }: { onClose
           options={intervalOptions}
           selected={iosConfig.updateInterval}
           onSelect={(v) => updateIOSConfig({ updateInterval: v })}
+          onClose={() => setActivePicker(null)}
+          theme={theme}
+        />
+        <PickerModal
+          visible={activePicker === 'textSize'}
+          title="Text Size"
+          options={textSizeOptions}
+          selected={iosConfig.textSize}
+          onSelect={(v) => updateIOSConfig({ textSize: v })}
           onClose={() => setActivePicker(null)}
           theme={theme}
         />
@@ -885,20 +898,20 @@ export default function WidgetsScreen({ onClose, onBack, onContinue }: { onClose
 
             <View style={[styles.settingsCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
               <ToggleRow
-                icon="circle-opacity"
-                label="Transparent background"
-                value={editorConfig.transparentBg}
-                onToggle={gated((v) => updateConfig({ transparentBg: v }))}
+                icon="account-outline"
+                label="Show author"
+                value={editorConfig.showAuthor}
+                onToggle={gated((v) => updateConfig({ showAuthor: v }))}
                 theme={theme}
               />
 
               <View style={[rowStyles.separator, { backgroundColor: theme.border }]} />
 
               <ToggleRow
-                icon="account-outline"
-                label="Show author"
-                value={editorConfig.showAuthor}
-                onToggle={gated((v) => updateConfig({ showAuthor: v }))}
+                icon="shape-outline"
+                label="Show border"
+                value={editorConfig.showBorder}
+                onToggle={gated((v) => updateConfig({ showBorder: v }))}
                 theme={theme}
               />
 
@@ -928,18 +941,8 @@ export default function WidgetsScreen({ onClose, onBack, onContinue }: { onClose
                 value={TEXT_SIZE_LABELS[editorConfig.textSize]}
                 onPress={gated(() => setActivePicker('textSize'))}
                 theme={theme}
-              />
-
-              <View style={[rowStyles.separator, { backgroundColor: theme.border }]} />
-              <SettingsRow
-                icon="palette-outline"
-                label="Theme"
-                value={THEMES.find((t) => t.id === (editorConfig.widgetTheme ?? 'minimal'))?.name ?? 'Minimal'}
-                onPress={gated(() => setActivePicker('theme'))}
-                theme={theme}
                 isLast
               />
-
             </View>
           </ScrollView>
 
@@ -980,15 +983,6 @@ export default function WidgetsScreen({ onClose, onBack, onContinue }: { onClose
           options={textSizeOptions}
           selected={editorConfig.textSize}
           onSelect={(v) => updateConfig({ textSize: v })}
-          onClose={() => setActivePicker(null)}
-          theme={theme}
-        />
-        <PickerModal
-          visible={activePicker === 'theme'}
-          title="Widget Theme"
-          options={themeOptions}
-          selected={editorConfig.widgetTheme ?? 'minimal'}
-          onSelect={(v) => updateConfig({ widgetTheme: v })}
           onClose={() => setActivePicker(null)}
           theme={theme}
         />

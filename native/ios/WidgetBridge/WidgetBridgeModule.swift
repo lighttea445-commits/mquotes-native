@@ -41,9 +41,9 @@ class WidgetBridgeModule: NSObject {
     // JS sends authorText (not quoteAuthor) — read that key
     defaults.set(json["authorText"] as? String ?? "",       forKey: "mq_quote_author")
     defaults.set(json["showAuthor"] as? Bool   ?? false,    forKey: "mq_show_author")
+    defaults.set(json["showBorder"] as? Bool   ?? false,    forKey: "mq_show_border")
     defaults.set(json["widgetType"] as? String ?? "basic",  forKey: "mq_widget_type")
     defaults.set(json["streakCount"] as? Int   ?? 0,        forKey: "mq_streak_count")
-    defaults.set(json["themeName"]  as? String ?? "minimal",forKey: "mq_theme_name")
     defaults.set(json["textSize"]   as? String ?? "medium", forKey: "mq_text_size")
     defaults.set(Date().timeIntervalSince1970,              forKey: "mq_last_updated")
     defaults.synchronize()
@@ -60,7 +60,11 @@ class WidgetBridgeModule: NSObject {
   /// it. The queue index travels in the widget's tap URL, which is how a tap
   /// resolves back to the exact quote that was on screen.
   ///
-  /// Payload: `{ quotes: [{ text, author, id }], rotateMinutes: Int, isPro: Bool }`
+  /// Appearance travels with the queue: the app is the sole owner of every
+  /// widget setting, so the extension reads these keys rather than an AppIntent.
+  ///
+  /// Payload: `{ quotes: [{ text, author, id }], rotateMinutes: Int, isPro: Bool,
+  ///             textSize: String, showAuthor: Bool, showBorder: Bool }`
   @objc
   func updateWidgetQueue(
     _ jsonPayload: String,
@@ -93,9 +97,13 @@ class WidgetBridgeModule: NSObject {
 
     defaults.set(quotesString, forKey: "mq_quotes")
     defaults.set(json["rotateMinutes"] as? Int ?? 60, forKey: "mq_rotate_minutes")
-    // Pro gate for theme/text-size/author. Apple's Edit Widget panel can't see
-    // entitlements, so the widget's render path enforces it from this flag.
+    // Pro gate for every appearance key below. The app gates its own controls
+    // too, but the render path enforces it so a stale queue can't outlive a
+    // lapsed entitlement.
     defaults.set(json["isPro"] as? Bool ?? false, forKey: "mq_is_pro")
+    defaults.set(json["textSize"]   as? String ?? "large", forKey: "mq_text_size")
+    defaults.set(json["showAuthor"] as? Bool ?? false, forKey: "mq_show_author")
+    defaults.set(json["showBorder"] as? Bool ?? false, forKey: "mq_show_border")
     defaults.set(json["widgetType"] as? String ?? "basic", forKey: "mq_widget_type")
     defaults.set(Date().timeIntervalSince1970, forKey: "mq_last_updated")
     defaults.synchronize()
