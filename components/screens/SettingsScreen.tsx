@@ -296,7 +296,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     minHeight: 56,
     paddingHorizontal: 16,
-    paddingVertical: 16,
+    paddingVertical: 8,
     borderRadius: 16,
     borderWidth: 1,
     gap: 12,
@@ -304,6 +304,9 @@ const styles = StyleSheet.create({
   nameInput: {
     flex: 1,
     fontSize: 15,
+    lineHeight: 20,
+    includeFontPadding: false,
+    textAlignVertical: 'center',
     padding: 0,
   },
   menuItem: {
@@ -311,7 +314,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     minHeight: 56,
     paddingHorizontal: 16,
-    paddingVertical: 16,
+    paddingVertical: 8,
     borderRadius: 16,
     borderWidth: 1,
     gap: 12,
@@ -321,7 +324,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     minHeight: 56,
     paddingHorizontal: 16,
-    paddingVertical: 16,
+    paddingVertical: 8,
     borderRadius: 16,
     borderWidth: 1,
     gap: 12,
@@ -330,6 +333,8 @@ const styles = StyleSheet.create({
   menuText: {
     flex: 1,
     fontSize: 15,
+    lineHeight: 20,
+    includeFontPadding: false,
   },
   // Android's native Switch reserves ~8px of invisible touch padding around
   // the track, which reads as the knob sitting short of the card's edge next
