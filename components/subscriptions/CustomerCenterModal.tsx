@@ -4,6 +4,7 @@ import { View, StyleSheet, Text, Pressable, ActivityIndicator, ScrollView } from
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Icon } from '../ui/Icon';
 import { IconButton } from '../ui/IconButton';
+import { ICON_BTN } from '../ui/tokens';
 import { liquidGlassAvailable } from '../ui/GlassSurface';
 import RevenueCatUI from 'react-native-purchases-ui';
 import { useTheme } from '../../hooks/useTheme';
@@ -46,7 +47,8 @@ export function CustomerCenterModal({ onClose }: CustomerCenterModalProps) {
           onPress={() => onClose?.()}
           disabled={isLoading}
           filled={glass}
-          iconSize={glass ? 20 : 24}
+          size={glass ? ICON_BTN.md : ICON_BTN.sm}
+          iconSize={glass ? 22 : 24}
           color={theme.text}
           accessibilityLabel="Close"
         />

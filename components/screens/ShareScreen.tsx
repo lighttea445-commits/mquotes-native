@@ -21,7 +21,7 @@ import { useCollectionsStore } from '../../store/useCollectionsStore';
 import { useModal } from '../../contexts/ModalContext';
 import { ShareCard } from '../quotes/ShareCard';
 import { AddToCollectionSheet } from '../collections/AddToCollectionSheet';
-import { GUTTER, RADIUS, ON_GOLD } from '../ui/tokens';
+import { GUTTER, RADIUS, ON_GOLD, ICON_BTN } from '../ui/tokens';
 import { FONTS } from '../../constants/fonts';
 import { errorReporting } from '../../lib/errorReporting';
 import { analytics } from '../../lib/analytics';
@@ -106,7 +106,8 @@ export default function ShareScreen({ onClose }: { onClose?: () => void }) {
           icon="close"
           onPress={close}
           filled={glass}
-          iconSize={glass ? 20 : 26}
+          size={glass ? ICON_BTN.md : ICON_BTN.sm}
+          iconSize={glass ? 22 : 26}
           color={theme.text}
           accessibilityLabel="Close"
         />

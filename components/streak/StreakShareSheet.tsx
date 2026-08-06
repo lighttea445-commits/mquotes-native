@@ -26,7 +26,7 @@ import { useBaseTheme } from '../../hooks/useTheme';
 import { useRevenueCat } from '../../hooks/useRevenueCat';
 import { useModal } from '../../contexts/ModalContext';
 import { StreakShareCard } from './StreakShareCard';
-import { ON_GOLD, GUTTER, RADIUS } from '../ui/tokens';
+import { ON_GOLD, GUTTER, RADIUS, ICON_BTN } from '../ui/tokens';
 import { FONTS } from '../../constants/fonts';
 
 let captureRef: ((ref: React.RefObject<any>, opts: object) => Promise<string>) | null = null;
@@ -138,7 +138,8 @@ export function StreakShareSheet({ visible, streakCount, onClose }: Props) {
                 icon="close"
                 onPress={onClose}
                 filled={glass}
-                iconSize={glass ? 20 : 26}
+                size={glass ? ICON_BTN.md : ICON_BTN.sm}
+                iconSize={glass ? 22 : 26}
                 color={theme.text}
                 accessibilityLabel="Close"
               />

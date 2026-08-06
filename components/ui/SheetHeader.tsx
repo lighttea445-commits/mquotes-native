@@ -66,8 +66,8 @@ export function SheetHeader({
           icon={leading === 'back' ? 'arrow-left' : 'close'}
           onPress={onLeadingPress}
           filled={glass}
-          size={ICON_BTN.sm}
-          iconSize={glass ? 20 : 26}
+          size={glass ? ICON_BTN.md : ICON_BTN.sm}
+          iconSize={glass ? 22 : 26}
           color={theme.text}
           accessibilityLabel={leading === 'back' ? 'Go back' : 'Close'}
           // The bare glyph needs pulling back into the gutter optically. A
@@ -91,8 +91,8 @@ export function SheetHeader({
           <IconButton
             icon={actionIcon}
             onPress={onActionPress}
-            size={ICON_BTN.sm}
-            iconSize={20}
+            size={ICON_BTN.md}
+            iconSize={22}
             color={theme.text}
             accessibilityLabel={actionLabel}
           />
@@ -178,7 +178,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   actionPill: {
-    height: 34,
+    // Matches the glass circles at either end of the header, so a text action
+    // and an icon action sit on the same visual line.
+    height: ICON_BTN.md,
     paddingHorizontal: SPACE.lg,
     borderRadius: RADIUS.pill,
     justifyContent: 'center',

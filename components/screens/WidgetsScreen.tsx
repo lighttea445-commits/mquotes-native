@@ -27,8 +27,6 @@ import { ConfirmSheet } from '../ui/ConfirmSheet';
 import { useTheme } from '../../hooks/useTheme';
 import {
   useWidgetStore,
-  createConfig,
-  nextConfigName,
   type WidgetConfig,
   type WidgetRefreshFrequency,
   type WidgetQuoteType,
@@ -116,27 +114,29 @@ const pickerStyles = StyleSheet.create({
 
 // ── Widget preview ────────────────────────────────────────────────────────────
 //
-// A handset with the widget face inside it. Deliberately plain Views rather
-// than art/PhoneFrame: that one is a single-weight line-art outline, and this
-// needs a solid body so the widget card reads as sitting on a home screen.
+// A handset with the widget face inside it. Solid body with a top sheen for
+// depth, a Dynamic Island pill, and a bottom fade so the body dissolves into
+// the page rather than ending in a hard edge. Renders once behind the widget
+// face content, which stays regular RN Views/Text — SVG doesn't wrap dynamic
+// multiline text cleanly, so only the chrome is drawn as SVG.
 
 const PHONE_VB_W = 240;
 const PHONE_VB_H = 240 * 1.28;
 
-/**
- * Vector handset chrome: rounded body, a top sheen for depth, a Dynamic
- * Island-style pill and a home indicator. Renders once behind the widget
- * face content, which stays regular RN Views/Text — SVG doesn't wrap dynamic
- * multiline text cleanly, so only the chrome is drawn as SVG.
- */
 function PhoneChrome({ width, height, theme }: { width: number; height: number; theme: ReturnType<typeof useTheme> }) {
-  const r = PHONE_VB_W * 0.14;
+  const r = PHONE_VB_W * 0.16;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${PHONE_VB_W} ${PHONE_VB_H}`} style={StyleSheet.absoluteFill}>
       <Defs>
         <LinearGradient id="phoneSheen" x1="0" y1="0" x2="0" y2="1">
           <Stop offset="0" stopColor={theme.text} stopOpacity={0.08} />
           <Stop offset="0.35" stopColor={theme.text} stopOpacity={0} />
+        </LinearGradient>
+        <LinearGradient id="phoneFade" x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0" stopColor={theme.background} stopOpacity={0} />
+          <Stop offset="0.45" stopColor={theme.background} stopOpacity={0} />
+          <Stop offset="0.9" stopColor={theme.background} stopOpacity={1} />
+          <Stop offset="1" stopColor={theme.background} stopOpacity={1} />
         </LinearGradient>
       </Defs>
 
@@ -147,8 +147,6 @@ function PhoneChrome({ width, height, theme }: { width: number; height: number; 
         height={PHONE_VB_H - 3}
         rx={r}
         fill={theme.surface}
-        stroke={theme.border}
-        strokeWidth={1.5}
       />
       <Rect
         x={1.5}
@@ -167,13 +165,12 @@ function PhoneChrome({ width, height, theme }: { width: number; height: number; 
         fill={theme.background}
       />
       <Rect
-        x={PHONE_VB_W / 2 - 20}
-        y={PHONE_VB_H - 16}
-        width={40}
-        height={4}
-        rx={2}
-        fill={theme.text}
-        opacity={0.35}
+        x={1.5}
+        y={1.5}
+        width={PHONE_VB_W - 3}
+        height={PHONE_VB_H - 3}
+        rx={r}
+        fill="url(#phoneFade)"
       />
     </Svg>
   );
@@ -181,12 +178,10 @@ function PhoneChrome({ width, height, theme }: { width: number; height: number; 
 
 function WidgetPreview({
   config,
-  pending,
   width,
   theme,
 }: {
   config: WidgetConfig;
-  pending: boolean;
   width: number;
   theme: ReturnType<typeof useTheme>;
 }) {
@@ -215,23 +210,6 @@ function WidgetPreview({
             >
               {PREVIEW_QUOTE}
             </Text>
-
-            {config.showButtons && (
-              <View style={previewStyles.buttons}>
-                <Icon name="chevron-left" size={16} color={theme.text} />
-                <Icon name="export-variant" size={16} color={theme.text} />
-                <Icon name="heart-outline" size={16} color={theme.text} />
-                <Icon name="chevron-right" size={16} color={theme.text} />
-              </View>
-            )}
-
-            {pending && (
-              <View style={[previewStyles.badge, { backgroundColor: theme.goldButton }]}>
-                <Text style={[previewStyles.badgeText, { color: ON_GOLD, fontFamily: FONTS.ui.medium }]}>
-                  Pending
-                </Text>
-              </View>
-            )}
           </View>
         </View>
       </View>
@@ -242,39 +220,20 @@ function WidgetPreview({
 const previewStyles = StyleSheet.create({
   faceWrap: {
     flex: 1,
-    paddingTop: 34,
-    paddingHorizontal: 18,
-    paddingBottom: 34,
+    paddingTop: 54,
+    paddingHorizontal: 20,
+    paddingBottom: 130,
   },
   face: {
     width: '100%',
     flex: 1,
-    borderRadius: 22,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 18,
     paddingVertical: 16,
   },
   quote: { fontSize: 17, lineHeight: 24, textAlign: 'center' },
-  buttons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    alignSelf: 'stretch',
-    position: 'absolute',
-    bottom: 14,
-    left: 18,
-    right: 18,
-  },
-  badge: {
-    position: 'absolute',
-    right: 14,
-    bottom: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: RADIUS.pill,
-  },
-  badgeText: { fontSize: 12 },
 });
 
 // ── Settings card ─────────────────────────────────────────────────────────────
@@ -318,17 +277,9 @@ function ConfigCard({
           />
           <ListRow
             label="Refresh"
+            last
             onPress={() => onOpenPicker('interval')}
             trailing={{ kind: 'valueChevron', value: REFRESH_FREQUENCY_LABELS[config.updateInterval] }}
-          />
-          <ListRow
-            label="Show buttons"
-            last
-            trailing={{
-              kind: 'switch',
-              value: config.showButtons,
-              onValueChange: (v) => onChange({ showButtons: v }),
-            }}
           />
         </>
       )}
@@ -358,7 +309,6 @@ export default function WidgetsScreen({
   const { isPro } = useRevenueCat();
 
   const configs = useWidgetStore((s) => s.configs);
-  const bindings = useWidgetStore((s) => s.bindings);
   const addConfig = useWidgetStore((s) => s.addConfig);
   const updateConfig = useWidgetStore((s) => s.updateConfig);
   const removeConfig = useWidgetStore((s) => s.removeConfig);
@@ -367,8 +317,6 @@ export default function WidgetsScreen({
   const [activePicker, setActivePicker] = useState<ActivePicker>(null);
   const [renaming, setRenaming] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  /** Non-null while the "+" flow is open; not yet added to the store. */
-  const [draft, setDraft] = useState<WidgetConfig | null>(null);
   const scrollRef = useRef<ScrollView>(null);
 
   // The screen is never empty: a first configuration is created on open so
@@ -402,12 +350,7 @@ export default function WidgetsScreen({
     return () => sub.remove();
   }, [reconcile]);
 
-  const active: WidgetConfig | undefined = draft ?? configs[Math.min(index, configs.length - 1)];
-
-  const isPending = useCallback(
-    (configId: string) => !Object.values(bindings).includes(configId),
-    [bindings],
-  );
+  const active: WidgetConfig | undefined = configs[Math.min(index, configs.length - 1)];
 
   const openPaywall = () => (modal ? modal.openSheet('trial') : router.push('/subscriptions'));
 
@@ -417,16 +360,12 @@ export default function WidgetsScreen({
       if (!active) return;
       if (!isPro) { openPaywall(); return; }
 
-      if (draft) {
-        setDraft({ ...draft, ...updates });
-        return;
-      }
       updateConfig(active.id, updates);
       // A topic change can change WHICH quotes show, not just how the current
       // one is drawn, so it needs a refetch rather than a re-render.
       syncWidgets(active.id, { refetchQuote: 'quoteType' in updates || 'customize' in updates }).catch(() => {});
     },
-    [active, draft, isPro, updateConfig],
+    [active, isPro, updateConfig],
   );
 
   const handleScrollEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -434,17 +373,13 @@ export default function WidgetsScreen({
     if (next !== index) setIndex(next);
   };
 
+  /** Adding a widget is free — it always starts uncustomized ("mirror the app"). */
   const handleCreate = () => {
-    if (!isPro) { openPaywall(); return; }
-    // A new config always starts uncustomized — never inherits an existing
-    // config's Customize toggle along with its other borrowed defaults.
-    setDraft({
-      ...(useWidgetStore.getState().configs[0] ?? createConfig(nextConfigName(configs))),
-      id: '',
-      name: '',
-      customize: false,
-      cachedQuote: null,
-    });
+    const created = addConfig();
+    const newIndex = useWidgetStore.getState().configs.length - 1;
+    setIndex(newIndex);
+    scrollRef.current?.scrollTo({ x: newIndex * width, animated: true });
+    syncWidgets(created.id).catch(() => {});
   };
 
   const quoteTypeOptions = useMemo(
@@ -461,96 +396,6 @@ export default function WidgetsScreen({
 
   if (!active) return <View style={{ flex: 1, backgroundColor: theme.background }} />;
 
-  // ── Create mode ────────────────────────────────────────────────────────────
-
-  if (draft) {
-    const commit = () => {
-      const created = addConfig(draft.name || undefined);
-      updateConfig(created.id, {
-        customize: draft.customize,
-        quoteType: draft.quoteType,
-        showBorder: draft.showBorder,
-        updateInterval: draft.updateInterval,
-        showButtons: draft.showButtons,
-      });
-      setDraft(null);
-      setIndex(useWidgetStore.getState().configs.length - 1);
-      syncWidgets(created.id).catch(() => {});
-    };
-
-    return (
-      <View style={{ flex: 1, backgroundColor: theme.background }}>
-        <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-          <SheetHeader
-            title={draft.name || 'New widget'}
-            leading="back"
-            onLeadingPress={() => setDraft(null)}
-          />
-
-          <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-            <WidgetPreview config={draft} pending width={width} theme={theme} />
-
-            <TouchableOpacity
-              style={styles.nameRow}
-              onPress={() => setRenaming(true)}
-              activeOpacity={0.7}
-            >
-              <Icon name="pencil-outline" size={22} color={theme.text} />
-              <Text style={[styles.nameText, { color: theme.text, fontFamily: FONTS.display.medium }]}>
-                {draft.name || 'New widget'}
-              </Text>
-            </TouchableOpacity>
-
-            <ConfigCard
-              config={draft}
-              onChange={change}
-              onOpenPicker={(p) => setActivePicker(p)}
-            />
-          </ScrollView>
-
-          <View style={[styles.ctaWrap, { backgroundColor: theme.background }]}>
-            <TouchableOpacity
-              style={[styles.cta, { backgroundColor: theme.goldButton }]}
-              onPress={commit}
-              activeOpacity={0.85}
-            >
-              <Text style={[styles.ctaText, { color: ON_GOLD, fontFamily: FONTS.ui.bold }]}>
-                Create new widget
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </SafeAreaView>
-
-        <EditNameDialog
-          visible={renaming}
-          onClose={() => setRenaming(false)}
-          title="Edit name"
-          initialValue={draft.name}
-          onSubmit={(name) => setDraft({ ...draft, name })}
-        />
-
-        <PickerModal
-          visible={activePicker === 'quoteType'}
-          title="Topics"
-          options={quoteTypeOptions}
-          selected={draft.quoteType}
-          onSelect={(v) => change({ quoteType: v })}
-          onClose={() => setActivePicker(null)}
-          theme={theme}
-        />
-        <PickerModal
-          visible={activePicker === 'interval'}
-          title="Refresh"
-          options={intervalOptions}
-          selected={draft.updateInterval}
-          onSelect={(v) => change({ updateInterval: v })}
-          onClose={() => setActivePicker(null)}
-          theme={theme}
-        />
-      </View>
-    );
-  }
-
   // ── Carousel mode ──────────────────────────────────────────────────────────
 
   return (
@@ -566,10 +411,6 @@ export default function WidgetsScreen({
         />
 
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-          <Text style={[styles.subtitle, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
-            Set up your Home Screen widget
-          </Text>
-
           <ScrollView
             ref={scrollRef}
             horizontal
@@ -582,7 +423,6 @@ export default function WidgetsScreen({
               <WidgetPreview
                 key={c.id}
                 config={c}
-                pending={isPending(c.id)}
                 width={width}
                 theme={theme}
               />
@@ -684,7 +524,6 @@ export default function WidgetsScreen({
 const styles = StyleSheet.create({
   safe: { flex: 1 },
   scroll: { paddingHorizontal: GUTTER, paddingBottom: 120 },
-  subtitle: { fontSize: 16, textAlign: 'center', marginBottom: SPACE.lg },
   nameRow: {
     flexDirection: 'row',
     alignItems: 'center',

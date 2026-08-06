@@ -15,7 +15,7 @@ import { useHaptics } from '../../hooks/useHaptics';
 import { Icon } from '../ui/Icon';
 import { IconButton } from '../ui/IconButton';
 import { liquidGlassAvailable } from '../ui/GlassSurface';
-import { GUTTER, SPACE, RADIUS, ON_GOLD } from '../ui/tokens';
+import { GUTTER, SPACE, RADIUS, ON_GOLD, ICON_BTN } from '../ui/tokens';
 import { useBaseTheme } from '../../hooks/useTheme';
 import { useCollectionsStore, CollectionQuote } from '../../store/useCollectionsStore';
 import { FONTS } from '../../constants/fonts';
@@ -88,7 +88,8 @@ export function AddToCollectionSheet({ visible, quote, onClose }: Props) {
                 icon="close"
                 onPress={close}
                 filled={glass}
-                iconSize={glass ? 18 : 22}
+                size={glass ? ICON_BTN.md : ICON_BTN.sm}
+                iconSize={22}
                 color={theme.textMuted}
                 accessibilityLabel="Close"
               />
