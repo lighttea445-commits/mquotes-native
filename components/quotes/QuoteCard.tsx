@@ -419,15 +419,15 @@ export function QuoteCard() {
       }
     });
 
-  // Long-press anywhere on the quote screen (the quote text or the empty
-  // space around it) opens the share sheet — a faster path than reaching for
-  // the share icon. Composed with the pan gesture so a hold doesn't block a
-  // swipe, and vice versa.
+  // Long-press on the quote text or the empty space around it opens the share
+  // sheet — a faster path than reaching for the share icon. Scoped to the quote
+  // body only: mounted on the container it also fired on the top bar and the
+  // floating corner buttons, so holding a nav button opened share. Declared
+  // simultaneous with the pan so a hold doesn't block a swipe, and vice versa.
   const longPressGesture = Gesture.LongPress()
     .minDuration(500)
+    .simultaneousWithExternalGesture(panGesture)
     .onStart(() => { runOnJS(handleShare)(); });
-
-  const composedGesture = Gesture.Simultaneous(panGesture, longPressGesture);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [
@@ -571,6 +571,7 @@ export function QuoteCard() {
 
         {/* ── QUOTE ONLY — this is what animates ── */}
         <Animated.View style={[styles.quoteAnimated, animatedStyle]}>
+          <GestureDetector gesture={longPressGesture}>
           <View style={[styles.quoteBody, { paddingBottom: QUOTE_BODY_PB }]}>
             <View style={styles.quoteWrapper}>
               <Text
@@ -603,6 +604,7 @@ export function QuoteCard() {
               </TouchableOpacity>
             </View>
           </View>
+          </GestureDetector>
         </Animated.View>
 
         {/* ── SWIPE-UP HINT: bouncing arrow, no text, shown until the first swipe ── */}
@@ -647,7 +649,7 @@ export function QuoteCard() {
 
   return (
     <>
-      <GestureDetector gesture={composedGesture}>
+      <GestureDetector gesture={panGesture}>
         {containerContent}
       </GestureDetector>
       <PremiumModal visible={showPremiumModal} onClose={() => setShowPremiumModal(false)} />
