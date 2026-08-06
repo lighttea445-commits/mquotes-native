@@ -1,79 +1,47 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { FONTS } from '../../constants/fonts';
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Switch,
   Modal,
   FlatList,
   AppState,
-  TextInput,
-  ActivityIndicator,
   Platform,
+  useWindowDimensions,
+  type NativeSyntheticEvent,
+  type NativeScrollEvent,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Icon, IconName } from '../ui/Icon';
+import Svg, { Rect, Defs, LinearGradient, Stop } from 'react-native-svg';
+import { useRouter } from 'expo-router';
+import { FONTS } from '../../constants/fonts';
+import { Icon } from '../ui/Icon';
 import { IconButton } from '../ui/IconButton';
 import { SheetHeader } from '../ui/SheetHeader';
+import { ListRow } from '../ui/ListRow';
+import { PageDots } from '../ui/PageDots';
+import { EditNameDialog } from '../ui/EditNameDialog';
+import { ConfirmSheet } from '../ui/ConfirmSheet';
 import { useTheme } from '../../hooks/useTheme';
 import {
   useWidgetStore,
-  WidgetType,
-  WidgetRefreshFrequency,
-  WidgetQuoteType,
-  WidgetTextSize,
+  createConfig,
+  nextConfigName,
+  type WidgetConfig,
+  type WidgetRefreshFrequency,
+  type WidgetQuoteType,
   REFRESH_FREQUENCY_LABELS,
   QUOTE_TYPE_LABELS,
-  TEXT_SIZE_LABELS,
-  defaultInstanceConfig,
 } from '../../store/useWidgetStore';
-import { fetchQuotesByCategory, fetchMultipleRandomQuotes } from '../../lib/quotesApi';
-import { WidgetBridge, ActiveWidget, IOS_WIDGET_CONFIG_ID } from '../../modules/widget-bridge';
-import { refreshIOSWidget, setIOSWidgetConfig, pushIOSWidgetAppearance } from '../../lib/iosWidget';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useFavoritesStore } from '../../store/useFavoritesStore';
-import { useUserQuotesStore } from '../../store/useUserQuotesStore';
+import { WidgetBridge } from '../../modules/widget-bridge';
+import { syncWidgets } from '../../lib/widgetSync';
 import { useRevenueCat } from '../../hooks/useRevenueCat';
 import { useModal } from '../../contexts/ModalContext';
-import { useAppStore } from '../../store/useAppStore';
 import { GUTTER, SPACE, RADIUS, ON_GOLD } from '../ui/tokens';
 
-const WIDGET_STORE_KEY = 'widget-store-v2';
-
-async function persistWidgetQuote(
-  widgetId: number,
-  config: ReturnType<typeof defaultInstanceConfig>,
-  quote: { id?: string; text: string; author: string },
-) {
-  try {
-    const raw = await AsyncStorage.getItem(WIDGET_STORE_KEY);
-    const parsed = raw
-      ? (JSON.parse(raw) as { state: { widgetConfigs: Record<string, typeof config> }; version?: number })
-      : { state: { widgetConfigs: {} } };
-    // Merge so any fields already in storage (e.g. written by a concurrent
-    // background refresh) aren't clobbered by a stale editor snapshot.
-    const existing = parsed.state.widgetConfigs[widgetId.toString()];
-    parsed.state.widgetConfigs[widgetId.toString()] = {
-      ...(existing ?? {}),
-      ...config,
-      cachedQuote: { text: quote.text, author: quote.author, quoteId: quote.id },
-    };
-    await AsyncStorage.setItem(WIDGET_STORE_KEY, JSON.stringify(parsed));
-  } catch {
-    // Non-critical
-  }
-}
-
-// ── Widget type meta ──────────────────────────────────────────────────────────
-
-const WIDGET_META: Record<WidgetType, { label: string; subtitle: string; icon: IconName }> = {
-  basic: { label: 'Basic', subtitle: 'Rotating quotes', icon: 'format-quote-open' },
-};
-
+const PREVIEW_QUOTE = 'Discipline always beats motivation.';
 
 // ── Picker modal ──────────────────────────────────────────────────────────────
 
@@ -119,9 +87,7 @@ function PickerModal<T extends string>({
               <Text style={[pickerStyles.rowLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
                 {item.label}
               </Text>
-              {item.value === selected && (
-                <Icon name="check" size={18} color={theme.gold} />
-              )}
+              {item.value === selected && <Icon name="check" size={18} color={theme.gold} />}
             </TouchableOpacity>
           )}
         />
@@ -148,841 +114,436 @@ const pickerStyles = StyleSheet.create({
   rowLabel: { fontSize: 15 },
 });
 
-// ── Settings row ──────────────────────────────────────────────────────────────
+// ── Widget preview ────────────────────────────────────────────────────────────
+//
+// A handset with the widget face inside it. Deliberately plain Views rather
+// than art/PhoneFrame: that one is a single-weight line-art outline, and this
+// needs a solid body so the widget card reads as sitting on a home screen.
 
-function SettingsRow({
-  icon,
-  label,
-  value,
-  onPress,
-  theme,
-  isLast,
-}: {
-  icon: IconName;
-  label: string;
-  value: string;
-  onPress: () => void;
-  theme: ReturnType<typeof useTheme>;
-  isLast?: boolean;
-}) {
+const PHONE_VB_W = 240;
+const PHONE_VB_H = 240 * 1.28;
+
+/**
+ * Vector handset chrome: rounded body, a top sheen for depth, a Dynamic
+ * Island-style pill and a home indicator. Renders once behind the widget
+ * face content, which stays regular RN Views/Text — SVG doesn't wrap dynamic
+ * multiline text cleanly, so only the chrome is drawn as SVG.
+ */
+function PhoneChrome({ width, height, theme }: { width: number; height: number; theme: ReturnType<typeof useTheme> }) {
+  const r = PHONE_VB_W * 0.14;
   return (
-    <>
-      <TouchableOpacity style={rowStyles.row} onPress={onPress} activeOpacity={0.7}>
-        <Icon name={icon} size={18} color={theme.gold} />
-        <Text style={[rowStyles.label, { color: theme.text, fontFamily: theme.uiFontFamily }]}>{label}</Text>
-        <Text style={[rowStyles.value, { color: theme.textMuted }]} numberOfLines={1}>{value}</Text>
-        <Icon name="chevron-right" size={16} color={theme.textMuted} />
-      </TouchableOpacity>
-      {!isLast && <View style={[rowStyles.separator, { backgroundColor: theme.border }]} />}
-    </>
+    <Svg width={width} height={height} viewBox={`0 0 ${PHONE_VB_W} ${PHONE_VB_H}`} style={StyleSheet.absoluteFill}>
+      <Defs>
+        <LinearGradient id="phoneSheen" x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0" stopColor={theme.text} stopOpacity={0.08} />
+          <Stop offset="0.35" stopColor={theme.text} stopOpacity={0} />
+        </LinearGradient>
+      </Defs>
+
+      <Rect
+        x={1.5}
+        y={1.5}
+        width={PHONE_VB_W - 3}
+        height={PHONE_VB_H - 3}
+        rx={r}
+        fill={theme.surface}
+        stroke={theme.border}
+        strokeWidth={1.5}
+      />
+      <Rect
+        x={1.5}
+        y={1.5}
+        width={PHONE_VB_W - 3}
+        height={PHONE_VB_H - 3}
+        rx={r}
+        fill="url(#phoneSheen)"
+      />
+      <Rect
+        x={PHONE_VB_W / 2 - 34}
+        y={16}
+        width={68}
+        height={20}
+        rx={10}
+        fill={theme.background}
+      />
+      <Rect
+        x={PHONE_VB_W / 2 - 20}
+        y={PHONE_VB_H - 16}
+        width={40}
+        height={4}
+        rx={2}
+        fill={theme.text}
+        opacity={0.35}
+      />
+    </Svg>
   );
 }
 
-const rowStyles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', minHeight: 64, paddingHorizontal: SPACE.lg, paddingVertical: SPACE.md, gap: SPACE.sm },
-  label: { flex: 1, fontSize: 15 },
-  value: { fontSize: 13, maxWidth: 160, textAlign: 'right', fontFamily: FONTS.ui.regular },
-  separator: { height: StyleSheet.hairlineWidth, marginHorizontal: SPACE.lg },
-});
-
-// ── Toggle row ────────────────────────────────────────────────────────────────
-
-function ToggleRow({
-  icon,
-  label,
-  value,
-  onToggle,
+function WidgetPreview({
+  config,
+  pending,
+  width,
   theme,
-  isLast,
 }: {
-  icon: IconName;
-  label: string;
-  value: boolean;
-  onToggle: (v: boolean) => void;
+  config: WidgetConfig;
+  pending: boolean;
+  width: number;
   theme: ReturnType<typeof useTheme>;
-  isLast?: boolean;
 }) {
-  return (
-    <>
-      <View style={rowStyles.row}>
-        <Icon name={icon} size={18} color={theme.gold} />
-        <Text style={[rowStyles.label, { color: theme.text, fontFamily: theme.uiFontFamily }]}>{label}</Text>
-        <Switch
-          value={value}
-          onValueChange={onToggle}
-          trackColor={{ false: theme.border, true: theme.gold + '88' }}
-          thumbColor={value ? theme.gold : theme.textMuted}
-        />
-      </View>
-      {!isLast && <View style={[rowStyles.separator, { backgroundColor: theme.border }]} />}
-    </>
-  );
-}
-
-// ── Active-widget card ────────────────────────────────────────────────────────
-
-function WidgetCard({
-  widgetId,
-  type,
-  theme,
-  onEdit,
-}: {
-  widgetId: number;
-  type: WidgetType;
-  theme: ReturnType<typeof useTheme>;
-  onEdit: () => void;
-}) {
-  const config = useWidgetStore((s) => s.widgetConfigs[widgetId.toString()]);
-  const meta   = WIDGET_META[type];
-  const displayName = config?.name || 'Unnamed Widget';
+  const phoneW = Math.min(width - GUTTER * 4, 300);
+  const phoneH = phoneW * (PHONE_VB_H / PHONE_VB_W);
 
   return (
-    <View style={[cardStyles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-      <View style={cardStyles.cardMain}>
-        <View style={cardStyles.typeRow}>
-          <Icon name={meta.icon} size={15} color={theme.gold} />
-          <Text style={[cardStyles.typeLabel, { color: theme.text, fontFamily: FONTS.ui.bold }]}>
-            {displayName}
-          </Text>
+    <View style={{ width, alignItems: 'center' }}>
+      <View style={{ width: phoneW, height: phoneH }}>
+        <PhoneChrome width={phoneW} height={phoneH} theme={theme} />
+
+        <View style={previewStyles.faceWrap}>
+          <View
+            style={[
+              previewStyles.face,
+              {
+                backgroundColor: theme.background,
+                borderWidth: config.showBorder ? 1.5 : 0,
+                borderColor: theme.text,
+              },
+            ]}
+          >
+            <Text
+              style={[previewStyles.quote, { color: theme.text, fontFamily: theme.quoteFontFamily }]}
+              numberOfLines={4}
+            >
+              {PREVIEW_QUOTE}
+            </Text>
+
+            {config.showButtons && (
+              <View style={previewStyles.buttons}>
+                <Icon name="chevron-left" size={16} color={theme.text} />
+                <Icon name="export-variant" size={16} color={theme.text} />
+                <Icon name="heart-outline" size={16} color={theme.text} />
+                <Icon name="chevron-right" size={16} color={theme.text} />
+              </View>
+            )}
+
+            {pending && (
+              <View style={[previewStyles.badge, { backgroundColor: theme.goldButton }]}>
+                <Text style={[previewStyles.badgeText, { color: ON_GOLD, fontFamily: FONTS.ui.medium }]}>
+                  Pending
+                </Text>
+              </View>
+            )}
+          </View>
         </View>
-        <Text style={[cardStyles.quoteSnippet, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]} numberOfLines={1}>
-          {meta.label} · {QUOTE_TYPE_LABELS[config?.quoteType ?? 'general']}
-        </Text>
       </View>
-
-      <TouchableOpacity
-        style={[cardStyles.editBtn, { backgroundColor: theme.background, borderColor: theme.border }]}
-        onPress={onEdit}
-        activeOpacity={0.8}
-      >
-        <Icon name="pencil-outline" size={14} color={theme.textMuted} />
-        <Text style={[cardStyles.editBtnText, { color: theme.textMuted, fontFamily: FONTS.ui.medium }]}>
-          Edit
-        </Text>
-      </TouchableOpacity>
     </View>
   );
 }
 
-const cardStyles = StyleSheet.create({
-  card: {
+const previewStyles = StyleSheet.create({
+  faceWrap: {
+    flex: 1,
+    paddingTop: 34,
+    paddingHorizontal: 18,
+    paddingBottom: 34,
+  },
+  face: {
+    width: '100%',
+    flex: 1,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+  },
+  quote: { fontSize: 17, lineHeight: 24, textAlign: 'center' },
+  buttons: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    borderRadius: RADIUS.card,
-    borderWidth: 1,
-    paddingVertical: 14,
-    paddingHorizontal: SPACE.lg,
-    marginBottom: SPACE.md,
-    gap: SPACE.md,
+    alignSelf: 'stretch',
+    position: 'absolute',
+    bottom: 14,
+    left: 18,
+    right: 18,
   },
-  cardMain: { flex: 1, gap: 6 },
-  typeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  typeLabel: { fontSize: 14 },
-  quoteSnippet: { fontSize: 13, lineHeight: 19 },
-  editBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
+  badge: {
+    position: 'absolute',
+    right: 14,
+    bottom: 14,
     paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 10,
-    borderWidth: 1,
-    flexShrink: 0,
+    paddingVertical: 5,
+    borderRadius: RADIUS.pill,
   },
-  editBtnText: { fontSize: 12 },
+  badgeText: { fontSize: 12 },
 });
 
-// ── Empty state ───────────────────────────────────────────────────────────────
+// ── Settings card ─────────────────────────────────────────────────────────────
 
-function EmptyState({ theme, onRefresh }: { theme: ReturnType<typeof useTheme>; onRefresh: () => void }) {
-  const [adding, setAdding] = useState(false);
-
-  const handleAddWidget = async () => {
-    setAdding(true);
-    try {
-      await WidgetBridge.requestPinWidget();
-    } finally {
-      setAdding(false);
-    }
-  };
-
+function ConfigCard({
+  config,
+  onChange,
+  onOpenPicker,
+}: {
+  config: WidgetConfig;
+  onChange: (updates: Partial<WidgetConfig>) => void;
+  onOpenPicker: (picker: 'quoteType' | 'interval') => void;
+}) {
   return (
-    <View style={emptyStyles.container}>
-      <Icon name="view-grid-plus-outline" size={48} color={theme.textMuted} style={{ opacity: 0.4 }} />
-      <Text style={[emptyStyles.title, { color: theme.text, fontFamily: FONTS.display.bold }]}>
-        No widgets yet
-      </Text>
+    <View style={styles.card}>
+      <ListRow
+        label="Customize"
+        first
+        last={!config.customize}
+        trailing={{
+          kind: 'switch',
+          value: config.customize,
+          onValueChange: (v) => onChange({ customize: v }),
+        }}
+      />
 
-      <TouchableOpacity
-        style={[emptyStyles.addBtn, { backgroundColor: theme.gold }]}
-        onPress={handleAddWidget}
-        activeOpacity={0.82}
-        disabled={adding}
-      >
-        <Icon name="plus-circle-outline" size={18} color={ON_GOLD} />
-        <Text style={[emptyStyles.addBtnText, { fontFamily: FONTS.ui.bold, color: ON_GOLD }]}>
-          {adding ? 'Opening…' : 'Add Widget'}
-        </Text>
-      </TouchableOpacity>
-
-      <View style={[emptyStyles.stepsCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-        {[
-          'Tap "Add Widget" above',
-          'Confirm in the system prompt',
-          'Position it on your home screen',
-        ].map((step, i) => (
-          <View key={i} style={emptyStyles.stepRow}>
-            <View style={[emptyStyles.stepBadge, { backgroundColor: theme.gold + '22' }]}>
-              <Text style={[emptyStyles.stepNum, { color: theme.gold, fontFamily: FONTS.ui.bold }]}>{i + 1}</Text>
-            </View>
-            <Text style={[emptyStyles.stepText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>{step}</Text>
-          </View>
-        ))}
-      </View>
-
-      <TouchableOpacity
-        style={[emptyStyles.refreshBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}
-        onPress={onRefresh}
-        activeOpacity={0.7}
-      >
-        <Icon name="refresh" size={16} color={theme.textMuted} />
-        <Text style={[emptyStyles.refreshBtnText, { color: theme.textMuted, fontFamily: FONTS.ui.medium }]}>
-          Refresh
-        </Text>
-      </TouchableOpacity>
+      {config.customize && (
+        <>
+          <ListRow
+            label="Topics"
+            onPress={() => onOpenPicker('quoteType')}
+            trailing={{ kind: 'valueChevron', value: QUOTE_TYPE_LABELS[config.quoteType] }}
+          />
+          <ListRow
+            label="Widget border"
+            trailing={{
+              kind: 'switch',
+              value: config.showBorder,
+              onValueChange: (v) => onChange({ showBorder: v }),
+            }}
+          />
+          <ListRow
+            label="Refresh"
+            onPress={() => onOpenPicker('interval')}
+            trailing={{ kind: 'valueChevron', value: REFRESH_FREQUENCY_LABELS[config.updateInterval] }}
+          />
+          <ListRow
+            label="Show buttons"
+            last
+            trailing={{
+              kind: 'switch',
+              value: config.showButtons,
+              onValueChange: (v) => onChange({ showButtons: v }),
+            }}
+          />
+        </>
+      )}
     </View>
   );
 }
 
-const emptyStyles = StyleSheet.create({
-  container: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28, gap: 16 },
-  title: { fontSize: 20, textAlign: 'center' },
-  stepsCard: {
-    width: '100%',
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 16,
-    gap: 12,
-  },
-  stepRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  stepBadge: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  stepNum: { fontSize: 13 },
-  stepText: { fontSize: 14, lineHeight: 20, flex: 1 },
-  refreshBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderRadius: RADIUS.pill,
-    borderWidth: 1,
-  },
-  refreshBtnText: { fontSize: 14 },
-  addBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 28,
-    paddingVertical: 14,
-    borderRadius: RADIUS.pill,
-  },
-  addBtnText: { fontSize: 16 },
-});
+// ── Screen ────────────────────────────────────────────────────────────────────
 
-// ── iOS panel ─────────────────────────────────────────────────────────────────
-//
-// iOS gives the app no widget ids and no way to enumerate placed widgets, so
-// there is no list to render and no per-instance editor. All iOS widgets share
-// one config, but the app owns every setting in it: the extension reads them
-// from the App Group, and Apple's Edit Widget panel is deliberately empty.
+type ActivePicker = 'quoteType' | 'interval' | null;
 
-const IOS_ADD_STEPS = [
-  'Long-press an empty spot on your home screen',
-  'Tap the + button, then search for "Quotes"',
-  'Pick a size and drag it into place',
-];
-
-function IOSWidgetPanel({
-  theme,
-  config,
-  onOpenPicker,
-  onToggle,
-  onRefresh,
-  refreshing,
+export default function WidgetsScreen({
+  onClose,
+  onBack,
+  onContinue,
 }: {
-  theme: ReturnType<typeof useTheme>;
-  config: ReturnType<typeof defaultInstanceConfig>;
-  onOpenPicker: (picker: 'interval' | 'quoteType' | 'textSize') => void;
-  onToggle: (key: 'showAuthor' | 'showBorder', value: boolean) => void;
-  onRefresh: () => void;
-  refreshing: boolean;
+  onClose?: () => void;
+  onBack?: () => void;
+  onContinue?: () => void;
 }) {
-  const cached = config.cachedQuote;
-
-  return (
-    <ScrollView contentContainerStyle={iosStyles.content} showsVerticalScrollIndicator={false}>
-      <View style={[iosStyles.preview, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-        <Icon name="format-quote-open" size={20} color={theme.text} style={{ opacity: 0.25 }} />
-        <Text
-          style={[iosStyles.previewQuote, { color: theme.text, fontFamily: theme.quoteFontFamily }]}
-          numberOfLines={4}
-        >
-          {cached?.text ?? 'Your widget will show a quote here once it refreshes.'}
-        </Text>
-        {!!cached?.author && (
-          <Text style={[iosStyles.previewAuthor, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-            {`- ${cached.author}`}
-          </Text>
-        )}
-      </View>
-
-      <View style={[styles.settingsCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-        <SettingsRow
-          icon="tag-outline"
-          label="Quote category"
-          value={QUOTE_TYPE_LABELS[config.quoteType]}
-          onPress={() => onOpenPicker('quoteType')}
-          theme={theme}
-        />
-        <SettingsRow
-          icon="refresh"
-          label="Update interval"
-          value={REFRESH_FREQUENCY_LABELS[config.updateInterval]}
-          onPress={() => onOpenPicker('interval')}
-          theme={theme}
-        />
-        <SettingsRow
-          icon="format-size"
-          label="Text size"
-          value={TEXT_SIZE_LABELS[config.textSize]}
-          onPress={() => onOpenPicker('textSize')}
-          theme={theme}
-        />
-        <ToggleRow
-          icon="account-outline"
-          label="Show author"
-          value={config.showAuthor}
-          onToggle={(v) => onToggle('showAuthor', v)}
-          theme={theme}
-        />
-        <ToggleRow
-          icon="shape-outline"
-          label="Show border"
-          value={config.showBorder}
-          onToggle={(v) => onToggle('showBorder', v)}
-          theme={theme}
-          isLast
-        />
-      </View>
-
-      <View style={[emptyStyles.stepsCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-        {IOS_ADD_STEPS.map((step, i) => (
-          <View key={i} style={emptyStyles.stepRow}>
-            <View style={[emptyStyles.stepBadge, { backgroundColor: theme.gold + '22' }]}>
-              <Text style={[emptyStyles.stepNum, { color: theme.gold, fontFamily: FONTS.ui.bold }]}>{i + 1}</Text>
-            </View>
-            <Text style={[emptyStyles.stepText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>{step}</Text>
-          </View>
-        ))}
-      </View>
-
-      <TouchableOpacity
-        style={[iosStyles.refreshBtn, { backgroundColor: theme.gold }]}
-        onPress={onRefresh}
-        activeOpacity={0.82}
-        disabled={refreshing}
-      >
-        <Icon name="refresh" size={18} color={ON_GOLD} />
-        <Text style={[emptyStyles.addBtnText, { fontFamily: FONTS.ui.bold, color: ON_GOLD }]}>
-          {refreshing ? 'Refreshing…' : 'Refresh now'}
-        </Text>
-      </TouchableOpacity>
-    </ScrollView>
-  );
-}
-
-const iosStyles = StyleSheet.create({
-  content: { paddingHorizontal: GUTTER, paddingTop: SPACE.lg, paddingBottom: 120, gap: SPACE.md },
-  preview: {
-    borderRadius: RADIUS.card,
-    borderWidth: 1,
-    padding: 20,
-    gap: 8,
-  },
-  previewQuote: { fontSize: 17, lineHeight: 25 },
-  previewAuthor: { fontSize: 13, textAlign: 'right' },
-  refreshBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 15,
-    borderRadius: RADIUS.pill,
-    marginTop: 4,
-  },
-});
-
-// ── Main screen ───────────────────────────────────────────────────────────────
-
-type ActivePicker = 'interval' | 'quoteType' | 'textSize' | null;
-
-export default function WidgetsScreen({ onClose, onBack, onContinue }: { onClose?: () => void; onBack?: () => void; onContinue?: () => void }) {
   const theme = useTheme();
   const router = useRouter();
+  const { width } = useWindowDimensions();
   const close = onClose ?? (() => router.back());
   const back = onBack ?? close;
-  const { widgetConfigs, setWidgetConfig, removeWidgetConfig } = useWidgetStore();
-  const { isPro, isLoading: rcLoading } = useRevenueCat();
   const modal = useModal();
+  const { isPro } = useRevenueCat();
 
-  // Route params: set when launched from WidgetConfigActivity (standalone route mode)
-  const params = useLocalSearchParams<{ widgetId?: string; type?: string }>();
-  const routeWidgetId   = params.widgetId ? parseInt(params.widgetId, 10) : null;
-  const routeWidgetType = (params.type as WidgetType | undefined) ?? 'basic';
+  const configs = useWidgetStore((s) => s.configs);
+  const bindings = useWidgetStore((s) => s.bindings);
+  const addConfig = useWidgetStore((s) => s.addConfig);
+  const updateConfig = useWidgetStore((s) => s.updateConfig);
+  const removeConfig = useWidgetStore((s) => s.removeConfig);
 
-  // Local editor state for BottomSheet (in-app) mode
-  const [localEditorId, setLocalEditorId] = useState<number | null>(null);
-  const [localEditorType, setLocalEditorType] = useState<WidgetType>('basic');
-
-  // List-view state
-  const [activeWidgets, setActiveWidgets] = useState<ActiveWidget[]>([]);
-  const [loadingList, setLoadingList]     = useState(true);
-  const appStateRef = useRef(AppState.currentState);
-  // Ref so loadActiveWidgets can read the latest configs without being in its
-  // useCallback deps (avoids an infinite loop: remove → configs change →
-  // new callback → effect re-fires → remove again → …).
-  const widgetConfigsRef = useRef(widgetConfigs);
-  widgetConfigsRef.current = widgetConfigs;
-
-  // Editor state
+  const [index, setIndex] = useState(0);
   const [activePicker, setActivePicker] = useState<ActivePicker>(null);
+  const [renaming, setRenaming] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  /** Non-null while the "+" flow is open; not yet added to the store. */
+  const [draft, setDraft] = useState<WidgetConfig | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
 
-  // iOS: one shared config, no per-instance editor. See IOSWidgetPanel.
-  const isIOS = Platform.OS === 'ios';
-  const [iosRefreshing, setIosRefreshing] = useState(false);
-  const iosConfig = widgetConfigs[IOS_WIDGET_CONFIG_ID] ?? defaultInstanceConfig('basic');
+  // The screen is never empty: a first configuration is created on open so
+  // there is always something to show and bind to.
+  useEffect(() => {
+    if (configs.length === 0) addConfig();
+  }, [configs.length, addConfig]);
 
-  const handleIOSRefresh = useCallback(async () => {
-    setIosRefreshing(true);
-    try {
-      await refreshIOSWidget({ force: true });
-    } finally {
-      setIosRefreshing(false);
+  // Android can enumerate placed widgets, so bindings are refreshed whenever
+  // the screen is shown or the app returns to the foreground.
+  const reconcile = useCallback(async () => {
+    if (Platform.OS !== 'android') return;
+    const placed = await WidgetBridge.getActiveWidgets();
+    const store = useWidgetStore.getState();
+    const placedIds = new Set(placed.map((w) => w.widgetId.toString()));
+
+    for (const widgetId of Object.keys(store.bindings)) {
+      if (!placedIds.has(widgetId)) store.unbindWidget(widgetId);
+    }
+    for (const id of placedIds) {
+      store.claimConfigFor(id);
     }
   }, []);
 
-  // A category change needs a new batch of quotes. Everything else only rewrites
-  // the settings that travel alongside the queue already on disk, so it skips
-  // the network entirely.
-  const updateIOSConfig = useCallback(
-    (updates: Partial<ReturnType<typeof defaultInstanceConfig>>, refetch = false) => {
-      setIOSWidgetConfig(updates);
-      const pushed = refetch ? refreshIOSWidget({ force: true }) : pushIOSWidgetAppearance();
-      pushed.catch(() => {});
+  useEffect(() => { reconcile(); }, [reconcile]);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') reconcile();
+    });
+    return () => sub.remove();
+  }, [reconcile]);
+
+  const active: WidgetConfig | undefined = draft ?? configs[Math.min(index, configs.length - 1)];
+
+  const isPending = useCallback(
+    (configId: string) => !Object.values(bindings).includes(configId),
+    [bindings],
+  );
+
+  const openPaywall = () => (modal ? modal.openSheet('trial') : router.push('/subscriptions'));
+
+  /** Every change is Pro-gated and pushes straight through to the widget. */
+  const change = useCallback(
+    (updates: Partial<WidgetConfig>) => {
+      if (!active) return;
+      if (!isPro) { openPaywall(); return; }
+
+      if (draft) {
+        setDraft({ ...draft, ...updates });
+        return;
+      }
+      updateConfig(active.id, updates);
+      // A topic change can change WHICH quotes show, not just how the current
+      // one is drawn, so it needs a refetch rather than a re-render.
+      syncWidgets(active.id, { refetchQuote: 'quoteType' in updates || 'customize' in updates }).catch(() => {});
     },
+    [active, draft, isPro, updateConfig],
+  );
+
+  const handleScrollEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const next = Math.round(e.nativeEvent.contentOffset.x / width);
+    if (next !== index) setIndex(next);
+  };
+
+  const handleCreate = () => {
+    if (!isPro) { openPaywall(); return; }
+    // A new config always starts uncustomized — never inherits an existing
+    // config's Customize toggle along with its other borrowed defaults.
+    setDraft({
+      ...(useWidgetStore.getState().configs[0] ?? createConfig(nextConfigName(configs))),
+      id: '',
+      name: '',
+      customize: false,
+      cachedQuote: null,
+    });
+  };
+
+  const quoteTypeOptions = useMemo(
+    () => (Object.entries(QUOTE_TYPE_LABELS) as [WidgetQuoteType, string][])
+      .map(([value, label]) => ({ value, label })),
     [],
   );
 
-  // Derive editor config — in BottomSheet mode use local state; in route mode use route params.
-  const editorId = onClose ? localEditorId : routeWidgetId;
-  const editorType = onClose ? localEditorType : routeWidgetType;
-  const storedConfig = editorId !== null ? widgetConfigs[editorId.toString()] : undefined;
-  const editorConfig = editorId !== null
-    ? (storedConfig ?? defaultInstanceConfig(editorType))
-    : null;
-
-  // Persist the default config after mount if the widget has no stored config yet.
-  useEffect(() => {
-    if (editorId !== null && !storedConfig) {
-      setWidgetConfig(editorId.toString(), defaultInstanceConfig(editorType));
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editorId, editorType]);
-
-  // ── Load active widgets list ───────────────────────────────────────────────
-
-  const loadActiveWidgets = useCallback(async () => {
-    // iOS can't enumerate placed widgets — getActiveWidgets() always returns []
-    // there, which would strand every iOS user on the "No widgets yet" empty
-    // state and, worse, prune the shared iOS config as "no longer placed".
-    if (Platform.OS === 'ios') {
-      setLoadingList(false);
-      return;
-    }
-
-    setLoadingList(true);
-    const list = await WidgetBridge.getActiveWidgets();
-    setActiveWidgets(list);
-    setLoadingList(false);
-
-    // Remove configs for widgets that are no longer placed on the home screen.
-    // Read via ref to avoid widgetConfigs appearing in deps, which would
-    // recreate this callback on every removal and re-trigger the effect.
-    const activeIds = new Set(list.map((w) => w.widgetId.toString()));
-    for (const id of Object.keys(widgetConfigsRef.current)) {
-      if (!activeIds.has(id)) removeWidgetConfig(id);
-    }
-
-    // Force-re-render all placed widgets so their PendingIntents are always
-    // up-to-date (e.g. after a code change to clickAction).
-    if (list.length > 0) {
-      WidgetBridge.reloadTimelines().catch(() => {});
-    }
-  }, [removeWidgetConfig]);
-
-  useEffect(() => {
-    if (editorId === null) {
-      loadActiveWidgets();
-    }
-  }, [editorId, loadActiveWidgets]);
-
-  useEffect(() => {
-    if (editorId !== null) return;
-    const sub = AppState.addEventListener('change', (next) => {
-      if (appStateRef.current.match(/inactive|background/) && next === 'active') {
-        loadActiveWidgets();
-      }
-      appStateRef.current = next;
-    });
-    return () => sub.remove();
-  }, [editorId, loadActiveWidgets]);
-
-  // ── Editor helpers ─────────────────────────────────────────────────────────
-
-  // Update zustand immediately for UI reactivity, then force-flush to
-  // AsyncStorage so a headless resize task running right after sees the
-  // change. Without the direct write, the zustand persist middleware's
-  // async flush can lose the race against a WIDGET_RESIZED that fires
-  // as soon as the user touches the widget on their home screen.
-  const updateConfig = useCallback(
-    (updates: Parameters<typeof setWidgetConfig>[1]) => {
-      if (editorId === null) return;
-      setWidgetConfig(editorId.toString(), updates);
-
-      (async () => {
-        try {
-          const raw = await AsyncStorage.getItem(WIDGET_STORE_KEY);
-          const parsed = raw
-            ? (JSON.parse(raw) as { state: { widgetConfigs: Record<string, ReturnType<typeof defaultInstanceConfig>> }; version?: number })
-            : { state: { widgetConfigs: {} } };
-          const existing = parsed.state.widgetConfigs[editorId.toString()] ?? defaultInstanceConfig('basic');
-          parsed.state.widgetConfigs[editorId.toString()] = { ...existing, ...updates };
-          await AsyncStorage.setItem(WIDGET_STORE_KEY, JSON.stringify(parsed));
-        } catch {
-          // Non-critical — zustand persist will eventually flush the same data.
-        }
-      })();
-    },
-    [editorId, setWidgetConfig],
+  const intervalOptions = useMemo(
+    () => (Object.entries(REFRESH_FREQUENCY_LABELS) as [WidgetRefreshFrequency, string][])
+      .map(([value, label]) => ({ value, label })),
+    [],
   );
 
-  const handleUpdateWidget = useCallback(async () => {
-    if (editorId === null || !editorConfig) return;
+  if (!active) return <View style={{ flex: 1, backgroundColor: theme.background }} />;
 
-    const qt = editorConfig.quoteType;
-    let quote: { id?: string; text: string; author: string } | null = null;
+  // ── Create mode ────────────────────────────────────────────────────────────
 
-    if (qt === 'general') {
-      const fresh = await fetchMultipleRandomQuotes(1);
-      if (fresh[0]) quote = { id: fresh[0]._id, text: fresh[0].content, author: fresh[0].author };
-    } else if (qt === 'favorites') {
-      const favs = useFavoritesStore.getState().favorites;
-      if (favs.length > 0) {
-        const f = favs[Math.floor(Math.random() * favs.length)];
-        quote = { id: f.id, text: f.text, author: f.author };
-      } else {
-        // No favorites yet — fall back to general
-        const fresh = await fetchMultipleRandomQuotes(1);
-        if (fresh[0]) quote = { id: fresh[0]._id, text: fresh[0].content, author: fresh[0].author };
-      }
-    } else if (qt === 'my-quotes') {
-      const myQuotes = useUserQuotesStore.getState().userQuotes;
-      if (myQuotes.length > 0) {
-        const q = myQuotes[Math.floor(Math.random() * myQuotes.length)];
-        quote = { id: q.id, text: q.text, author: q.author };
-      } else {
-        // No user quotes yet — fall back to general
-        const fresh = await fetchMultipleRandomQuotes(1);
-        if (fresh[0]) quote = { id: fresh[0]._id, text: fresh[0].content, author: fresh[0].author };
-      }
-    } else {
-      const fresh = await fetchQuotesByCategory(qt);
-      if (fresh.length > 0) {
-        const q = fresh[Math.floor(Math.random() * fresh.length)];
-        quote = { id: q._id, text: q.content, author: q.author };
-      }
-    }
-
-    // Fall back to cached quote if fetch returned nothing.
-    if (!quote && editorConfig.cachedQuote) {
-      quote = {
-        id: editorConfig.cachedQuote.quoteId,
-        text: editorConfig.cachedQuote.text,
-        author: editorConfig.cachedQuote.author,
-      };
-    }
-    if (!quote) return;
-
-    // Persist to Zustand store (for UI preview) and to AsyncStorage (for
-    // widget tap deep-link resolution and task handler access).
-    updateConfig({ cachedQuote: { text: quote.text, author: quote.author, quoteId: quote.id } });
-    await persistWidgetQuote(editorId, editorConfig, quote);
-
-    await WidgetBridge.updateWidget({
-      widgetId: editorId,
-      quote,
-      config: {
-        showAuthor: editorConfig.showAuthor,
-        showBorder: editorConfig.showBorder,
-        textSize:   editorConfig.textSize,
-      },
-    });
-
-    await WidgetBridge.reloadTimelines();
-
-    if (onClose) {
-      setLocalEditorId(null);
-    } else {
-      router.back();
-    }
-  }, [editorId, editorConfig, router, updateConfig]);
-
-  // ── Picker options ─────────────────────────────────────────────────────────
-
-  const intervalOptions = (
-    Object.entries(REFRESH_FREQUENCY_LABELS) as [WidgetRefreshFrequency, string][]
-  ).map(([value, label]) => ({ value, label }));
-
-  const quoteTypeOptions = (
-    Object.entries(QUOTE_TYPE_LABELS) as [WidgetQuoteType, string][]
-  ).map(([value, label]) => ({ value, label }));
-
-  const textSizeOptions = (
-    Object.entries(TEXT_SIZE_LABELS) as [WidgetTextSize, string][]
-  ).map(([value, label]) => ({ value, label }));
-
-  // ── Pro-gate helper ────────────────────────────────────────────────────────
-
-  const openPaywall = () =>
-    modal ? modal.openSheet('trial') : router.push('/subscriptions');
-
-  // ── Render: iOS ────────────────────────────────────────────────────────────
-
-  if (isIOS) {
-    return (
-      <View style={{ flex: 1, backgroundColor: theme.background }}>
-        <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-          <SheetHeader
-            title="Widgets"
-            leading="back"
-            onLeadingPress={back}
-            right={
-              <IconButton
-                icon="refresh"
-                onPress={handleIOSRefresh}
-                accessibilityLabel="Refresh widget"
-              />
-            }
-          />
-
-          <IOSWidgetPanel
-            theme={theme}
-            config={iosConfig}
-            refreshing={iosRefreshing}
-            onRefresh={handleIOSRefresh}
-            onOpenPicker={(picker) => { if (isPro) { setActivePicker(picker); } else { openPaywall(); } }}
-            onToggle={(key, value) => { if (isPro) { updateIOSConfig({ [key]: value }); } else { openPaywall(); } }}
-          />
-
-          {onContinue && (
-            <View style={[styles.saveBtnWrapper, { backgroundColor: theme.background }]}>
-              <TouchableOpacity
-                style={[styles.saveBtn, { backgroundColor: theme.gold }]}
-                onPress={onContinue}
-                activeOpacity={0.82}
-              >
-                <Text style={[styles.saveBtnText, { fontFamily: FONTS.ui.bold, color: ON_GOLD }]}>
-                  Continue
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </SafeAreaView>
-
-        <PickerModal
-          visible={activePicker === 'quoteType'}
-          title="Quote Category"
-          options={quoteTypeOptions}
-          selected={iosConfig.quoteType}
-          onSelect={(v) => updateIOSConfig({ quoteType: v }, true)}
-          onClose={() => setActivePicker(null)}
-          theme={theme}
-        />
-        <PickerModal
-          visible={activePicker === 'interval'}
-          title="Update Interval"
-          options={intervalOptions}
-          selected={iosConfig.updateInterval}
-          onSelect={(v) => updateIOSConfig({ updateInterval: v })}
-          onClose={() => setActivePicker(null)}
-          theme={theme}
-        />
-        <PickerModal
-          visible={activePicker === 'textSize'}
-          title="Text Size"
-          options={textSizeOptions}
-          selected={iosConfig.textSize}
-          onSelect={(v) => updateIOSConfig({ textSize: v })}
-          onClose={() => setActivePicker(null)}
-          theme={theme}
-        />
-      </View>
-    );
-  }
-
-  // ── Render: editor ─────────────────────────────────────────────────────────
-
-  if (editorId !== null && editorConfig) {
-    const meta = WIDGET_META[editorConfig.type];
-    const handleEditorBack = onClose ? () => setLocalEditorId(null) : () => router.back();
-
-    // Gates a callback behind Pro — opens paywall for free users instead.
-    function gated<T extends unknown[]>(fn: (...args: T) => void) {
-      return (...args: T) => { if (isPro) { fn(...args); } else { openPaywall(); } };
-    }
+  if (draft) {
+    const commit = () => {
+      const created = addConfig(draft.name || undefined);
+      updateConfig(created.id, {
+        customize: draft.customize,
+        quoteType: draft.quoteType,
+        showBorder: draft.showBorder,
+        updateInterval: draft.updateInterval,
+        showButtons: draft.showButtons,
+      });
+      setDraft(null);
+      setIndex(useWidgetStore.getState().configs.length - 1);
+      syncWidgets(created.id).catch(() => {});
+    };
 
     return (
       <View style={{ flex: 1, backgroundColor: theme.background }}>
         <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
           <SheetHeader
-            title="Widget Editor"
+            title={draft.name || 'New widget'}
             leading="back"
-            onLeadingPress={handleEditorBack}
-            right={
-              <View style={[styles.typeBadge, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                <Icon name={meta.icon} size={13} color={theme.gold} />
-                <Text style={[styles.typeBadgeText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-                  {meta.label}
-                </Text>
-              </View>
-            }
+            onLeadingPress={() => setDraft(null)}
           />
 
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
-            <View style={styles.nameContainer}>
-              <Text style={[styles.nameLabel, { color: theme.textMuted, fontFamily: FONTS.ui.bold }]}>
-                Widget Name
+          <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+            <WidgetPreview config={draft} pending width={width} theme={theme} />
+
+            <TouchableOpacity
+              style={styles.nameRow}
+              onPress={() => setRenaming(true)}
+              activeOpacity={0.7}
+            >
+              <Icon name="pencil-outline" size={22} color={theme.text} />
+              <Text style={[styles.nameText, { color: theme.text, fontFamily: FONTS.display.medium }]}>
+                {draft.name || 'New widget'}
               </Text>
-              <TextInput
-                style={[styles.nameInput, { color: theme.text, backgroundColor: theme.surface, borderColor: theme.border, fontFamily: theme.uiFontFamily }]}
-                value={editorConfig.name}
-                onChangeText={(v) => updateConfig({ name: v })}
-                placeholder="e.g. Morning Motivation"
-                placeholderTextColor={theme.textMuted + '66'}
-                autoCapitalize="words"
-                returnKeyType="done"
-              />
-            </View>
+            </TouchableOpacity>
 
-            <View style={[styles.settingsCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-              <ToggleRow
-                icon="account-outline"
-                label="Show author"
-                value={editorConfig.showAuthor}
-                onToggle={gated((v) => updateConfig({ showAuthor: v }))}
-                theme={theme}
-              />
-
-              <View style={[rowStyles.separator, { backgroundColor: theme.border }]} />
-
-              <ToggleRow
-                icon="shape-outline"
-                label="Show border"
-                value={editorConfig.showBorder}
-                onToggle={gated((v) => updateConfig({ showBorder: v }))}
-                theme={theme}
-              />
-
-              <View style={[rowStyles.separator, { backgroundColor: theme.border }]} />
-
-              <SettingsRow
-                icon="refresh"
-                label="Update interval"
-                value={REFRESH_FREQUENCY_LABELS[editorConfig.updateInterval]}
-                onPress={gated(() => setActivePicker('interval'))}
-                theme={theme}
-              />
-
-              <View style={[rowStyles.separator, { backgroundColor: theme.border }]} />
-              <SettingsRow
-                icon="tag-outline"
-                label="Quote category"
-                value={QUOTE_TYPE_LABELS[editorConfig.quoteType]}
-                onPress={gated(() => setActivePicker('quoteType'))}
-                theme={theme}
-              />
-
-              <View style={[rowStyles.separator, { backgroundColor: theme.border }]} />
-              <SettingsRow
-                icon="format-size"
-                label="Text size"
-                value={TEXT_SIZE_LABELS[editorConfig.textSize]}
-                onPress={gated(() => setActivePicker('textSize'))}
-                theme={theme}
-                isLast
-              />
-            </View>
+            <ConfigCard
+              config={draft}
+              onChange={change}
+              onOpenPicker={(p) => setActivePicker(p)}
+            />
           </ScrollView>
 
-          <View style={[styles.saveBtnWrapper, { backgroundColor: theme.background }]}>
+          <View style={[styles.ctaWrap, { backgroundColor: theme.background }]}>
             <TouchableOpacity
-              style={[styles.saveBtn, { backgroundColor: theme.gold }]}
-              onPress={handleUpdateWidget}
-              activeOpacity={0.82}
+              style={[styles.cta, { backgroundColor: theme.goldButton }]}
+              onPress={commit}
+              activeOpacity={0.85}
             >
-              <Text style={[styles.saveBtnText, { fontFamily: FONTS.ui.bold, color: ON_GOLD }]}>
-                Update Widget
+              <Text style={[styles.ctaText, { color: ON_GOLD, fontFamily: FONTS.ui.bold }]}>
+                Create new widget
               </Text>
             </TouchableOpacity>
           </View>
         </SafeAreaView>
 
-        <PickerModal
-          visible={activePicker === 'interval'}
-          title="Update Interval"
-          options={intervalOptions}
-          selected={editorConfig.updateInterval}
-          onSelect={(v) => updateConfig({ updateInterval: v })}
-          onClose={() => setActivePicker(null)}
-          theme={theme}
+        <EditNameDialog
+          visible={renaming}
+          onClose={() => setRenaming(false)}
+          title="Edit name"
+          initialValue={draft.name}
+          onSubmit={(name) => setDraft({ ...draft, name })}
         />
+
         <PickerModal
           visible={activePicker === 'quoteType'}
-          title="Quote Category"
+          title="Topics"
           options={quoteTypeOptions}
-          selected={editorConfig.quoteType}
-          onSelect={(v) => updateConfig({ quoteType: v })}
+          selected={draft.quoteType}
+          onSelect={(v) => change({ quoteType: v })}
           onClose={() => setActivePicker(null)}
           theme={theme}
         />
         <PickerModal
-          visible={activePicker === 'textSize'}
-          title="Text Size"
-          options={textSizeOptions}
-          selected={editorConfig.textSize}
-          onSelect={(v) => updateConfig({ textSize: v })}
+          visible={activePicker === 'interval'}
+          title="Refresh"
+          options={intervalOptions}
+          selected={draft.updateInterval}
+          onSelect={(v) => change({ updateInterval: v })}
           onClose={() => setActivePicker(null)}
           theme={theme}
         />
@@ -990,7 +551,7 @@ export default function WidgetsScreen({ onClose, onBack, onContinue }: { onClose
     );
   }
 
-  // ── Render: card list ──────────────────────────────────────────────────────
+  // ── Carousel mode ──────────────────────────────────────────────────────────
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -1000,104 +561,141 @@ export default function WidgetsScreen({ onClose, onBack, onContinue }: { onClose
           leading="back"
           onLeadingPress={back}
           right={
-            <IconButton
-              icon="refresh"
-              onPress={loadActiveWidgets}
-              accessibilityLabel="Refresh widgets"
-            />
+            <IconButton icon="plus" onPress={handleCreate} accessibilityLabel="Add widget configuration" />
           }
         />
 
-        {loadingList ? (
-          <View style={styles.centered}>
-            <ActivityIndicator size="large" color={theme.textMuted} />
-          </View>
-        ) : activeWidgets.length === 0 ? (
-          <EmptyState theme={theme} onRefresh={loadActiveWidgets} />
-        ) : (
-          <ScrollView contentContainerStyle={styles.cardList} showsVerticalScrollIndicator={false}>
-            {activeWidgets.map((w) => (
-              <WidgetCard
-                key={w.widgetId}
-                widgetId={w.widgetId}
-                type={w.type}
+        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+          <Text style={[styles.subtitle, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
+            Set up your Home Screen widget
+          </Text>
+
+          <ScrollView
+            ref={scrollRef}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            onMomentumScrollEnd={handleScrollEnd}
+            style={{ marginHorizontal: -GUTTER }}
+          >
+            {configs.map((c) => (
+              <WidgetPreview
+                key={c.id}
+                config={c}
+                pending={isPending(c.id)}
+                width={width}
                 theme={theme}
-                onEdit={() => {
-                  if (onClose) {
-                    setLocalEditorType(w.type);
-                    setLocalEditorId(w.widgetId);
-                  } else {
-                    router.push({
-                      pathname: '/widgets',
-                      params: { widgetId: w.widgetId.toString(), type: w.type },
-                    });
-                  }
-                }}
               />
             ))}
-            <Text style={[styles.hintText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-              To add more widgets, long-press your home screen → Widgets → Quotable.
-            </Text>
           </ScrollView>
-        )}
-        {onContinue && (
-          <View style={[styles.saveBtnWrapper, { backgroundColor: theme.background }]}>
+
+          <PageDots count={configs.length} activeIndex={index} />
+
+          <TouchableOpacity
+            style={styles.nameRow}
+            onPress={() => setRenaming(true)}
+            activeOpacity={0.7}
+          >
+            <Icon name="pencil-outline" size={22} color={theme.text} />
+            <Text style={[styles.nameText, { color: theme.text, fontFamily: FONTS.display.medium }]}>
+              {active.customize ? active.name : 'Mirror the app'}
+            </Text>
+          </TouchableOpacity>
+
+          <ConfigCard
+            config={active}
+            onChange={change}
+            onOpenPicker={(p) => (isPro ? setActivePicker(p) : openPaywall())}
+          />
+
+          {configs.length > 1 && (
             <TouchableOpacity
-              style={[styles.saveBtn, { backgroundColor: theme.gold }]}
-              onPress={onContinue}
-              activeOpacity={0.82}
+              style={styles.deleteBtn}
+              onPress={() => setConfirmDelete(true)}
+              activeOpacity={0.7}
             >
-              <Text style={[styles.saveBtnText, { fontFamily: FONTS.ui.bold, color: ON_GOLD }]}>
+              <Text style={[styles.deleteText, { color: theme.text, fontFamily: FONTS.display.medium }]}>
+                Delete widget
+              </Text>
+            </TouchableOpacity>
+          )}
+        </ScrollView>
+
+        {onContinue && (
+          <View style={[styles.ctaWrap, { backgroundColor: theme.background }]}>
+            <TouchableOpacity
+              style={[styles.cta, { backgroundColor: theme.goldButton }]}
+              onPress={onContinue}
+              activeOpacity={0.85}
+            >
+              <Text style={[styles.ctaText, { color: ON_GOLD, fontFamily: FONTS.ui.bold }]}>
                 Continue
               </Text>
             </TouchableOpacity>
           </View>
         )}
       </SafeAreaView>
+
+      <EditNameDialog
+        visible={renaming}
+        onClose={() => setRenaming(false)}
+        title="Edit name"
+        initialValue={active.name}
+        onSubmit={(name) => updateConfig(active.id, { name })}
+      />
+
+      <ConfirmSheet
+        visible={confirmDelete}
+        onClose={() => setConfirmDelete(false)}
+        title="Delete widget"
+        message="This configuration will be removed. Any Home Screen widget using it will fall back to another configuration."
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        destructive
+        onConfirm={() => {
+          removeConfig(active.id);
+          setIndex((i) => Math.max(0, i - 1));
+          scrollRef.current?.scrollTo({ x: 0, animated: false });
+        }}
+      />
+
+      <PickerModal
+        visible={activePicker === 'quoteType'}
+        title="Topics"
+        options={quoteTypeOptions}
+        selected={active.quoteType}
+        onSelect={(v) => change({ quoteType: v })}
+        onClose={() => setActivePicker(null)}
+        theme={theme}
+      />
+      <PickerModal
+        visible={activePicker === 'interval'}
+        title="Refresh"
+        options={intervalOptions}
+        selected={active.updateInterval}
+        onSelect={(v) => change({ updateInterval: v })}
+        onClose={() => setActivePicker(null)}
+        theme={theme}
+      />
     </View>
   );
 }
 
-// ── Styles ────────────────────────────────────────────────────────────────────
-
 const styles = StyleSheet.create({
   safe: { flex: 1 },
-  typeBadge: {
+  scroll: { paddingHorizontal: GUTTER, paddingBottom: 120 },
+  subtitle: { fontSize: 16, textAlign: 'center', marginBottom: SPACE.lg },
+  nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 20,
-    borderWidth: 1,
-  },
-  typeBadgeText: { fontSize: 12 },
-  nameContainer: {
-    paddingHorizontal: GUTTER,
-    paddingTop: SPACE.lg,
-    paddingBottom: SPACE.xl,
-  },
-  nameLabel: {
-    fontSize: 13,
-    marginBottom: SPACE.sm,
-    letterSpacing: 0.3,
-    textTransform: 'uppercase',
-  },
-  nameInput: {
-    fontSize: 16,
-    borderRadius: RADIUS.row,
-    borderWidth: 1,
-    paddingHorizontal: SPACE.lg,
-    paddingVertical: SPACE.md,
-  },
-  settingsCard: {
-    marginHorizontal: GUTTER,
-    borderRadius: RADIUS.card,
-    borderWidth: 1,
+    gap: SPACE.md,
     marginBottom: SPACE.md,
-    overflow: 'hidden',
   },
-  saveBtnWrapper: {
+  nameText: { fontSize: 22, flex: 1 },
+  card: { borderRadius: RADIUS.row, overflow: 'hidden' },
+  deleteBtn: { alignItems: 'center', paddingVertical: SPACE.xl },
+  deleteText: { fontSize: 18 },
+  ctaWrap: {
     position: 'absolute',
     bottom: 0,
     left: 0,
@@ -1106,31 +704,11 @@ const styles = StyleSheet.create({
     paddingBottom: 32,
     paddingTop: SPACE.md,
   },
-  saveBtn: {
+  cta: {
     borderRadius: RADIUS.pill,
     paddingVertical: 17,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  saveBtnText: {
-    fontSize: 16,
-    letterSpacing: 0.2,
-  },
-  cardList: {
-    paddingHorizontal: GUTTER,
-    paddingTop: SPACE.lg,
-    paddingBottom: 40,
-  },
-  hintText: {
-    fontSize: 13,
-    lineHeight: 20,
-    textAlign: 'center',
-    opacity: 0.5,
-    marginTop: 8,
-  },
-  centered: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  ctaText: { fontSize: 16, letterSpacing: 0.2 },
 });

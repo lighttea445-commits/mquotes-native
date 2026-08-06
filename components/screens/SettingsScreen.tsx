@@ -42,7 +42,7 @@ export default function SettingsScreen({ onClose, onBack }: { onClose?: () => vo
   const resetTopics = useTopicsStore((s) => s.resetTopics);
   const clearCollections = useCollectionsStore((s) => s.clearCollections);
   const clearUserQuotes = useUserQuotesStore((s) => s.clearUserQuotes);
-  const clearWidgetConfigs = useWidgetStore((s) => s.clearWidgetConfigs);
+  const clearWidgetConfigs = useWidgetStore((s) => s.clearAll);
 
   const close = onClose ?? (() => router.back());
   const back = onBack ?? close;
@@ -189,6 +189,60 @@ export default function SettingsScreen({ onClose, onBack }: { onClose?: () => vo
                   thumbColor={isPro ? ON_GOLD : theme.text}
                 />
               </View>
+              <TouchableOpacity
+                style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border, marginTop: 8 }]}
+                onPress={async () => {
+                  useAppStore.setState((s) => ({
+                    reviewPrompt: { ...s.reviewPrompt, activeMs: 30 * 60 * 1000, promptShown: true },
+                  }));
+                  if (await StoreReview.hasAction()) {
+                    await StoreReview.requestReview();
+                  }
+                }}
+              >
+                <Icon name="star-outline" size={20} color={theme.gold} />
+                <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
+                  Trigger Review Prompt (30min reached)
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border, marginTop: 8 }]}
+                onPress={() => {
+                  useAppStore.setState({ reviewPrompt: { activeMs: 0, promptShown: false } });
+                }}
+              >
+                <Icon name="refresh" size={20} color={theme.gold} />
+                <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
+                  Reset Review Prompt State
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border, marginTop: 8 }]}
+                onPress={() => useAppStore.setState({ returnNudgeType: 'notifications' })}
+              >
+                <Icon name="bell-outline" size={20} color={theme.gold} />
+                <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
+                  Trigger Notifications Nudge
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border, marginTop: 8 }]}
+                onPress={() => useAppStore.setState({ returnNudgeType: 'widget' })}
+              >
+                <Icon name="apps" size={20} color={theme.gold} />
+                <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
+                  Trigger Widget Nudge
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border, marginTop: 8 }]}
+                onPress={() => useAppStore.setState({ returnNudgeType: null, lastForegroundAt: 0 })}
+              >
+                <Icon name="refresh" size={20} color={theme.gold} />
+                <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
+                  Reset Return Nudge State
+                </Text>
+              </TouchableOpacity>
             </View>
           )}
 

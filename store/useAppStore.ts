@@ -64,6 +64,16 @@ export interface StreakData {
   weekData: boolean[]; // last 7 days: true = visited
 }
 
+export interface ReviewPromptState {
+  /** Cumulative foreground active time, in ms, since the last prompt (or since install). */
+  activeMs: number;
+  /** Once true, the native review prompt is never triggered again. */
+  promptShown: boolean;
+}
+
+/** Which "come back" nudge is currently on screen. Only one at a time. */
+export type ReturnNudgeType = 'notifications' | 'widget' | null;
+
 interface AppState {
   preferences: UserPreferences;
   onboardingComplete: boolean;
@@ -78,6 +88,10 @@ interface AppState {
   postOnboardingQuoteViews?: number;
   streak: StreakData;
   showStreakBanner: boolean;
+  reviewPrompt: ReviewPromptState;
+  /** Epoch ms of the last time the app came to the foreground. 0 = never recorded. */
+  lastForegroundAt: number;
+  returnNudgeType: ReturnNudgeType;
 
   // Actions
   setPreferences: (prefs: Partial<UserPreferences>) => void;
@@ -89,6 +103,13 @@ interface AppState {
   noteQuoteViewed: () => void;
   updateStreak: () => void;
   dismissStreakBanner: () => void;
+  /** Adds elapsed foreground time toward the review-prompt threshold. */
+  addActiveUsageMs: (ms: number) => void;
+  /** Latches the review prompt off so it never fires again. */
+  markReviewPromptShown: () => void;
+  /** Records a foreground open and returns the gap since the previous one, in ms (0 on the very first open). */
+  noteForegroundOpen: () => number;
+  setReturnNudgeType: (type: ReturnNudgeType) => void;
   resetApp: () => void;
 }
 
@@ -120,6 +141,11 @@ const defaultStreak: StreakData = {
   count: 0,
   lastVisitDate: '',
   weekData: [false, false, false, false, false, false, false],
+};
+
+const defaultReviewPrompt: ReviewPromptState = {
+  activeMs: 0,
+  promptShown: false,
 };
 
 function toLocalDateString(d: Date): string {
@@ -163,6 +189,9 @@ export const useAppStore = create<AppState>()(
       onboardingComplete: false,
       streak: defaultStreak,
       showStreakBanner: false,
+      reviewPrompt: defaultReviewPrompt,
+      lastForegroundAt: 0,
+      returnNudgeType: null,
 
       setPreferences: (prefs) =>
         set((state) => ({
@@ -274,12 +303,34 @@ export const useAppStore = create<AppState>()(
 
       dismissStreakBanner: () => set({ showStreakBanner: false }),
 
+      addActiveUsageMs: (ms) =>
+        set((state) => ({
+          reviewPrompt: { ...state.reviewPrompt, activeMs: state.reviewPrompt.activeMs + ms },
+        })),
+
+      markReviewPromptShown: () =>
+        set((state) => ({
+          reviewPrompt: { ...state.reviewPrompt, promptShown: true },
+        })),
+
+      noteForegroundOpen: () => {
+        const prev = get().lastForegroundAt;
+        const now = Date.now();
+        set({ lastForegroundAt: now });
+        return prev === 0 ? 0 : now - prev;
+      },
+
+      setReturnNudgeType: (type) => set({ returnNudgeType: type }),
+
       resetApp: () =>
         set({
           preferences: defaultPreferences,
           onboardingComplete: false,
           streak: defaultStreak,
           showStreakBanner: false,
+          reviewPrompt: defaultReviewPrompt,
+          lastForegroundAt: 0,
+          returnNudgeType: null,
         }),
     }),
     {

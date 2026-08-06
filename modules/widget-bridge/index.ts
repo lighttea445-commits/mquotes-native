@@ -9,26 +9,20 @@
 import { Platform, NativeModules } from 'react-native';
 import { getWidgetInfo, requestWidgetUpdateById } from 'react-native-android-widget';
 import type { WidgetInfo } from 'react-native-android-widget';
-import type { WidgetInstanceConfig } from '../../store/useWidgetStore';
+import type { WidgetConfig } from '../../store/useWidgetStore';
 import type { QuoteData } from '../../widget/QuoteWidget';
 import type { WidgetQuote } from '../../lib/widgetQuotes';
 
 export const WIDGET_NAME = 'BasicWidget';
 
 /**
- * iOS has no per-widget ids, so all iOS widgets share one config stored under
- * this key in useWidgetStore's widgetConfigs map.
+ * Prefix for the per-config quote queue mirrored into AsyncStorage, so a
+ * widget tap (quotable://widget-open?src=ios&i=<index>&cfg=<id>) can resolve
+ * the displayed quote without a native read. See app/widget-open.tsx.
  */
-export const IOS_WIDGET_CONFIG_ID = 'ios';
+export const IOS_WIDGET_QUEUE_KEY_PREFIX = 'ios-widget-queue-';
 
-/**
- * The quote queue written to the App Group, mirrored here so a widget tap
- * (quotable://widget-open?src=ios&i=<index>) can resolve the displayed quote
- * without a native read. See app/widget-open.tsx.
- */
-export const IOS_WIDGET_QUEUE_KEY = 'ios-widget-queue';
-
-/** How many quotes to pre-write. iOS rotates through these without waking JS. */
+/** How many quotes to pre-write per config. iOS rotates without waking JS. */
 export const IOS_WIDGET_QUEUE_SIZE = 48;
 
 export interface ActiveWidget {
@@ -36,21 +30,34 @@ export interface ActiveWidget {
   type: 'basic';
 }
 
+/** One config's queue push. iOS keeps a separate queue per config so each can follow its own topic. */
 export interface IOSQueuePayload {
+  configId: string;
   quotes: WidgetQuote[];
   /** Minutes between rotations. Floored at 15 by the widget extension. */
   rotateMinutes: number;
   /** Gates every appearance setting below, all of which are Pro-only. */
   isPro: boolean;
-  textSize: WidgetInstanceConfig['textSize'];
-  showAuthor: boolean;
   showBorder: boolean;
+  showButtons: boolean;
+}
+
+/** The metadata list backing the AppIntent's config picker in Apple's Edit Widget panel. */
+export interface IOSConfigListPayload {
+  configs: {
+    id: string;
+    name: string;
+    showBorder: boolean;
+    showButtons: boolean;
+    rotateMinutes: number;
+  }[];
+  isPro: boolean;
 }
 
 export interface RenderPayload {
   widgetId: number;
   quote: QuoteData;
-  config: Pick<WidgetInstanceConfig, 'showAuthor' | 'showBorder' | 'textSize'>;
+  config: Pick<WidgetConfig, 'showBorder' | 'showButtons'>;
 }
 
 class WidgetBridgeClass {
@@ -106,32 +113,11 @@ class WidgetBridgeClass {
   }
 
   /**
-   * Re-render a specific widget instance with new quote/config.
+   * Android only. Re-render a specific widget instance with new quote/config.
+   * iOS has no equivalent single-widget target — see updateIOSQueue.
    * Dynamic imports avoid pulling React into the headless task bundle at module-load time.
    */
   async updateWidget(payload: RenderPayload): Promise<void> {
-    // iOS: write data to the shared App Group UserDefaults via the native module,
-    // then tell WidgetKit to reload its timeline.
-    if (Platform.OS === 'ios') {
-      try {
-        await NativeModules.WidgetBridge?.updateWidget(
-          JSON.stringify({
-            quoteText:   payload.quote.text,
-            authorText:  payload.quote.author,
-            showAuthor:  payload.config.showAuthor,
-            showBorder:  payload.config.showBorder,
-            widgetType:  'basic',
-            streakCount: 0,
-            textSize:    payload.config.textSize,
-          }),
-        );
-        await NativeModules.WidgetBridge?.reloadAllTimelines();
-      } catch {
-        // Native module not linked (e.g. Expo Go without dev client) — silently skip.
-      }
-      return;
-    }
-
     if (Platform.OS !== 'android') return;
     try {
       const React = (await import('react')).default;
@@ -176,7 +162,10 @@ class WidgetBridgeClass {
 
     try {
       const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
-      await AsyncStorage.setItem(IOS_WIDGET_QUEUE_KEY, JSON.stringify(payload.quotes));
+      await AsyncStorage.setItem(
+        `${IOS_WIDGET_QUEUE_KEY_PREFIX}${payload.configId}`,
+        JSON.stringify(payload.quotes),
+      );
     } catch {
       // Non-critical — the widget still renders; only tap resolution degrades.
     }
@@ -184,17 +173,47 @@ class WidgetBridgeClass {
     try {
       await NativeModules.WidgetBridge?.updateWidgetQueue(
         JSON.stringify({
+          configId: payload.configId,
           quotes: payload.quotes.map((q) => ({ text: q.text, author: q.author, id: q.id ?? '' })),
           rotateMinutes: payload.rotateMinutes,
           isPro: payload.isPro,
-          textSize: payload.textSize,
-          showAuthor: payload.showAuthor,
           showBorder: payload.showBorder,
-          widgetType: 'basic',
+          showButtons: payload.showButtons,
         }),
       );
     } catch (err) {
       console.warn('[WidgetBridge] updateIOSQueue error:', err);
+    }
+  }
+
+  /**
+   * iOS only. Writes the config metadata list (id/name/appearance) that backs
+   * the AppIntent's dynamic option list in Apple's Edit Widget panel — every
+   * config a user has created, so any placed widget can be pointed at any of
+   * them without the app knowing which widget picked which.
+   */
+  async updateIOSConfigList(payload: IOSConfigListPayload): Promise<void> {
+    if (Platform.OS !== 'ios') return;
+    try {
+      await NativeModules.WidgetBridge?.updateConfigList(JSON.stringify(payload));
+    } catch (err) {
+      console.warn('[WidgetBridge] updateIOSConfigList error:', err);
+    }
+  }
+
+  /**
+   * iOS only. Milliseconds-since-epoch the extension last rendered this config,
+   * or null if it never has. The extension stamps this on every timeline
+   * request — the only signal the app gets for whether a config is bound to a
+   * placed widget, since iOS never reports widget-to-config selections back.
+   */
+  async getIOSConfigSeenAt(configId: string): Promise<number | null> {
+    if (Platform.OS !== 'ios') return null;
+    try {
+      const ms = await NativeModules.WidgetBridge?.getConfigSeenAt(configId);
+      return typeof ms === 'number' && ms > 0 ? ms : null;
+    } catch {
+      return null;
     }
   }
 
@@ -239,12 +258,14 @@ class WidgetBridgeClass {
       const { QuoteWidget } = await import('../../widget/QuoteWidget');
       const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
       const { requestWidgetUpdate } = await import('react-native-android-widget');
-      const { defaultInstanceConfig } = await import('../../store/useWidgetStore');
+      const { createConfig } = await import('../../store/useWidgetStore');
 
       const raw = await AsyncStorage.getItem('widget-store-v2');
-      const configs = raw
-        ? (JSON.parse(raw) as { state: { widgetConfigs: Record<string, WidgetInstanceConfig> } }).state.widgetConfigs
-        : {};
+      const parsed = raw
+        ? (JSON.parse(raw) as { state: { configs: WidgetConfig[]; bindings: Record<string, string> } })
+        : null;
+      const configs = parsed?.state.configs ?? [];
+      const bindings = parsed?.state.bindings ?? {};
 
       // Track which quote each widget instance rendered so we can persist
       // widget-shown-{widgetId} for accurate widget-tap deep-link resolution.
@@ -253,7 +274,8 @@ class WidgetBridgeClass {
       await requestWidgetUpdate({
         widgetName: WIDGET_NAME,
         renderWidget: (info) => {
-          const config = configs[info.widgetId.toString()] ?? defaultInstanceConfig('basic');
+          const configId = bindings[info.widgetId.toString()];
+          const config = configs.find((c) => c.id === configId) ?? createConfig('');
           const cached = config.cachedQuote;
           const quote: QuoteData = cached
             ? { id: cached.quoteId, text: cached.text, author: cached.author }

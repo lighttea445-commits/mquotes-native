@@ -1,7 +1,7 @@
 import React from 'react';
 import { FlexWidget, TextWidget } from 'react-native-android-widget';
 import type { WidgetInfo } from 'react-native-android-widget';
-import type { WidgetInstanceConfig } from '../store/useWidgetStore';
+import type { WidgetConfig } from '../store/useWidgetStore';
 
 // ── Widget appearance ─────────────────────────────────────────────────────────
 //
@@ -26,7 +26,7 @@ export interface QuoteData {
 
 interface Props {
   quote: QuoteData;
-  config: Pick<WidgetInstanceConfig, 'showAuthor' | 'showBorder' | 'textSize'>;
+  config: Pick<WidgetConfig, 'showBorder' | 'showButtons'>;
   widgetInfo: WidgetInfo;
 }
 
@@ -44,11 +44,8 @@ interface SizeSpec {
   padding: number;
   quoteMin: number;
   quoteMax: number;
-  authorRatio: number;
   quoteMaxLinesCap: number;
   lineHeight: number;
-  dashGap: number;
-  authorGap: number;
 }
 
 // Deterministic sizing — we don't rely on Android's autoSize because it doesn't
@@ -56,10 +53,10 @@ interface SizeSpec {
 // Instead we pick the largest fontSize that's mathematically guaranteed to fit
 // (chars-per-line × lines-that-fit >= quote length), and truncate the rest.
 const SIZE_SPEC: Record<SizeFamily, SizeSpec> = {
-  xs: { padding: 4,  quoteMin: 6,  quoteMax: 9,  authorRatio: 0.95, quoteMaxLinesCap: 20, lineHeight: 1.1,  dashGap: 0, authorGap: 0 },
-  sm: { padding: 6,  quoteMin: 7,  quoteMax: 11, authorRatio: 0.9,  quoteMaxLinesCap: 20, lineHeight: 1.15, dashGap: 1, authorGap: 1 },
-  md: { padding: 12, quoteMin: 11, quoteMax: 19, authorRatio: 0.85, quoteMaxLinesCap: 20, lineHeight: 1.3,  dashGap: 4, authorGap: 4 },
-  lg: { padding: 18, quoteMin: 14, quoteMax: 26, authorRatio: 0.85, quoteMaxLinesCap: 20, lineHeight: 1.35, dashGap: 7, authorGap: 7 },
+  xs: { padding: 4,  quoteMin: 6,  quoteMax: 9,  quoteMaxLinesCap: 20, lineHeight: 1.1 },
+  sm: { padding: 6,  quoteMin: 7,  quoteMax: 11, quoteMaxLinesCap: 20, lineHeight: 1.15 },
+  md: { padding: 12, quoteMin: 11, quoteMax: 19, quoteMaxLinesCap: 20, lineHeight: 1.3 },
+  lg: { padding: 18, quoteMin: 14, quoteMax: 26, quoteMaxLinesCap: 20, lineHeight: 1.35 },
 };
 
 // Average character width for a bold serif at fontSize dp. Empirical — slightly
@@ -78,15 +75,6 @@ function getSizeFamily(w: number, h: number): SizeFamily {
   return 'lg';
 }
 
-// Positive offset raises the starting fontSize above the family's quoteMax so
-// the "Large" preference genuinely tries bigger glyphs (accepting more truncation).
-// Negative offset lowers the starting point so "Small" packs in more text.
-const TEXT_SIZE_OFFSET: Record<WidgetInstanceConfig['textSize'], number> = {
-  small: -2,
-  medium: 0,
-  large: 3,
-};
-
 /**
  * Pick the largest fontSize that's guaranteed to fit `length` characters in the
  * available width × height, given the family's lineHeight ratio. Falls back to
@@ -98,13 +86,8 @@ function fitQuoteSize(
   innerW: number,
   innerH: number,
   spec: SizeSpec,
-  textSize: WidgetInstanceConfig['textSize'],
 ): { fontSize: number; maxLines: number } {
-  const offset = TEXT_SIZE_OFFSET[textSize];
-  // Do NOT cap upper at spec.quoteMax — a positive offset intentionally
-  // raises the ceiling so "Large" starts the search above the family max.
-  // The loop will fall back if the bigger size doesn't fit.
-  const upper = Math.max(spec.quoteMin, spec.quoteMax + offset);
+  const upper = spec.quoteMax;
 
   for (let fs = upper; fs >= spec.quoteMin; fs--) {
     const lh = Math.ceil(fs * spec.lineHeight);
@@ -129,27 +112,11 @@ export function QuoteWidget({ quote, config, widgetInfo }: Props) {
   const spec   = SIZE_SPEC[family];
   const padding = spec.padding;
 
-  // Respect the user's toggle on every size. On 1x1 the deterministic font
-  // sizer will shrink the quote to keep room for the dash + author, which is
-  // what the toggle should mean.
-  const showAuthor = !!config.showAuthor && !!quote.author;
-
   const innerW = Math.max(20, widgetInfo.width  - padding * 2);
   const innerH = Math.max(20, widgetInfo.height - padding * 2);
 
-  // Reserve space for the author block first; whatever remains is the quote box.
-  // We pick the author/dash size from the family floor so it never dominates.
-  const authorSize = showAuthor ? Math.max(spec.quoteMin, 9) : 0;
-  const dashSize   = authorSize;
-  const authorBlockH = showAuthor
-    ? Math.ceil(dashSize * spec.lineHeight) + spec.dashGap +
-      Math.ceil(authorSize * spec.lineHeight) + spec.authorGap
-    : 0;
-
-  const quoteH = Math.max(Math.ceil(spec.quoteMin * spec.lineHeight), innerH - authorBlockH);
-
   const { fontSize: quoteSize, maxLines: quoteMaxLines } =
-    fitQuoteSize(quote.text.length, innerW, quoteH, spec, config.textSize);
+    fitQuoteSize(quote.text.length, innerW, innerH, spec);
 
   const tapUri = `quotable://widget-open?widgetId=${widgetInfo.widgetId}`;
 
@@ -172,45 +139,6 @@ export function QuoteWidget({ quote, config, widgetInfo }: Props) {
     />
   );
 
-  const dashText = showAuthor ? (
-    <TextWidget
-      text="-"
-      style={{
-        width: 'match_parent',
-        color: WIDGET_TEXT,
-        fontSize: dashSize,
-        fontFamily: WIDGET_FONT,
-        fontWeight: 'bold',
-        textAlign: 'center',
-        marginTop: spec.dashGap,
-      }}
-      maxLines={1}
-      allowFontScaling={false}
-      clickAction="OPEN_URI"
-      clickActionData={{ uri: tapUri }}
-    />
-  ) : null;
-
-  const authorText = showAuthor ? (
-    <TextWidget
-      text={quote.author}
-      style={{
-        width: 'match_parent',
-        color: WIDGET_TEXT,
-        fontSize: authorSize,
-        fontFamily: WIDGET_FONT,
-        fontWeight: 'bold',
-        textAlign: 'center',
-        marginTop: spec.authorGap,
-      }}
-      maxLines={1}
-      truncate="END"
-      allowFontScaling={false}
-      clickAction="OPEN_URI"
-      clickActionData={{ uri: tapUri }}
-    />
-  ) : null;
-
   return (
     <FlexWidget
       style={{
@@ -228,8 +156,6 @@ export function QuoteWidget({ quote, config, widgetInfo }: Props) {
       clickActionData={{ uri: tapUri }}
     >
       {quoteText}
-      {dashText}
-      {authorText}
     </FlexWidget>
   );
 }

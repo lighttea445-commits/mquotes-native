@@ -4,9 +4,10 @@ module.exports = {
   name: 'QuotesWidget',
   // Resolves to com.kovoapps.quotable.quotes-widget (ios.bundleIdentifier + suffix)
   bundleIdentifier: '.quotes-widget',
-  // Required by QuotesWidget.swift's use of .containerBackground(for: .widget).
+  // Required by QuotesWidget.swift's use of .containerBackground(for: .widget)
+  // and AppIntentConfiguration's dynamic config picker (iOS 17+).
   deploymentTarget: '17.0',
-  frameworks: ['WidgetKit', 'SwiftUI'],
+  frameworks: ['WidgetKit', 'SwiftUI', 'AppIntents'],
   // Must be declared here, not just in app.json. @bacons/apple-targets only
   // mirrors the main app's app groups onto the target when an `entitlements`
   // object already exists (build/with-widget.js — the sync block is guarded by

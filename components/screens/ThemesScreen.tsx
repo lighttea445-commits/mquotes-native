@@ -20,6 +20,8 @@ import { useAppStore } from '../../store/useAppStore';
 import { THEMES, DEFAULT_THEME_ID } from '../../constants/themes';
 import { useModal } from '../../contexts/ModalContext';
 import { analytics } from '../../lib/analytics';
+import { FONTS } from '../../constants/fonts';
+import { Crystals } from '../art/Crystals';
 
 const GAP = 10;
 const BADGE = 22;
@@ -69,8 +71,6 @@ export default function ThemesScreen({ onClose }: { onClose?: () => void }) {
           title="Themes"
           leading="close"
           onLeadingPress={close}
-          actionLabel={isPro ? undefined : 'Unlock all'}
-          onActionPress={isPro ? undefined : openUpsell}
         />
 
         <FlatList
@@ -80,6 +80,28 @@ export default function ThemesScreen({ onClose }: { onClose?: () => void }) {
           contentContainerStyle={styles.grid}
           columnWrapperStyle={styles.row}
           showsVerticalScrollIndicator={false}
+          ListHeaderComponent={
+            !isPro ? (
+              // Upsell banner — the one light surface on the screen
+              <TouchableOpacity
+                style={[styles.banner, { backgroundColor: theme.goldButton }]}
+                onPress={openUpsell}
+                activeOpacity={0.9}
+                accessibilityRole="button"
+                accessibilityLabel="Unlock everything. Access all categories, quotes, and themes to unlock discipline and motivation."
+              >
+                <View style={styles.bannerText}>
+                  <Text style={[styles.bannerTitle, { color: ON_GOLD }]}>Unlock everything</Text>
+                  <Text style={[styles.bannerSubtitle, { color: ON_GOLD }]}>
+                    Access all categories, quotes, and themes to unlock discipline and motivation!
+                  </Text>
+                </View>
+                <View style={styles.bannerArt} pointerEvents="none">
+                  <Crystals size={130} color={ON_GOLD} />
+                </View>
+              </TouchableOpacity>
+            ) : null
+          }
           renderItem={({ item: t }) => {
             const isSelected = preferences.theme === t.id;
             const locked = isLocked(t.id);
@@ -167,6 +189,40 @@ const styles = StyleSheet.create({
   row: {
     gap: GAP,
     marginBottom: SPACE.lg,
+  },
+
+  // ── Upsell banner ────────────────────────────────────────────────────────
+  banner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: RADIUS.tile,
+    paddingVertical: 10.5,
+    paddingLeft: SPACE.xl,
+    paddingRight: SPACE.lg,
+    overflow: 'hidden',
+    marginBottom: SPACE.lg,
+  },
+  bannerText: {
+    flex: 1,
+    gap: SPACE.xs,
+    zIndex: 1,
+  },
+  bannerTitle: {
+    fontSize: 19,
+    fontFamily: FONTS.display.bold,
+    lineHeight: 25,
+    includeFontPadding: false,
+  },
+  bannerSubtitle: {
+    fontSize: 10,
+    lineHeight: 15,
+    maxWidth: '57%',
+    opacity: 0.75,
+  },
+  bannerArt: {
+    position: 'absolute',
+    right: -6,
+    top: -17,
   },
   cardWrapper: {
     alignItems: 'center',

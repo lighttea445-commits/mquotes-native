@@ -135,4 +135,51 @@ describe('useAppStore', () => {
     expect(state.streak.count).toBe(0);
     expect(state.preferences.theme).toBe('minimal');
   });
+
+  it('accumulates active usage time', () => {
+    const { useAppStore } = require('../../store/useAppStore');
+    useAppStore.getState().resetApp();
+    useAppStore.getState().addActiveUsageMs(1000);
+    useAppStore.getState().addActiveUsageMs(2000);
+    expect(useAppStore.getState().reviewPrompt.activeMs).toBe(3000);
+  });
+
+  it('latches promptShown once marked, and resetApp clears it', () => {
+    const { useAppStore } = require('../../store/useAppStore');
+    useAppStore.getState().resetApp();
+    expect(useAppStore.getState().reviewPrompt.promptShown).toBe(false);
+    useAppStore.getState().markReviewPromptShown();
+    expect(useAppStore.getState().reviewPrompt.promptShown).toBe(true);
+    useAppStore.getState().resetApp();
+    expect(useAppStore.getState().reviewPrompt.promptShown).toBe(false);
+    expect(useAppStore.getState().reviewPrompt.activeMs).toBe(0);
+  });
+
+  it('returns a 0 gap on the very first foreground open', () => {
+    const { useAppStore } = require('../../store/useAppStore');
+    useAppStore.getState().resetApp();
+    const gap = useAppStore.getState().noteForegroundOpen();
+    expect(gap).toBe(0);
+    expect(useAppStore.getState().lastForegroundAt).toBeGreaterThan(0);
+  });
+
+  it('returns the elapsed gap on subsequent foreground opens', () => {
+    const { useAppStore } = require('../../store/useAppStore');
+    useAppStore.getState().resetApp();
+    useAppStore.setState({ lastForegroundAt: Date.now() - 100_000 });
+    const gap = useAppStore.getState().noteForegroundOpen();
+    expect(gap).toBeGreaterThanOrEqual(100_000);
+  });
+
+  it('sets and clears the return nudge type', () => {
+    const { useAppStore } = require('../../store/useAppStore');
+    useAppStore.getState().resetApp();
+    expect(useAppStore.getState().returnNudgeType).toBeNull();
+    useAppStore.getState().setReturnNudgeType('notifications');
+    expect(useAppStore.getState().returnNudgeType).toBe('notifications');
+    useAppStore.getState().setReturnNudgeType('widget');
+    expect(useAppStore.getState().returnNudgeType).toBe('widget');
+    useAppStore.getState().resetApp();
+    expect(useAppStore.getState().returnNudgeType).toBeNull();
+  });
 });

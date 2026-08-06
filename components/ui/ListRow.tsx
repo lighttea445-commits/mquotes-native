@@ -1,12 +1,15 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Switch } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Icon, IconName } from './Icon';
+import { Toggle } from './Toggle';
 import { useTheme } from '../../hooks/useTheme';
 import { SPACE, RADIUS } from './tokens';
 
 type Trailing =
   | { kind: 'chevron' }
   | { kind: 'value'; value: string }
+  /** Current value alongside a chevron, for a row that opens a picker. */
+  | { kind: 'valueChevron'; value: string }
   | { kind: 'switch'; value: boolean; onValueChange: (v: boolean) => void }
   | { kind: 'none' };
 
@@ -71,12 +74,19 @@ export function ListRow({
           {trailing.value}
         </Text>
       )}
+      {trailing.kind === 'valueChevron' && (
+        <View style={styles.valueChevron}>
+          <Text style={[styles.value, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+            {trailing.value}
+          </Text>
+          <Icon name="chevron-right" size={22} color={theme.textMuted} />
+        </View>
+      )}
       {trailing.kind === 'switch' && (
-        <Switch
+        <Toggle
           value={trailing.value}
           onValueChange={trailing.onValueChange}
-          trackColor={{ false: theme.border, true: theme.goldButton }}
-          thumbColor="#fff"
+          accessibilityLabel={label}
         />
       )}
     </View>
@@ -106,5 +116,10 @@ const styles = StyleSheet.create({
   },
   value: {
     fontSize: 15,
+  },
+  valueChevron: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
   },
 });

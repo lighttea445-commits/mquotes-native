@@ -52,11 +52,12 @@ import { View, ActivityIndicator, Text, Pressable, Platform, AppState } from 're
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAppStore } from '../store/useAppStore';
 import { useTheme } from '../hooks/useTheme';
+import { useReviewPrompt } from '../hooks/useReviewPrompt';
 import { registerWidgetRefreshTask } from '../tasks/widgetRefreshTask';
-import { WidgetBridge, IOS_WIDGET_QUEUE_KEY } from '../modules/widget-bridge';
-import { refreshIOSWidget } from '../lib/iosWidget';
+import { WidgetBridge, IOS_WIDGET_QUEUE_KEY_PREFIX } from '../modules/widget-bridge';
+import { refreshAllIOSWidgets } from '../lib/iosWidget';
 import { useDeepLinkStore } from '../store/useDeepLinkStore';
-import { useWidgetStore, type WidgetInstanceConfig } from '../store/useWidgetStore';
+import { useWidgetStore, type WidgetConfig } from '../store/useWidgetStore';
 import type { WidgetQuote } from '../lib/widgetQuotes';
 
 // Required for scheduled notifications to appear in the foreground and for the
@@ -118,6 +119,8 @@ function RootLayoutInner() {
   const router = useRouter();
   const onboardingComplete = useAppStore((s) => s.onboardingComplete);
   const navReady = !!useRootNavigationState()?.key;
+
+  useReviewPrompt();
 
   // Redirect to onboarding on first launch. We gate on both:
   // 1. navReady — the Expo Router navigator has committed its initial state,
@@ -230,14 +233,15 @@ function RootLayoutInner() {
 
   // ── iOS widget queue top-up ─────────────────────────────────────────────
   //
-  // iOS can't wake JS in the background, so the widget rotates through a queue
-  // the app pre-writes. Top it up on launch and on every return to foreground;
-  // refreshIOSWidget() no-ops when the existing queue is still fresh and on
-  // non-iOS platforms (Android has registerWidgetRefreshTask above).
+  // iOS can't wake JS in the background, so each config's widget rotates
+  // through a queue the app pre-writes. Top up every config on launch and on
+  // every return to foreground; refreshAllIOSWidgets() no-ops per-config when
+  // that config's queue is still fresh, and no-ops entirely on non-iOS
+  // platforms (Android has registerWidgetRefreshTask above).
   useEffect(() => {
     if (Platform.OS !== 'ios') return;
 
-    const topUp = () => { refreshIOSWidget().catch(() => {}); };
+    const topUp = () => { refreshAllIOSWidgets().catch(() => {}); };
 
     let unsubHydration: (() => void) | undefined;
     if (useWidgetStore.persist.hasHydrated()) {
@@ -346,11 +350,11 @@ export default function RootLayout() {
           params[part.slice(0, eq)] = decodeURIComponent(part.slice(eq + 1));
         }
 
-        // iOS: quotable://widget-open?src=ios&i=<index>. There are no widget
-        // ids on iOS — the index points into the queue the app wrote, mirrored
-        // to AsyncStorage by WidgetBridge.updateIOSQueue().
-        if (params['src'] === 'ios') {
-          const raw = await AsyncStorage.getItem(IOS_WIDGET_QUEUE_KEY);
+        // iOS: quotable://widget-open?src=ios&cfg=<configId>&i=<index>. There
+        // are no widget ids on iOS — cfg names which config's queue to read,
+        // mirrored to AsyncStorage by WidgetBridge.updateIOSQueue().
+        if (params['src'] === 'ios' && params['cfg']) {
+          const raw = await AsyncStorage.getItem(`${IOS_WIDGET_QUEUE_KEY_PREFIX}${params['cfg']}`);
           if (!raw) return;
           const queue = JSON.parse(raw) as WidgetQuote[];
           if (!Array.isArray(queue) || queue.length === 0) return;
@@ -387,9 +391,10 @@ export default function RootLayout() {
         const raw = await AsyncStorage.getItem('widget-store-v2');
         if (!raw) return;
         const store = JSON.parse(raw) as {
-          state?: { widgetConfigs?: Record<string, WidgetInstanceConfig> };
+          state?: { configs?: WidgetConfig[]; bindings?: Record<string, string> };
         };
-        const cached = store?.state?.widgetConfigs?.[widgetId]?.cachedQuote;
+        const configId = store?.state?.bindings?.[widgetId];
+        const cached = store?.state?.configs?.find((c) => c.id === configId)?.cachedQuote;
         if (cached) {
           useDeepLinkStore.getState().setPendingQuote({
             id:     cached.quoteId ?? '',

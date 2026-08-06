@@ -78,7 +78,7 @@ export default function CategoriesScreen({ onClose }: { onClose?: () => void }) 
         style={[
           styles.tile,
           {
-            width: TILE_W,
+            width: '100%',
             backgroundColor: theme.surface,
             borderColor: following ? theme.gold : 'transparent',
             borderWidth: following ? 1.5 : 0,
@@ -96,23 +96,20 @@ export default function CategoriesScreen({ onClose }: { onClose?: () => void }) 
           `${cat.name}${following ? ', following' : ''}${locked ? ', locked, requires Premium' : ''}`
         }
       >
-        {following && (
-          <View style={[styles.badge, { backgroundColor: theme.gold }]}>
-            <Icon name="check" size={13} color={ON_GOLD} />
-          </View>
-        )}
-        <View style={styles.tileArt} pointerEvents="none">
-          <Icon name={cat.icon} size={Math.round(TILE_W * 0.42)} color={theme.text} />
+        <View style={[styles.tileIconWrap, { borderColor: theme.border }]}>
+          <Icon name={cat.icon} size={20} color={theme.text} />
         </View>
-        <View style={styles.tileFooter}>
-          <Text
-            style={[styles.tileLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}
-            numberOfLines={2}
-          >
-            {cat.name}
-          </Text>
-          {locked && <Icon name="lock-outline" size={16} color={theme.textMuted} />}
-        </View>
+        <Text
+          style={[styles.tileLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}
+          numberOfLines={2}
+        >
+          {cat.name}
+        </Text>
+        {locked ? (
+          <Icon name="lock-outline" size={16} color={theme.textMuted} />
+        ) : !following ? (
+          <Icon name="chevron-right" size={18} color={theme.textMuted} />
+        ) : null}
       </TouchableOpacity>
     );
   };
@@ -181,7 +178,7 @@ export default function CategoriesScreen({ onClose }: { onClose?: () => void }) 
           {groups.map(({ group, title, items }) => (
             <React.Fragment key={group}>
               <Text style={[styles.sectionTitle, { color: theme.text }]}>{title}</Text>
-              <View style={styles.grid}>
+              <View style={styles.list}>
                 {items.map(renderTile)}
               </View>
             </React.Fragment>
@@ -269,6 +266,10 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: GAP,
   },
+  list: {
+    gap: GAP,
+    marginBottom: SPACE.md,
+  },
 
   // ── Quick access rows ────────────────────────────────────────────────────
   quickRow: {
@@ -286,33 +287,21 @@ const styles = StyleSheet.create({
   },
 
   // ── Topic tiles ──────────────────────────────────────────────────────────
-  badge: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    zIndex: 1,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   tile: {
-    aspectRatio: 1,
-    borderRadius: RADIUS.tile,
-    padding: SPACE.lg,
-    justifyContent: 'flex-end',
-  },
-  tileArt: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
-    justifyContent: 'center',
-    bottom: 34,
-  },
-  tileFooter: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACE.sm,
+    minHeight: 68,
+    borderRadius: RADIUS.card,
+    paddingHorizontal: SPACE.lg,
+    gap: SPACE.md,
+  },
+  tileIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   tileLabel: {
     flex: 1,

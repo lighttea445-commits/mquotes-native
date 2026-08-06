@@ -7,12 +7,14 @@ import { ThemeBackground } from '../components/layout/ThemeBackground';
 import { QuoteCard } from '../components/quotes/QuoteCard';
 import { BottomSheet } from '../components/layout/BottomSheet';
 import { StreakBanner } from '../components/layout/StreakBanner';
+import { ReturnNudge } from '../components/layout/ReturnNudge';
 import { useStreak } from '../hooks/useStreak';
+import { useReturnNudge } from '../hooks/useReturnNudge';
 import { useTheme } from '../hooks/useTheme';
 import { useAppStore, QUOTES_BEFORE_REVEAL } from '../store/useAppStore';
 import { ModalProvider, useModal } from '../contexts/ModalContext';
 import { useDeepLinkStore } from '../store/useDeepLinkStore';
-import type { WidgetInstanceConfig } from '../store/useWidgetStore';
+import type { WidgetConfig } from '../store/useWidgetStore';
 import CategoriesScreen from '../components/screens/CategoriesScreen';
 import ThemesScreen from '../components/screens/ThemesScreen';
 import TopicsScreen from '../components/screens/TopicsScreen';
@@ -30,10 +32,11 @@ import ShareScreen from '../components/screens/ShareScreen';
 
 function HomeScreenInner() {
   const theme = useTheme();
-  const { activeSheet, previousSheet, goBack, closeSheet } = useModal()!;
+  const { activeSheet, previousSheet, openSheet, goBack, closeSheet } = useModal()!;
   // True when switching between sheets (not a fresh open/close) — used to skip animations
   const isSwitching = previousSheet !== null;
   const { streakCount, weekData, showStreakBanner, dismissStreakBanner } = useStreak();
+  useReturnNudge();
   // Matches QuoteCard's first-run reveal — the streak card shouldn't drop in
   // over the stripped-down post-onboarding screen before the user has
   // scrolled through the staged quotes.
@@ -86,9 +89,10 @@ function HomeScreenInner() {
       if (!raw) return;
       try {
         const parsed = JSON.parse(raw) as {
-          state?: { widgetConfigs?: Record<string, WidgetInstanceConfig> };
+          state?: { configs?: WidgetConfig[]; bindings?: Record<string, string> };
         };
-        const cached = parsed?.state?.widgetConfigs?.[String(widgetId)]?.cachedQuote;
+        const configId = parsed?.state?.bindings?.[String(widgetId)];
+        const cached = parsed?.state?.configs?.find((c) => c.id === configId)?.cachedQuote;
         if (cached) {
           useDeepLinkStore.getState().setPendingQuote({
             id:     cached.quoteId ?? '',
@@ -112,6 +116,11 @@ function HomeScreenInner() {
         streakCount={streakCount}
         weekData={weekData}
         onDismiss={dismissStreakBanner}
+      />
+
+      <ReturnNudge
+        onOpenNotifications={() => openSheet('notifications')}
+        onOpenWidgets={() => openSheet('widgets')}
       />
 
       {/* Categories sheet */}

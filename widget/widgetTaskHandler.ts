@@ -12,69 +12,90 @@ import { registerWidgetTaskHandler } from 'react-native-android-widget';
 import type { WidgetTaskHandlerProps } from 'react-native-android-widget';
 import { QuoteWidget } from './QuoteWidget';
 import { FALLBACK_WIDGET_QUOTE, resolveWidgetQuote } from '../lib/widgetQuotes';
-import type { WidgetInstanceConfig } from '../store/useWidgetStore';
+import { createConfig, nextConfigName, type WidgetConfig } from '../store/useWidgetStore';
 
 // Same key used by the Zustand persist middleware in useWidgetStore
 const WIDGET_STORE_KEY = 'widget-store-v2';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-async function loadWidgetConfig(widgetId: number): Promise<WidgetInstanceConfig | null> {
+interface RawStore {
+  configs: WidgetConfig[];
+  bindings: Record<string, string>;
+}
+
+async function loadStore(): Promise<RawStore> {
   try {
     const raw = await AsyncStorage.getItem(WIDGET_STORE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as { state?: { widgetConfigs?: Record<string, WidgetInstanceConfig> } };
-    return parsed?.state?.widgetConfigs?.[widgetId.toString()] ?? null;
+    if (!raw) return { configs: [], bindings: {} };
+    const parsed = JSON.parse(raw) as { state?: Partial<RawStore> };
+    return { configs: parsed.state?.configs ?? [], bindings: parsed.state?.bindings ?? {} };
   } catch {
-    return null;
+    return { configs: [], bindings: {} };
+  }
+}
+
+async function saveStore(store: RawStore): Promise<void> {
+  try {
+    const raw = await AsyncStorage.getItem(WIDGET_STORE_KEY);
+    const parsed = raw ? (JSON.parse(raw) as { state?: object; version?: number }) : {};
+    await AsyncStorage.setItem(
+      WIDGET_STORE_KEY,
+      JSON.stringify({ ...parsed, state: { ...parsed.state, ...store } }),
+    );
+  } catch {
+    // Non-critical — widget still renders, tap deep link falls back gracefully.
   }
 }
 
 /**
- * Write back the cached quote after fetching a new one.
+ * Resolves (and if necessary creates) the config a placed widget is bound to.
  *
- * Takes the config we already loaded as a fallback — if AsyncStorage has been
- * cleared or partially-written between the load and write (rare, but happens
- * on fresh background JS engine wakes), we still preserve theme/showAuthor
- * instead of falling through to `defaultConfig()` which would silently reset
- * the widget's appearance.
+ * A widget can reach the task handler before the Widgets screen has ever run
+ * its own reconcile pass — e.g. the very first WIDGET_ADDED after pinning. In
+ * that case bind to the first config not already claimed by another widget,
+ * creating one if the library is empty, exactly mirroring
+ * useWidgetStore.claimConfigFor so a headless wake and the UI agree.
  */
-async function persistCachedQuote(
-  widgetId: number,
-  quote: { id?: string; text: string; author: string },
-  fallback: WidgetInstanceConfig,
-) {
-  try {
-    const raw = await AsyncStorage.getItem(WIDGET_STORE_KEY);
-    const parsed = raw
-      ? (JSON.parse(raw) as { state: { widgetConfigs: Record<string, WidgetInstanceConfig> }; version?: number })
-      : { state: { widgetConfigs: {} } };
+async function resolveConfig(widgetId: number): Promise<{ store: RawStore; config: WidgetConfig }> {
+  const store = await loadStore();
+  const idStr = widgetId.toString();
 
-    const existing = parsed.state.widgetConfigs[widgetId.toString()];
-    parsed.state.widgetConfigs[widgetId.toString()] = {
-      ...fallback,
-      ...(existing ?? {}),
-      cachedQuote: { text: quote.text, author: quote.author, quoteId: quote.id },
-      lastRefreshed: new Date().toISOString(),
-    };
-    await AsyncStorage.setItem(WIDGET_STORE_KEY, JSON.stringify(parsed));
-  } catch {
-    // Non-critical — widget still renders, tap deep link falls back gracefully
+  const boundId = store.bindings[idStr];
+  const bound = boundId ? store.configs.find((c) => c.id === boundId) : undefined;
+  if (bound) return { store, config: bound };
+
+  const used = new Set(Object.values(store.bindings));
+  let target = store.configs.find((c) => !used.has(c.id));
+  if (!target) {
+    target = createConfig(nextConfigName(store.configs));
+    store.configs = [...store.configs, target];
   }
+  store.bindings = { ...store.bindings, [idStr]: target.id };
+  await saveStore(store);
+
+  return { store, config: target };
 }
 
-function defaultConfig(): WidgetInstanceConfig {
-  return {
-    type: 'basic',
-    name: '',
-    showAuthor: false,
-    showBorder: false,
-    updateInterval: 'hourly',
-    quoteType: 'general',
-    textSize: 'large',
-    cachedQuote: null,
-    lastRefreshed: null,
-  };
+async function persistCachedQuote(
+  store: RawStore,
+  configId: string,
+  quote: { id?: string; text: string; author: string },
+): Promise<void> {
+  // Re-read rather than reuse `store` — a concurrent write (a settings change
+  // from the app, or another widget's refresh) may have landed since we loaded.
+  const fresh = await loadStore();
+  const withoutStale = fresh.configs.length ? fresh : store;
+  const configs = withoutStale.configs.map((c) =>
+    c.id === configId
+      ? {
+          ...c,
+          cachedQuote: { text: quote.text, author: quote.author, quoteId: quote.id },
+          lastRefreshed: new Date().toISOString(),
+        }
+      : c,
+  );
+  await saveStore({ ...withoutStale, configs });
 }
 
 // ── Task handler ──────────────────────────────────────────────────────────────
@@ -82,15 +103,24 @@ function defaultConfig(): WidgetInstanceConfig {
 async function widgetTaskHandler(props: WidgetTaskHandlerProps) {
   const { widgetAction, widgetInfo, renderWidget } = props;
 
-  if (widgetAction === 'WIDGET_DELETED') return;
+  if (widgetAction === 'WIDGET_DELETED') {
+    // Free the binding so the config becomes claimable (or Pending) again
+    // rather than staying attached to a widget id that no longer exists.
+    const store = await loadStore();
+    if (store.bindings[widgetInfo.widgetId.toString()]) {
+      const bindings = { ...store.bindings };
+      delete bindings[widgetInfo.widgetId.toString()];
+      await saveStore({ ...store, bindings });
+    }
+    return;
+  }
 
   if (
     widgetAction === 'WIDGET_ADDED' ||
     widgetAction === 'WIDGET_UPDATE' ||
     widgetAction === 'WIDGET_RESIZED'
   ) {
-    const loaded = await loadWidgetConfig(widgetInfo.widgetId);
-    const config = loaded ?? defaultConfig();
+    const { store, config } = await resolveConfig(widgetInfo.widgetId);
 
     // On WIDGET_ADDED/RESIZED use the cached quote (if any) to avoid a network
     // call. On WIDGET_UPDATE fetch a fresh quote.
@@ -99,18 +129,12 @@ async function widgetTaskHandler(props: WidgetTaskHandlerProps) {
       : null;
 
     if (!quote || widgetAction === 'WIDGET_UPDATE') {
-      const fetched = await resolveWidgetQuote(config.quoteType);
+      const fetched = await resolveWidgetQuote(config.customize ? config.quoteType : 'general');
       if (fetched) {
         quote = fetched;
         // Persist so the app reads the correct quote on widget tap.
-        await persistCachedQuote(widgetInfo.widgetId, quote, config);
+        await persistCachedQuote(store, config.id, quote);
       }
-    } else if (widgetAction === 'WIDGET_RESIZED' && loaded) {
-      // Self-heal: re-commit the loaded config to disk on every resize so
-      // that any concurrent/partial writer can't leave the config in a state
-      // that later reads interpret as "missing". We only do this when we
-      // actually loaded a non-null config — never write defaults back.
-      await persistCachedQuote(widgetInfo.widgetId, quote, loaded);
     }
 
     // Absolute fallback — never show a blank widget.
@@ -118,7 +142,11 @@ async function widgetTaskHandler(props: WidgetTaskHandlerProps) {
       quote = FALLBACK_WIDGET_QUOTE;
     }
 
-    renderWidget(React.createElement(QuoteWidget, { quote, config, widgetInfo }));
+    renderWidget(React.createElement(QuoteWidget, {
+      quote,
+      config: { showBorder: config.showBorder, showButtons: config.showButtons },
+      widgetInfo,
+    }));
 
     // Persist what is now rendered on screen so widget-open.tsx reads the
     // correct quote regardless of background-refresh race conditions.

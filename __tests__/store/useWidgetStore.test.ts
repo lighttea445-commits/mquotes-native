@@ -1,15 +1,10 @@
 /**
  * Unit tests for store/useWidgetStore.ts
  *
- * Bugs exercised:
- * B6 — setWidgetConfig merges into defaultInstanceConfig('basic') when no prior
- *      config exists, so partial updates don't lose fields.
- * B7 — getOrCreateConfig is idempotent: a second call returns the same object
- *      without creating a second store entry.
- * B8 — loadActiveWidgets infinite-loop risk: removing a stale config changes
- *      widgetConfigs, which recreates the loadActiveWidgets callback, triggering
- *      the effect again. This test documents the store's clean removeWidgetConfig
- *      behaviour (the component-level loop is a separate concern).
+ * The store moved from one config per placed widget id (widgetConfigs) to a
+ * named library of configs plus a separate widgetId->configId binding map, so
+ * a config can exist before anything uses it ("Pending" in the UI) and one
+ * config can back several placed widgets.
  */
 
 jest.mock('@react-native-async-storage/async-storage', () => ({
@@ -22,176 +17,314 @@ beforeEach(() => {
   jest.resetModules();
 });
 
-// ── defaultInstanceConfig ─────────────────────────────────────────────────────
+// ── createConfig / nextConfigName ───────────────────────────────────────────
 
-describe('defaultInstanceConfig', () => {
-  it('returns sensible defaults for a basic widget', () => {
-    const { defaultInstanceConfig } = require('../../store/useWidgetStore');
-    const cfg = defaultInstanceConfig('basic');
+describe('createConfig', () => {
+  it('returns sensible defaults, customize off', () => {
+    const { createConfig } = require('../../store/useWidgetStore');
+    const cfg = createConfig('My widget');
 
-    expect(cfg.type).toBe('basic');
+    expect(cfg.name).toBe('My widget');
+    expect(cfg.customize).toBe(false);
     expect(cfg.showBorder).toBe(false);
+    expect(cfg.showButtons).toBe(false);
     expect(cfg.updateInterval).toBe('hourly');
     expect(cfg.quoteType).toBe('general');
-    expect(cfg.textSize).toBe('medium');
     expect(cfg.cachedQuote).toBeNull();
     expect(cfg.lastRefreshed).toBeNull();
+    expect(cfg.id).toBeTruthy();
+  });
+
+  it('gives distinct ids to successive configs', () => {
+    const { createConfig } = require('../../store/useWidgetStore');
+    const a = createConfig('A');
+    const b = createConfig('B');
+    expect(a.id).not.toBe(b.id);
   });
 });
 
-// ── setWidgetConfig ───────────────────────────────────────────────────────────
+describe('nextConfigName', () => {
+  it('numbers from 1 when the library is empty', () => {
+    const { nextConfigName } = require('../../store/useWidgetStore');
+    expect(nextConfigName([])).toBe('Widget configuration #1');
+  });
 
-describe('setWidgetConfig', () => {
-  it('creates a new config entry from defaults when the widget is new', () => {
+  it('continues past the highest existing number', () => {
+    const { nextConfigName, createConfig } = require('../../store/useWidgetStore');
+    const configs = [
+      { ...createConfig('Widget configuration #1') },
+      { ...createConfig('Widget configuration #3') },
+    ];
+    expect(nextConfigName(configs)).toBe('Widget configuration #4');
+  });
+
+  it('does not reuse a number freed by deleting a middle entry', () => {
+    const { nextConfigName, createConfig } = require('../../store/useWidgetStore');
+    // #2 was deleted; #1 and #3 remain — next should be #4, not #2.
+    const configs = [createConfig('Widget configuration #1'), createConfig('Widget configuration #3')];
+    expect(nextConfigName(configs)).toBe('Widget configuration #4');
+  });
+});
+
+// ── addConfig / updateConfig / removeConfig ─────────────────────────────────
+
+describe('addConfig', () => {
+  it('appends a new config and returns it', () => {
     const { useWidgetStore } = require('../../store/useWidgetStore');
-    useWidgetStore.getState().setWidgetConfig('42', { showBorder: true });
+    const created = useWidgetStore.getState().addConfig('Morning');
 
-    const cfg = useWidgetStore.getState().widgetConfigs['42'];
-    expect(cfg).toBeDefined();
+    expect(useWidgetStore.getState().configs).toHaveLength(1);
+    expect(useWidgetStore.getState().configs[0].id).toBe(created.id);
+    expect(created.name).toBe('Morning');
+  });
+
+  it('auto-names when no name is given', () => {
+    const { useWidgetStore } = require('../../store/useWidgetStore');
+    const created = useWidgetStore.getState().addConfig();
+    expect(created.name).toBe('Widget configuration #1');
+  });
+});
+
+describe('updateConfig', () => {
+  it('merges partial updates without losing other fields', () => {
+    const { useWidgetStore } = require('../../store/useWidgetStore');
+    const { id } = useWidgetStore.getState().addConfig('A');
+
+    useWidgetStore.getState().updateConfig(id, { quoteType: 'wisdom', customize: true });
+    useWidgetStore.getState().updateConfig(id, { showBorder: true });
+
+    const cfg = useWidgetStore.getState().getConfig(id);
+    expect(cfg.quoteType).toBe('wisdom');
+    expect(cfg.customize).toBe(true);
     expect(cfg.showBorder).toBe(true);
-    // Default fields are preserved
-    expect(cfg.type).toBe('basic');
-    expect(cfg.updateInterval).toBe('hourly');
-    expect(cfg.quoteType).toBe('general');
   });
 
-  it('merges partial updates into an existing config without losing other fields', () => {
+  it('is a no-op for an unknown id', () => {
     const { useWidgetStore } = require('../../store/useWidgetStore');
-    useWidgetStore.getState().setWidgetConfig('10', { quoteType: 'wisdom', textSize: 'large' });
-    useWidgetStore.getState().setWidgetConfig('10', { showBorder: true }); // second update
+    useWidgetStore.getState().addConfig('A');
+    expect(() => useWidgetStore.getState().updateConfig('missing', { showBorder: true })).not.toThrow();
+    expect(useWidgetStore.getState().configs).toHaveLength(1);
+  });
+});
 
-    const cfg = useWidgetStore.getState().widgetConfigs['10'];
-    expect(cfg.quoteType).toBe('wisdom');   // first update preserved
-    expect(cfg.textSize).toBe('large');     // first update preserved
-    expect(cfg.showBorder).toBe(true);  // second update applied
+describe('removeConfig', () => {
+  it('removes the config and any binding pointing at it', () => {
+    const { useWidgetStore } = require('../../store/useWidgetStore');
+    const { id } = useWidgetStore.getState().addConfig('A');
+    useWidgetStore.getState().bindWidget('101', id);
+
+    useWidgetStore.getState().removeConfig(id);
+
+    expect(useWidgetStore.getState().getConfig(id)).toBeUndefined();
+    expect(useWidgetStore.getState().bindings['101']).toBeUndefined();
   });
 
-  it('updates the cachedQuote without overwriting other fields', () => {
+  it('leaves other configs and their bindings untouched', () => {
     const { useWidgetStore } = require('../../store/useWidgetStore');
-    useWidgetStore.getState().setWidgetConfig('7', { updateInterval: 'daily' });
-    useWidgetStore.getState().setWidgetConfig('7', {
-      cachedQuote: { text: 'Live boldly.', author: 'Unknown' },
-    });
+    const a = useWidgetStore.getState().addConfig('A');
+    const b = useWidgetStore.getState().addConfig('B');
+    useWidgetStore.getState().bindWidget('1', a.id);
+    useWidgetStore.getState().bindWidget('2', b.id);
 
-    const cfg = useWidgetStore.getState().widgetConfigs['7'];
+    useWidgetStore.getState().removeConfig(a.id);
+
+    expect(useWidgetStore.getState().getConfig(b.id)).toBeDefined();
+    expect(useWidgetStore.getState().bindings['2']).toBe(b.id);
+  });
+});
+
+describe('clearAll', () => {
+  it('drops every config and binding', () => {
+    const { useWidgetStore } = require('../../store/useWidgetStore');
+    const { id } = useWidgetStore.getState().addConfig('A');
+    useWidgetStore.getState().bindWidget('1', id);
+
+    useWidgetStore.getState().clearAll();
+
+    expect(useWidgetStore.getState().configs).toHaveLength(0);
+    expect(useWidgetStore.getState().bindings).toEqual({});
+  });
+});
+
+// ── bindings ─────────────────────────────────────────────────────────────────
+
+describe('bindWidget / unbindWidget / configForWidget', () => {
+  it('binds a widget id to a config and resolves it back', () => {
+    const { useWidgetStore } = require('../../store/useWidgetStore');
+    const { id } = useWidgetStore.getState().addConfig('A');
+    useWidgetStore.getState().bindWidget('55', id);
+
+    expect(useWidgetStore.getState().configForWidget('55')?.id).toBe(id);
+  });
+
+  it('unbinding clears the resolution', () => {
+    const { useWidgetStore } = require('../../store/useWidgetStore');
+    const { id } = useWidgetStore.getState().addConfig('A');
+    useWidgetStore.getState().bindWidget('55', id);
+    useWidgetStore.getState().unbindWidget('55');
+
+    expect(useWidgetStore.getState().configForWidget('55')).toBeUndefined();
+  });
+
+  it('multiple widgets can bind to the same config', () => {
+    const { useWidgetStore } = require('../../store/useWidgetStore');
+    const { id } = useWidgetStore.getState().addConfig('A');
+    useWidgetStore.getState().bindWidget('1', id);
+    useWidgetStore.getState().bindWidget('2', id);
+
+    expect(useWidgetStore.getState().configForWidget('1')?.id).toBe(id);
+    expect(useWidgetStore.getState().configForWidget('2')?.id).toBe(id);
+  });
+});
+
+describe('isPending', () => {
+  it('is true for a config nothing is bound to', () => {
+    const { useWidgetStore } = require('../../store/useWidgetStore');
+    const { id } = useWidgetStore.getState().addConfig('A');
+    expect(useWidgetStore.getState().isPending(id)).toBe(true);
+  });
+
+  it('is false once something binds to it', () => {
+    const { useWidgetStore } = require('../../store/useWidgetStore');
+    const { id } = useWidgetStore.getState().addConfig('A');
+    useWidgetStore.getState().bindWidget('1', id);
+    expect(useWidgetStore.getState().isPending(id)).toBe(false);
+  });
+});
+
+describe('claimConfigFor', () => {
+  it('claims the first Pending config for a newly placed widget', () => {
+    const { useWidgetStore } = require('../../store/useWidgetStore');
+    const a = useWidgetStore.getState().addConfig('A');
+    const b = useWidgetStore.getState().addConfig('B');
+    useWidgetStore.getState().bindWidget('1', a.id); // A already taken
+
+    const claimed = useWidgetStore.getState().claimConfigFor('2');
+
+    expect(claimed?.id).toBe(b.id);
+    expect(useWidgetStore.getState().bindings['2']).toBe(b.id);
+  });
+
+  it('falls back to the first config when none are Pending', () => {
+    const { useWidgetStore } = require('../../store/useWidgetStore');
+    const a = useWidgetStore.getState().addConfig('A');
+    useWidgetStore.getState().bindWidget('1', a.id);
+
+    const claimed = useWidgetStore.getState().claimConfigFor('2');
+    expect(claimed?.id).toBe(a.id);
+  });
+
+  it('returns the already-bound config on a repeat call rather than reclaiming', () => {
+    const { useWidgetStore } = require('../../store/useWidgetStore');
+    const a = useWidgetStore.getState().addConfig('A');
+    useWidgetStore.getState().addConfig('B');
+    useWidgetStore.getState().bindWidget('1', a.id);
+
+    const claimed = useWidgetStore.getState().claimConfigFor('1');
+    expect(claimed?.id).toBe(a.id);
+  });
+
+  it('returns undefined when the library is empty', () => {
+    const { useWidgetStore } = require('../../store/useWidgetStore');
+    expect(useWidgetStore.getState().claimConfigFor('1')).toBeUndefined();
+  });
+});
+
+// ── migration from widget-store-v2 (v1 shape) ───────────────────────────────
+
+describe('migrateWidgetStore', () => {
+  it('folds each old widgetConfigs entry into a named, bound config', () => {
+    const { migrateWidgetStore } = require('../../store/useWidgetStore');
+
+    const result = migrateWidgetStore(
+      {
+        widgetConfigs: {
+          '42': {
+            type: 'basic',
+            name: 'Morning',
+            quoteType: 'wisdom',
+            showBorder: true,
+            updateInterval: 'daily',
+            cachedQuote: { text: 'Hi', author: 'Me' },
+            lastRefreshed: '2024-01-01T00:00:00.000Z',
+          },
+        },
+      },
+      1,
+    );
+
+    expect(result.configs).toHaveLength(1);
+    const cfg = result.configs[0];
+    expect(cfg.name).toBe('Morning');
+    expect(cfg.customize).toBe(true); // previously configured, so treated as customized
+    expect(cfg.quoteType).toBe('wisdom');
+    expect(cfg.showBorder).toBe(true);
     expect(cfg.updateInterval).toBe('daily');
-    expect(cfg.cachedQuote?.text).toBe('Live boldly.');
+    expect(cfg.cachedQuote).toEqual({ text: 'Hi', author: 'Me' });
+    expect(result.bindings['42']).toBe(cfg.id);
   });
 
-  it('handles multiple distinct widget IDs independently', () => {
-    const { useWidgetStore } = require('../../store/useWidgetStore');
-    useWidgetStore.getState().setWidgetConfig('1', { textSize: 'small' });
-    useWidgetStore.getState().setWidgetConfig('2', { textSize: 'large' });
+  it('turns the shared iOS entry into an unbound config, not a binding', () => {
+    const { migrateWidgetStore } = require('../../store/useWidgetStore');
 
-    expect(useWidgetStore.getState().widgetConfigs['1'].textSize).toBe('small');
-    expect(useWidgetStore.getState().widgetConfigs['2'].textSize).toBe('large');
-  });
-});
+    const result = migrateWidgetStore(
+      {
+        widgetConfigs: {
+          ios: {
+            type: 'basic',
+            name: '',
+            quoteType: 'general',
+            showBorder: false,
+            updateInterval: 'hourly',
+            cachedQuote: null,
+            lastRefreshed: null,
+          },
+        },
+      },
+      1,
+    );
 
-// ── removeWidgetConfig ────────────────────────────────────────────────────────
-
-describe('removeWidgetConfig', () => {
-  it('removes an existing widget config', () => {
-    const { useWidgetStore } = require('../../store/useWidgetStore');
-    useWidgetStore.getState().setWidgetConfig('99', { showBorder: false });
-    expect(useWidgetStore.getState().widgetConfigs['99']).toBeDefined();
-
-    useWidgetStore.getState().removeWidgetConfig('99');
-    expect(useWidgetStore.getState().widgetConfigs['99']).toBeUndefined();
-  });
-
-  it('is a no-op when the widget ID does not exist', () => {
-    const { useWidgetStore } = require('../../store/useWidgetStore');
-    // Should not throw
-    expect(() => useWidgetStore.getState().removeWidgetConfig('non-existent')).not.toThrow();
+    expect(result.configs).toHaveLength(1);
+    expect(result.bindings['ios']).toBeUndefined();
+    expect(Object.keys(result.bindings)).toHaveLength(0);
   });
 
-  it('does not affect other widget configs when one is removed', () => {
-    const { useWidgetStore } = require('../../store/useWidgetStore');
-    useWidgetStore.getState().setWidgetConfig('A', { textSize: 'small' });
-    useWidgetStore.getState().setWidgetConfig('B', { textSize: 'large' });
+  it('falls back to a numbered name when the old entry has none', () => {
+    const { migrateWidgetStore } = require('../../store/useWidgetStore');
 
-    useWidgetStore.getState().removeWidgetConfig('A');
+    const result = migrateWidgetStore(
+      { widgetConfigs: { '1': { name: '' }, '2': { name: '   ' } } },
+      1,
+    );
 
-    expect(useWidgetStore.getState().widgetConfigs['A']).toBeUndefined();
-    expect(useWidgetStore.getState().widgetConfigs['B'].textSize).toBe('large');
+    expect(result.configs.map((c: { name: string }) => c.name)).toEqual([
+      'Widget configuration #1',
+      'Widget configuration #2',
+    ]);
   });
 
-  it('[B8] after removal, a subsequent setWidgetConfig re-creates from defaults', () => {
-    const { useWidgetStore } = require('../../store/useWidgetStore');
-    useWidgetStore.getState().setWidgetConfig('55', { textSize: 'large', quoteType: 'love' });
-    useWidgetStore.getState().removeWidgetConfig('55');
-
-    // Re-create with a partial update — should default-fill missing fields
-    useWidgetStore.getState().setWidgetConfig('55', { showBorder: true });
-    const cfg = useWidgetStore.getState().widgetConfigs['55'];
-
-    expect(cfg.showBorder).toBe(true);
-    expect(cfg.textSize).toBe('medium');    // back to default, not 'large'
-    expect(cfg.quoteType).toBe('general');  // back to default, not 'love'
-  });
-});
-
-// ── getOrCreateConfig ─────────────────────────────────────────────────────────
-
-describe('getOrCreateConfig', () => {
-  it('[B7] returns an existing config without creating a duplicate', () => {
-    const { useWidgetStore } = require('../../store/useWidgetStore');
-    useWidgetStore.getState().setWidgetConfig('30', { textSize: 'large' });
-
-    const cfg = useWidgetStore.getState().getOrCreateConfig('30', 'basic');
-    expect(cfg.textSize).toBe('large'); // existing value preserved
-
-    // Calling again returns the same data
-    const cfg2 = useWidgetStore.getState().getOrCreateConfig('30', 'basic');
-    expect(cfg2.textSize).toBe('large');
-    expect(Object.keys(useWidgetStore.getState().widgetConfigs)).toHaveLength(1);
+  it('is a no-op when already at the current version', () => {
+    const { migrateWidgetStore } = require('../../store/useWidgetStore');
+    const current = { configs: [{ id: 'x' }], bindings: { a: 'x' } };
+    expect(migrateWidgetStore(current, 2)).toBe(current);
   });
 
-  it('creates a default config when the widget does not exist yet', () => {
-    const { useWidgetStore, defaultInstanceConfig } = require('../../store/useWidgetStore');
-    const cfg = useWidgetStore.getState().getOrCreateConfig('brand-new', 'basic');
-
-    expect(cfg).toEqual(defaultInstanceConfig('basic'));
-    expect(useWidgetStore.getState().widgetConfigs['brand-new']).toBeDefined();
-  });
-
-  it('stores the created config so the next call returns the same object', () => {
-    const { useWidgetStore } = require('../../store/useWidgetStore');
-    useWidgetStore.getState().getOrCreateConfig('fresh', 'basic');
-    useWidgetStore.getState().getOrCreateConfig('fresh', 'basic'); // second call
-
-    // Only one entry should exist
-    expect(Object.keys(useWidgetStore.getState().widgetConfigs)).toHaveLength(1);
+  it('handles a missing/empty persisted state without throwing', () => {
+    const { migrateWidgetStore } = require('../../store/useWidgetStore');
+    expect(migrateWidgetStore(undefined, 0)).toEqual({ configs: [], bindings: {} });
+    expect(migrateWidgetStore(null, 0)).toEqual({ configs: [], bindings: {} });
+    expect(migrateWidgetStore({}, 0)).toEqual({ configs: [], bindings: {} });
   });
 });
 
 // ── constant maps ─────────────────────────────────────────────────────────────
 
 describe('constant maps', () => {
-  it('REFRESH_FREQUENCY_MINUTES[off] is 0', () => {
-    const { REFRESH_FREQUENCY_MINUTES } = require('../../store/useWidgetStore');
-    expect(REFRESH_FREQUENCY_MINUTES['off']).toBe(0);
-  });
-
-  it('REFRESH_FREQUENCY_MINUTES[hourly] is 60', () => {
+  it('REFRESH_FREQUENCY_MINUTES covers every WidgetRefreshFrequency', () => {
     const { REFRESH_FREQUENCY_MINUTES } = require('../../store/useWidgetStore');
     expect(REFRESH_FREQUENCY_MINUTES['hourly']).toBe(60);
-  });
-
-  it('TEXT_SIZE_MULTIPLIERS[small] < 1', () => {
-    const { TEXT_SIZE_MULTIPLIERS } = require('../../store/useWidgetStore');
-    expect(TEXT_SIZE_MULTIPLIERS['small']).toBeLessThan(1);
-  });
-
-  it('TEXT_SIZE_MULTIPLIERS[medium] is exactly 1.0', () => {
-    const { TEXT_SIZE_MULTIPLIERS } = require('../../store/useWidgetStore');
-    expect(TEXT_SIZE_MULTIPLIERS['medium']).toBe(1.0);
-  });
-
-  it('TEXT_SIZE_MULTIPLIERS[large] > 1', () => {
-    const { TEXT_SIZE_MULTIPLIERS } = require('../../store/useWidgetStore');
-    expect(TEXT_SIZE_MULTIPLIERS['large']).toBeGreaterThan(1);
+    expect(REFRESH_FREQUENCY_MINUTES['twice-daily']).toBe(720);
+    expect(REFRESH_FREQUENCY_MINUTES['daily']).toBe(1440);
   });
 
   it('all WidgetQuoteType keys have labels', () => {

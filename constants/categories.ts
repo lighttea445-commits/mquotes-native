@@ -23,7 +23,7 @@ export interface Category {
 }
 
 export const CATEGORIES: Category[] = [
-  // ── Most popular — the free tier ──────────────────────────────────────────
+  // ── Most popular ───────────────────────────────────────────────────────────
   { id: 'motivational',  name: 'Motivation',  icon: 'fire',              color: '#F97316', group: 'popular',       apiTag: 'Motivational'  },
   { id: 'inspirational', name: 'Inspiration', icon: 'weather-sunset-up', color: '#FB923C', group: 'popular',       apiTag: 'Inspirational' },
   { id: 'wisdom',        name: 'Wisdom',      icon: 'book-open-variant', color: '#0EA5E9', group: 'popular',       apiTag: 'Wisdom'        },
@@ -66,13 +66,12 @@ export const SPECIAL_TOPICS: SpecialTopic[] = [
 ];
 
 /**
- * Free without Premium: General plus the five Most popular topics. Everything
- * else shows a lock and routes to the paywall.
+ * Free without Premium: General and Favorites only. Every CATEGORIES topic
+ * shows a lock and routes to the paywall.
  */
 export const FREE_TOPIC_IDS: string[] = [
   TOPIC_GENERAL,
   TOPIC_FAVORITES,
-  ...CATEGORIES.filter(c => c.group === 'popular').map(c => c.id),
 ];
 
 export function isTopicFree(id: string): boolean {

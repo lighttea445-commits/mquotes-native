@@ -2,15 +2,17 @@
  * Widget-open trampoline screen.
  *
  * When the user taps a home-screen widget, the OPEN_URI click action fires:
- *   quotable://widget-open?widgetId=<id>          (Android)
- *   quotable://widget-open?src=ios&i=<queueIndex> (iOS)
+ *   quotable://widget-open?widgetId=<id>                (Android)
+ *   quotable://widget-open?src=ios&cfg=<id>&i=<index>   (iOS)
  *
- * iOS has no widget ids. The index points into the quote queue the app wrote
- * into the App Group, mirrored to AsyncStorage under IOS_WIDGET_QUEUE_KEY by
+ * iOS has no widget ids, so the tap URL instead carries which config the
+ * placed widget was bound to (chosen in Apple's Edit Widget panel) plus the
+ * index into that config's own queue. Each config keeps a separate queue,
+ * mirrored to AsyncStorage under IOS_WIDGET_QUEUE_KEY_PREFIX + configId by
  * WidgetBridge.updateIOSQueue() — so the app can show exactly the quote the
  * widget's timeline had on screen.
  *
- * The URI is intentionally short (widgetId only) to avoid Android 12+
+ * The URI is intentionally short (ids only) to avoid Android 12+
  * FLAG_IMMUTABLE PendingIntent limitations — embedding quote text caused the
  * URI to change on every re-render, but immutable PendingIntents can't be
  * updated, making taps fire stale URIs or become unresponsive.
@@ -28,21 +30,26 @@ import { View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useDeepLinkStore } from '../store/useDeepLinkStore';
-import type { WidgetInstanceConfig } from '../store/useWidgetStore';
-import { IOS_WIDGET_QUEUE_KEY } from '../modules/widget-bridge';
+import type { WidgetConfig } from '../store/useWidgetStore';
+import { IOS_WIDGET_QUEUE_KEY_PREFIX } from '../modules/widget-bridge';
 import type { WidgetQuote } from '../lib/widgetQuotes';
 
 export default function WidgetOpenScreen() {
   const router = useRouter();
-  const { widgetId, src, i } = useLocalSearchParams<{ widgetId?: string; src?: string; i?: string }>();
+  const { widgetId, src, i, cfg } = useLocalSearchParams<{
+    widgetId?: string;
+    src?: string;
+    i?: string;
+    cfg?: string;
+  }>();
 
   useEffect(() => {
     async function handleAndNavigate() {
       const wid = String(widgetId ?? '');
 
-      if (src === 'ios') {
+      if (src === 'ios' && cfg) {
         try {
-          const raw = await AsyncStorage.getItem(IOS_WIDGET_QUEUE_KEY);
+          const raw = await AsyncStorage.getItem(`${IOS_WIDGET_QUEUE_KEY_PREFIX}${cfg}`);
           const queue = raw ? (JSON.parse(raw) as WidgetQuote[]) : [];
           if (Array.isArray(queue) && queue.length > 0) {
             const parsed = Number.parseInt(String(i ?? '0'), 10);
@@ -77,9 +84,10 @@ export default function WidgetOpenScreen() {
             const raw = await AsyncStorage.getItem('widget-store-v2');
             if (raw) {
               const store = JSON.parse(raw) as {
-                state?: { widgetConfigs?: Record<string, WidgetInstanceConfig> };
+                state?: { configs?: WidgetConfig[]; bindings?: Record<string, string> };
               };
-              const cached = store?.state?.widgetConfigs?.[wid]?.cachedQuote;
+              const configId = store?.state?.bindings?.[wid];
+              const cached = store?.state?.configs?.find((c) => c.id === configId)?.cachedQuote;
               if (cached) {
                 useDeepLinkStore.getState().setPendingQuote({
                   id:     cached.quoteId ?? '',

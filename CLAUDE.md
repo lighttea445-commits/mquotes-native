@@ -91,7 +91,7 @@ There is no `useMixStore`. Mixes were replaced by topics and collections.
 
 There is no `section: 'byType' | 'forYou'` field. That naming is gone.
 
-**Topics** — what the user actually follows. `SPECIAL_TOPICS` adds General, Favorites and My quotes on top of the categories. `FREE_TOPIC_IDS` and `isTopicFree()` define the free tier: General, Favorites, and the five `popular` categories. Everything else shows a lock and routes to the paywall.
+**Topics** — what the user actually follows. `SPECIAL_TOPICS` adds General, Favorites and My quotes on top of the categories. `FREE_TOPIC_IDS` and `isTopicFree()` define the free tier: General and Favorites only. Every one of the 14 `CATEGORIES` shows a lock and routes to the paywall.
 
 ### Onboarding
 

@@ -3,13 +3,19 @@
 @interface RCT_EXTERN_MODULE(WidgetBridge, NSObject)
 
 RCT_EXTERN_METHOD(
-  updateWidget:(NSString *)jsonPayload
+  updateWidgetQueue:(NSString *)jsonPayload
   resolver:(RCTPromiseResolveBlock)resolve
   rejecter:(RCTPromiseRejectBlock)reject
 )
 
 RCT_EXTERN_METHOD(
-  updateWidgetQueue:(NSString *)jsonPayload
+  updateConfigList:(NSString *)jsonPayload
+  resolver:(RCTPromiseResolveBlock)resolve
+  rejecter:(RCTPromiseRejectBlock)reject
+)
+
+RCT_EXTERN_METHOD(
+  getConfigSeenAt:(NSString *)configId
   resolver:(RCTPromiseResolveBlock)resolve
   rejecter:(RCTPromiseRejectBlock)reject
 )

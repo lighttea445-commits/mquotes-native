@@ -16,55 +16,19 @@ private let kAppGroupId = "group.com.mquotes.shared"
 @objc(WidgetBridge)
 class WidgetBridgeModule: NSObject {
 
-  // MARK: updateWidget
-
-  @objc
-  func updateWidget(
-    _ jsonPayload: String,
-    resolver resolve: @escaping (Any?) -> Void,
-    rejecter reject: @escaping (String?, String?, Error?) -> Void
-  ) {
-    guard
-      let data = jsonPayload.data(using: .utf8),
-      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-    else {
-      reject("PARSE_ERROR", "Invalid JSON payload", nil)
-      return
-    }
-
-    guard let defaults = UserDefaults(suiteName: kAppGroupId) else {
-      reject("DEFAULTS_ERROR", "Cannot access App Group UserDefaults. Check entitlements.", nil)
-      return
-    }
-
-    defaults.set(json["quoteText"]  as? String ?? "",       forKey: "mq_quote_text")
-    // JS sends authorText (not quoteAuthor) — read that key
-    defaults.set(json["authorText"] as? String ?? "",       forKey: "mq_quote_author")
-    defaults.set(json["showAuthor"] as? Bool   ?? false,    forKey: "mq_show_author")
-    defaults.set(json["showBorder"] as? Bool   ?? false,    forKey: "mq_show_border")
-    defaults.set(json["widgetType"] as? String ?? "basic",  forKey: "mq_widget_type")
-    defaults.set(json["streakCount"] as? Int   ?? 0,        forKey: "mq_streak_count")
-    defaults.set(json["textSize"]   as? String ?? "medium", forKey: "mq_text_size")
-    defaults.set(Date().timeIntervalSince1970,              forKey: "mq_last_updated")
-    defaults.synchronize()
-
-    resolve(nil)
-  }
-
   // MARK: updateWidgetQueue
 
-  /// Writes a queue of quotes the widget extension rotates through on its own.
+  /// Writes one config's quote queue, which the widget extension rotates
+  /// through on its own — iOS cannot wake JS in the background to fetch a
+  /// fresh quote. Each config in the app's library gets its own queue, keyed
+  /// by id, so a widget bound to any of them (via the AppIntent picker in
+  /// Apple's Edit Widget panel) shows that config's own topic.
   ///
-  /// iOS cannot wake JS in the background to fetch a fresh quote, so instead of
-  /// one current quote we pre-write a batch and let WidgetKit's timeline walk
-  /// it. The queue index travels in the widget's tap URL, which is how a tap
+  /// The queue index travels in the widget's tap URL, which is how a tap
   /// resolves back to the exact quote that was on screen.
   ///
-  /// Appearance travels with the queue: the app is the sole owner of every
-  /// widget setting, so the extension reads these keys rather than an AppIntent.
-  ///
-  /// Payload: `{ quotes: [{ text, author, id }], rotateMinutes: Int, isPro: Bool,
-  ///             textSize: String, showAuthor: Bool, showBorder: Bool }`
+  /// Payload: `{ configId: String, quotes: [{ text, author, id }],
+  ///             rotateMinutes: Int, isPro: Bool, showBorder: Bool, showButtons: Bool }`
   @objc
   func updateWidgetQueue(
     _ jsonPayload: String,
@@ -84,8 +48,13 @@ class WidgetBridgeModule: NSObject {
       return
     }
 
+    guard let configId = json["configId"] as? String, !configId.isEmpty else {
+      reject("PARSE_ERROR", "Payload is missing configId", nil)
+      return
+    }
+
     // Re-serialize rather than storing the whole payload — the widget decodes
-    // mq_quotes as a bare array.
+    // mq_queue_<id> as a bare array.
     guard
       let quotes = json["quotes"] as? [[String: Any]],
       let quotesData = try? JSONSerialization.data(withJSONObject: quotes),
@@ -95,17 +64,12 @@ class WidgetBridgeModule: NSObject {
       return
     }
 
-    defaults.set(quotesString, forKey: "mq_quotes")
-    defaults.set(json["rotateMinutes"] as? Int ?? 60, forKey: "mq_rotate_minutes")
-    // Pro gate for every appearance key below. The app gates its own controls
-    // too, but the render path enforces it so a stale queue can't outlive a
-    // lapsed entitlement.
+    defaults.set(quotesString, forKey: "mq_queue_\(configId)")
+    defaults.set(json["rotateMinutes"] as? Int ?? 60, forKey: "mq_rotate_\(configId)")
+    defaults.set(json["showBorder"] as? Bool ?? false, forKey: "mq_border_\(configId)")
+    defaults.set(json["showButtons"] as? Bool ?? false, forKey: "mq_buttons_\(configId)")
+    // Pro gate is shared across configs — one entitlement, not per-config.
     defaults.set(json["isPro"] as? Bool ?? false, forKey: "mq_is_pro")
-    defaults.set(json["textSize"]   as? String ?? "large", forKey: "mq_text_size")
-    defaults.set(json["showAuthor"] as? Bool ?? false, forKey: "mq_show_author")
-    defaults.set(json["showBorder"] as? Bool ?? false, forKey: "mq_show_border")
-    defaults.set(json["widgetType"] as? String ?? "basic", forKey: "mq_widget_type")
-    defaults.set(Date().timeIntervalSince1970, forKey: "mq_last_updated")
     defaults.synchronize()
 
     if #available(iOS 14.0, *) {
@@ -113,6 +77,61 @@ class WidgetBridgeModule: NSObject {
     }
 
     resolve(nil)
+  }
+
+  // MARK: updateConfigList
+
+  /// Writes the id/name/appearance list backing the AppIntent's dynamic option
+  /// list in Apple's Edit Widget panel — every config the user has created, so
+  /// any placed widget can be pointed at any of them.
+  ///
+  /// Payload: `{ configs: [{ id, name, showBorder, showButtons, rotateMinutes }], isPro: Bool }`
+  @objc
+  func updateConfigList(
+    _ jsonPayload: String,
+    resolver resolve: @escaping (Any?) -> Void,
+    rejecter reject: @escaping (String?, String?, Error?) -> Void
+  ) {
+    guard
+      let data = jsonPayload.data(using: .utf8),
+      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      let configs = json["configs"] as? [[String: Any]],
+      let configsData = try? JSONSerialization.data(withJSONObject: configs),
+      let configsString = String(data: configsData, encoding: .utf8)
+    else {
+      reject("PARSE_ERROR", "Invalid JSON payload", nil)
+      return
+    }
+
+    guard let defaults = UserDefaults(suiteName: kAppGroupId) else {
+      reject("DEFAULTS_ERROR", "Cannot access App Group UserDefaults. Check entitlements.", nil)
+      return
+    }
+
+    defaults.set(configsString, forKey: "mq_configs")
+    defaults.set(json["isPro"] as? Bool ?? false, forKey: "mq_is_pro")
+    defaults.synchronize()
+
+    resolve(nil)
+  }
+
+  // MARK: getConfigSeenAt
+
+  /// Milliseconds-since-epoch the extension last rendered this config, from
+  /// the mq_seen_<id> stamp it writes on every timeline request — or 0 if it
+  /// never has. This is the only channel that flows extension-to-app, and it's
+  /// how the app infers whether a config is "Pending" (unbound) or in use.
+  @objc
+  func getConfigSeenAt(
+    _ configId: String,
+    resolver resolve: @escaping (Any?) -> Void,
+    rejecter reject: @escaping (String?, String?, Error?) -> Void
+  ) {
+    guard let defaults = UserDefaults(suiteName: kAppGroupId) else {
+      resolve(0)
+      return
+    }
+    resolve(defaults.double(forKey: "mq_seen_\(configId)"))
   }
 
   // MARK: reloadAllTimelines
