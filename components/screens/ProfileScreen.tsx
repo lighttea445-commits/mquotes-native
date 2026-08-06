@@ -87,6 +87,7 @@ export default function ProfileScreen({ onClose }: { onClose?: () => void }) {
           leading="close"
           onLeadingPress={close}
           actionLabel="Settings"
+          actionIcon="cog-outline"
           onActionPress={() => go('settings', '/settings')}
         />
 

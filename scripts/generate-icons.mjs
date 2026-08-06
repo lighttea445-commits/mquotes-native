@@ -41,6 +41,7 @@ const MAP = {
   'circle-opacity': 'circle-half-2',
   'clock-outline': 'clock',
   close: 'x',
+  'cog-outline': 'settings',
   'compass-outline': 'compass',
   'content-copy': 'copy',
   crown: 'crown',

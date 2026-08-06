@@ -4,6 +4,7 @@ import Animated from 'react-native-reanimated';
 import { useTheme } from '../../hooks/useTheme';
 import { usePressScale } from '../../hooks/usePressScale';
 import { IconButton } from './IconButton';
+import { IconName } from './Icon';
 import { GlassSurface, liquidGlassAvailable } from './GlassSurface';
 import { GUTTER, SPACE, HIT, RADIUS, ICON_BTN } from './tokens';
 import { FONTS } from '../../constants/fonts';
@@ -18,6 +19,15 @@ interface SheetHeaderProps {
   onLeadingPress?: () => void;
   /** Right-hand text action, e.g. "Settings", "Clear all", "Unlock all". */
   actionLabel?: string;
+  /**
+   * Glyph to use for the action instead of its text, where the platform draws
+   * glass chrome. `actionLabel` is still required and becomes the
+   * accessibility label, so screen readers announce the action either way.
+   *
+   * Only applies on iOS 26. Android and older iOS keep the text, which is the
+   * convention on those platforms and reads better without a surface behind it.
+   */
+  actionIcon?: IconName;
   onActionPress?: () => void;
   /** Anything else to sit in the right slot (sort toggles, Follow chip, …). */
   right?: React.ReactNode;
@@ -42,6 +52,7 @@ export function SheetHeader({
   leading = 'close',
   onLeadingPress,
   actionLabel,
+  actionIcon,
   onActionPress,
   right,
 }: SheetHeaderProps) {
@@ -76,7 +87,18 @@ export function SheetHeader({
       {right}
 
       {actionLabel && onActionPress ? (
-        <HeaderAction label={actionLabel} onPress={onActionPress} />
+        actionIcon && glass ? (
+          <IconButton
+            icon={actionIcon}
+            onPress={onActionPress}
+            size={ICON_BTN.sm}
+            iconSize={20}
+            color={theme.text}
+            accessibilityLabel={actionLabel}
+          />
+        ) : (
+          <HeaderAction label={actionLabel} onPress={onActionPress} />
+        )
       ) : null}
     </View>
   );
