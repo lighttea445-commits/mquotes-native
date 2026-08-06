@@ -18,6 +18,8 @@ import Animated, {
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon } from '../ui/Icon';
+import { IconButton } from '../ui/IconButton';
+import { liquidGlassAvailable } from '../ui/GlassSurface';
 import { useHaptics } from '../../hooks/useHaptics';
 import * as ExpoSharing from 'expo-sharing';
 import { useBaseTheme } from '../../hooks/useTheme';
@@ -42,6 +44,7 @@ export function StreakShareSheet({ visible, streakCount, onClose }: Props) {
   const { width: W, height: H } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const theme = useBaseTheme();
+  const glass = liquidGlassAvailable();
   const { isPro } = useRevenueCat();
   const modal = useModal();
   const [watermarkRemoved, setWatermarkRemoved] = React.useState(false);
@@ -131,14 +134,14 @@ export function StreakShareSheet({ visible, streakCount, onClose }: Props) {
           >
             {/* Header — close only, as in the reference */}
             <View style={[styles.header, { paddingTop: insets.top + 14 }]}>
-              <TouchableOpacity
+              <IconButton
+                icon="close"
                 onPress={onClose}
-                hitSlop={12}
-                accessibilityRole="button"
+                filled={glass}
+                iconSize={glass ? 20 : 26}
+                color={theme.text}
                 accessibilityLabel="Close"
-              >
-                <Icon name="close" size={26} color={theme.text} />
-              </TouchableOpacity>
+              />
             </View>
 
             {/* Card preview */}

@@ -27,6 +27,8 @@ interface IconButtonProps {
   glass?: boolean;
   /** Selection tick on touch down. Respects the user's haptics preference. */
   haptic?: boolean;
+  /** Blocks the press and dims the control, matching the system's disabled look. */
+  disabled?: boolean;
   accessibilityLabel: string;
   style?: ViewStyle;
 }
@@ -43,6 +45,7 @@ export function IconButton({
   filled = true,
   glass = true,
   haptic = true,
+  disabled = false,
   accessibilityLabel,
   style,
 }: IconButtonProps) {
@@ -68,10 +71,12 @@ export function IconButton({
       onPress={onPress}
       onPressIn={onPressIn}
       onPressOut={onPressOut}
+      disabled={disabled}
       hitSlop={HIT}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
-      style={style}
+      accessibilityState={{ disabled }}
+      style={[style, disabled && styles.disabled]}
     >
       <Animated.View style={animatedStyle}>
         {filled && glass ? (
@@ -97,5 +102,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
+  },
+  disabled: {
+    opacity: 0.4,
   },
 });

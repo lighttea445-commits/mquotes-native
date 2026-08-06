@@ -13,6 +13,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useHaptics } from '../../hooks/useHaptics';
 import { Icon } from '../ui/Icon';
+import { IconButton } from '../ui/IconButton';
+import { liquidGlassAvailable } from '../ui/GlassSurface';
 import { GUTTER, SPACE, RADIUS, ON_GOLD } from '../ui/tokens';
 import { useBaseTheme } from '../../hooks/useTheme';
 import { useCollectionsStore, CollectionQuote } from '../../store/useCollectionsStore';
@@ -31,6 +33,7 @@ interface Props {
  */
 export function AddToCollectionSheet({ visible, quote, onClose }: Props) {
   const theme = useBaseTheme();
+  const glass = liquidGlassAvailable();
   const insets = useSafeAreaInsets();
   const collections = useCollectionsStore((s) => s.collections);
   const createCollection = useCollectionsStore((s) => s.createCollection);
@@ -81,9 +84,14 @@ export function AddToCollectionSheet({ visible, quote, onClose }: Props) {
           >
             <View style={styles.header}>
               <Text style={[styles.title, { color: theme.text }]}>Add to collection</Text>
-              <TouchableOpacity onPress={close} hitSlop={12} accessibilityLabel="Close">
-                <Icon name="close" size={22} color={theme.textMuted} />
-              </TouchableOpacity>
+              <IconButton
+                icon="close"
+                onPress={close}
+                filled={glass}
+                iconSize={glass ? 18 : 22}
+                color={theme.textMuted}
+                accessibilityLabel="Close"
+              />
             </View>
 
             {creating ? (

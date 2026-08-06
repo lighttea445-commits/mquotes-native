@@ -3,6 +3,8 @@ import { FONTS } from '../../constants/fonts';
 import { View, StyleSheet, Text, Pressable, ActivityIndicator, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Icon } from '../ui/Icon';
+import { IconButton } from '../ui/IconButton';
+import { liquidGlassAvailable } from '../ui/GlassSurface';
 import RevenueCatUI from 'react-native-purchases-ui';
 import { useTheme } from '../../hooks/useTheme';
 import * as RevenueChat from '../../lib/revenuecat';
@@ -13,6 +15,7 @@ interface CustomerCenterModalProps {
 
 export function CustomerCenterModal({ onClose }: CustomerCenterModalProps) {
   const theme = useTheme();
+  const glass = liquidGlassAvailable();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -38,13 +41,15 @@ export function CustomerCenterModal({ onClose }: CustomerCenterModalProps) {
       {/* Header */}
       <View style={styles.header}>
         <Text style={[styles.title, { color: theme.text }]}>Account & Billing</Text>
-        <Pressable onPress={onClose} disabled={isLoading}>
-          <Icon
-            name="close"
-            size={24}
-            color={theme.text}
-          />
-        </Pressable>
+        <IconButton
+          icon="close"
+          onPress={() => onClose?.()}
+          disabled={isLoading}
+          filled={glass}
+          iconSize={glass ? 20 : 24}
+          color={theme.text}
+          accessibilityLabel="Close"
+        />
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
