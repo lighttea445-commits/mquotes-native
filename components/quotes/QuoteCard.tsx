@@ -395,9 +395,9 @@ export function QuoteCard() {
     .onStart(() => { startY.value = translateY.value; })
     .onUpdate((e) => {
       const dy = e.translationY;
-      // 1:1 with the finger. Any damping factor here reads as the card
-      // resisting the drag.
-      translateY.value = startY.value + dy;
+      // Tracks at 0.75 of the finger. Slightly behind, which keeps a hint of
+      // weight without reading as the card fighting back.
+      translateY.value = startY.value + dy * 0.75;
       const absProgress = Math.abs(dy) / SCREEN_HEIGHT;
       scale.value = 1 - absProgress * 0.03;
       opacity.value = 1 - absProgress * 0.35;
