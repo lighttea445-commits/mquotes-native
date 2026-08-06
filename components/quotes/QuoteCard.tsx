@@ -39,6 +39,9 @@ import { PremiumModal } from '../subscriptions/PremiumModal';
 import { errorReporting } from '../../lib/errorReporting';
 import { analytics } from '../../lib/analytics';
 
+// Pixels per second past which a swipe commits regardless of how far it
+// travelled. Low enough that a casual flick counts.
+const FLING_VELOCITY = 450;
 // Maximum quotes to keep prefetched ahead. Prevents unbounded buffer growth.
 const MAX_BUFFER_AHEAD = 20;
 // Trim old quotes from buffer when past this many to free memory.
@@ -48,7 +51,7 @@ export function QuoteCard() {
   const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   // Dynamic layout values that adapt to every phone screen size.
-  const SWIPE_THRESHOLD = SCREEN_HEIGHT * 0.15;
+  const SWIPE_THRESHOLD = SCREEN_HEIGHT * 0.07;
   const BTN_BOTTOM = insets.bottom + 10;           // above safe-area / home indicator
   const QUOTE_FONT_SIZE = Math.max(18, Math.min(28, Math.round(SCREEN_WIDTH * 0.062)));
   const QUOTE_LINE_HEIGHT = Math.round(QUOTE_FONT_SIZE * 1.58);
@@ -284,28 +287,40 @@ export function QuoteCard() {
     }
   }
 
+  // The outgoing card carries on in the direction the finger was already
+  // going, so the handoff reads as one continuous motion rather than a
+  // gesture that ends and an animation that starts.
   const animateOut = (direction: 'up' | 'down', onDone: () => void) => {
     const toY = direction === 'up' ? -SCREEN_HEIGHT * 0.55 : SCREEN_HEIGHT * 0.55;
-    translateY.value = withTiming(toY, { duration: 200, easing: Easing.in(Easing.cubic) });
-    scale.value = withTiming(0.93, { duration: 200, easing: Easing.in(Easing.quad) });
-    opacity.value = withTiming(0, { duration: 160 }, () => { runOnJS(onDone)(); });
+    translateY.value = withTiming(toY, { duration: 140, easing: Easing.out(Easing.quad) });
+    scale.value = withTiming(0.95, { duration: 140, easing: Easing.out(Easing.quad) });
+    opacity.value = withTiming(0, { duration: 110 }, () => { runOnJS(onDone)(); });
   };
 
   const animateIn = (direction: 'up' | 'down') => {
-    const fromY = direction === 'up' ? SCREEN_HEIGHT * 0.22 : -SCREEN_HEIGHT * 0.22;
+    const fromY = direction === 'up' ? SCREEN_HEIGHT * 0.16 : -SCREEN_HEIGHT * 0.16;
     translateY.value = fromY;
-    scale.value = 0.93;
+    scale.value = 0.96;
     opacity.value = 0;
-    translateY.value = withSpring(0, { damping: 22, stiffness: 280, mass: 0.85 });
-    scale.value = withSpring(1, { damping: 20, stiffness: 260, mass: 0.85 });
-    opacity.value = withTiming(1, { duration: 160 });
+    translateY.value = withSpring(0, { damping: 24, stiffness: 380, mass: 0.7 });
+    scale.value = withSpring(1, { damping: 22, stiffness: 360, mass: 0.7 });
+    opacity.value = withTiming(1, { duration: 120 });
+  };
+
+  /** Put the card back under the finger's start position without animating. */
+  const resetCard = () => {
+    translateY.value = withSpring(0, { damping: 20, stiffness: 340 });
+    scale.value = withSpring(1, { damping: 18, stiffness: 300 });
+    opacity.value = withTiming(1, { duration: 110 });
   };
 
   const goNext = useCallback(() => {
     setHasSwiped(true);
     const nextIdx = currentIndex + 1;
     if (nextIdx >= buffer.length - 3) prefetchMore();
-    if (nextIdx >= buffer.length) { loadQuotes(); return; }
+    // Ran off the end of the buffer. Snap the card back rather than leaving it
+    // parked wherever the finger let go while the fetch runs.
+    if (nextIdx >= buffer.length) { resetCard(); loadQuotes(); return; }
     // No haptic here. Moving between quotes is the app's most repeated
     // gesture, and a buzz per swipe turns a calm read into a rattle.
     animateOut('up', () => {
@@ -371,28 +386,36 @@ export function QuoteCard() {
     }
   }, [converted, favorited, toggleFavorite, haptics]);
 
-  // Pan gesture — require 15px vertical movement before activating so taps
-  // on the share/heart buttons pass through cleanly to TouchableOpacity.
+  // Pan gesture — 8px of vertical movement before activating. Enough that taps
+  // on the share/heart buttons still pass through to TouchableOpacity, small
+  // enough that the card starts moving almost the instant the finger does.
   const startY = useSharedValue(0);
   const panGesture = Gesture.Pan()
-    .activeOffsetY([-15, 15])
+    .activeOffsetY([-8, 8])
     .onStart(() => { startY.value = translateY.value; })
     .onUpdate((e) => {
       const dy = e.translationY;
-      translateY.value = startY.value + dy * 0.55;
+      // 1:1 with the finger. Any damping factor here reads as the card
+      // resisting the drag.
+      translateY.value = startY.value + dy;
       const absProgress = Math.abs(dy) / SCREEN_HEIGHT;
-      scale.value = 1 - absProgress * 0.04;
-      opacity.value = 1 - absProgress * 0.45;
+      scale.value = 1 - absProgress * 0.03;
+      opacity.value = 1 - absProgress * 0.35;
     })
     .onEnd((e) => {
-      if (e.translationY < -SWIPE_THRESHOLD) {
+      // Either a deliberate drag past the threshold or a quick flick commits.
+      // Without the velocity test a fast, short swipe snaps back, which is the
+      // single most common way a feed feels sticky.
+      const flungUp = e.velocityY < -FLING_VELOCITY;
+      const flungDown = e.velocityY > FLING_VELOCITY;
+      if (e.translationY < -SWIPE_THRESHOLD || flungUp) {
         runOnJS(goNext)();
-      } else if (e.translationY > SWIPE_THRESHOLD && currentIndex > 0) {
+      } else if ((e.translationY > SWIPE_THRESHOLD || flungDown) && currentIndex > 0) {
         runOnJS(goPrev)();
       } else {
-        translateY.value = withSpring(0, { damping: 22, stiffness: 300 });
-        scale.value = withSpring(1, { damping: 18, stiffness: 280 });
-        opacity.value = withTiming(1, { duration: 120 });
+        translateY.value = withSpring(0, { damping: 20, stiffness: 340, velocity: e.velocityY });
+        scale.value = withSpring(1, { damping: 18, stiffness: 300 });
+        opacity.value = withTiming(1, { duration: 110 });
       }
     });
 
