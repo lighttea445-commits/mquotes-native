@@ -1,8 +1,11 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
+import Animated from 'react-native-reanimated';
 import { useTheme } from '../../hooks/useTheme';
+import { usePressScale } from '../../hooks/usePressScale';
 import { IconButton } from './IconButton';
-import { GUTTER, SPACE, HIT } from './tokens';
+import { GlassSurface, liquidGlassAvailable } from './GlassSurface';
+import { GUTTER, SPACE, HIT, RADIUS, ICON_BTN } from './tokens';
 import { FONTS } from '../../constants/fonts';
 
 interface SheetHeaderProps {
@@ -27,6 +30,12 @@ interface SheetHeaderProps {
  * Sheets now run to the very top of the screen, so each screen supplies its
  * own top safe-area inset (`edges={['top','bottom']}`) and this header sits
  * directly beneath it.
+ *
+ * On iOS 26 the leading control and the text action are carried on liquid
+ * glass, matching how the system draws sheet chrome. Everywhere else they stay
+ * exactly as they were: a bare glyph and bare text. The glass needs a surface
+ * to live on, and inventing one on Android would change that platform's look
+ * for no gain.
  */
 export function SheetHeader({
   title,
@@ -37,6 +46,7 @@ export function SheetHeader({
   right,
 }: SheetHeaderProps) {
   const theme = useTheme();
+  const glass = liquidGlassAvailable();
 
   return (
     <View style={styles.header}>
@@ -44,19 +54,19 @@ export function SheetHeader({
         <IconButton
           icon={leading === 'back' ? 'arrow-left' : 'close'}
           onPress={onLeadingPress}
-          filled={false}
-          iconSize={26}
+          filled={glass}
+          size={ICON_BTN.sm}
+          iconSize={glass ? 20 : 26}
           color={theme.text}
           accessibilityLabel={leading === 'back' ? 'Go back' : 'Close'}
-          style={styles.leading}
+          // The bare glyph needs pulling back into the gutter optically. A
+          // glass circle already sits on the gutter correctly.
+          style={glass ? undefined : styles.leading}
         />
       ) : null}
 
       {title ? (
-        <Text
-          style={[styles.title, { color: theme.text }]}
-          numberOfLines={1}
-        >
+        <Text style={[styles.title, { color: theme.text }]} numberOfLines={1}>
           {title}
         </Text>
       ) : null}
@@ -66,13 +76,51 @@ export function SheetHeader({
       {right}
 
       {actionLabel && onActionPress ? (
-        <TouchableOpacity onPress={onActionPress} hitSlop={HIT} accessibilityRole="button">
-          <Text style={[styles.action, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
-            {actionLabel}
-          </Text>
-        </TouchableOpacity>
+        <HeaderAction label={actionLabel} onPress={onActionPress} />
       ) : null}
     </View>
+  );
+}
+
+/**
+ * The right-hand text action. A glass pill on iOS 26, bare text elsewhere.
+ */
+function HeaderAction({ label, onPress }: { label: string; onPress: () => void }) {
+  const theme = useTheme();
+  // A pill is much wider than it is tall, so the circular button's compression
+  // would swing its edges far enough to read as a wobble. Go shallower.
+  const { onPressIn, onPressOut, animatedStyle } = usePressScale({ scale: 0.96 });
+  const glass = liquidGlassAvailable();
+
+  const text = (
+    <Text style={[styles.action, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
+      {label}
+    </Text>
+  );
+
+  return (
+    <Pressable
+      onPress={onPress}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
+      hitSlop={HIT}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+    >
+      <Animated.View style={animatedStyle}>
+        {glass ? (
+          <GlassSurface
+            style={styles.actionPill}
+            fallbackColor={theme.surface}
+            isDark={theme.isDark}
+          >
+            {text}
+          </GlassSurface>
+        ) : (
+          text
+        )}
+      </Animated.View>
+    </Pressable>
   );
 }
 
@@ -106,5 +154,13 @@ const styles = StyleSheet.create({
   },
   action: {
     fontSize: 16,
+  },
+  actionPill: {
+    height: 34,
+    paddingHorizontal: SPACE.lg,
+    borderRadius: RADIUS.pill,
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
   },
 });
