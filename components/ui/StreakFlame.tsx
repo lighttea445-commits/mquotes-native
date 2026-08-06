@@ -25,7 +25,7 @@ interface StreakFlameProps {
 const VB_W = 104;
 const VB_H = 128;
 const ASPECT = VB_W / VB_H;
-const STROKE = 9;
+const STROKE = 6;
 
 const FLAME =
   'M60 16C64 24 70 31 76 38C84 47 91 55 93 65C96 78 92 92 82 102C74 110 64 114 52 114' +
