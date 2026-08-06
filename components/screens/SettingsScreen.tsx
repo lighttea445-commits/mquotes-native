@@ -294,9 +294,8 @@ const styles = StyleSheet.create({
   nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 56,
+    height: 56,
     paddingHorizontal: 16,
-    paddingVertical: 8,
     borderRadius: 16,
     borderWidth: 1,
     gap: 12,
@@ -322,9 +321,8 @@ const styles = StyleSheet.create({
   toggleItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 56,
+    height: 56,
     paddingHorizontal: 16,
-    paddingVertical: 8,
     borderRadius: 16,
     borderWidth: 1,
     gap: 12,
