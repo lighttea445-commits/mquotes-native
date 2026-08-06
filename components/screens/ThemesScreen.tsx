@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import * as Haptics from 'expo-haptics';
+import { useHaptics } from '../../hooks/useHaptics';
 import { Icon } from '../ui/Icon';
 import { SheetHeader } from '../ui/SheetHeader';
 import { GUTTER, SPACE, RADIUS, ON_GOLD } from '../ui/tokens';
@@ -35,6 +35,7 @@ export default function ThemesScreen({ onClose }: { onClose?: () => void }) {
   const modal = useModal();
   const { isPro } = useRevenueCat();
   const { preferences, setTheme } = useAppStore();
+  const haptics = useHaptics();
 
   const close = onClose ?? (() => router.back());
 
@@ -51,7 +52,7 @@ export default function ThemesScreen({ onClose }: { onClose?: () => void }) {
       openUpsell();
       return;
     }
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    haptics.impact();
     analytics.track('theme_changed', { themeId });
     setTheme(themeId);
     close();

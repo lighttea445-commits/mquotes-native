@@ -18,7 +18,7 @@ import Animated, {
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon } from '../ui/Icon';
-import * as Haptics from 'expo-haptics';
+import { useHaptics } from '../../hooks/useHaptics';
 import * as ExpoSharing from 'expo-sharing';
 import { useBaseTheme } from '../../hooks/useTheme';
 import { useRevenueCat } from '../../hooks/useRevenueCat';
@@ -46,6 +46,7 @@ export function StreakShareSheet({ visible, streakCount, onClose }: Props) {
   const modal = useModal();
   const [watermarkRemoved, setWatermarkRemoved] = React.useState(false);
   const cardRef = useRef<View>(null);
+  const haptics = useHaptics();
 
   const cardPreviewWidth = Math.min(W - 80, 280);
 
@@ -90,7 +91,7 @@ export function StreakShareSheet({ visible, streakCount, onClose }: Props) {
   }));
 
   const handleShare = useCallback(async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    haptics.impact();
     if (captureRef) {
       try {
         const uri = await captureRef(cardRef, { format: 'png', quality: 1.0, result: 'tmpfile' });
@@ -104,7 +105,7 @@ export function StreakShareSheet({ visible, streakCount, onClose }: Props) {
     await Share.share({
       message: `${streakCount} day streak! I've made a habit of getting motivated each day! — Quotable`,
     });
-  }, [streakCount]);
+  }, [streakCount, haptics]);
 
   return (
     <Modal visible={visible} transparent animationType="none" statusBarTranslucent onRequestClose={onClose}>

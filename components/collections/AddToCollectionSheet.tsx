@@ -11,7 +11,7 @@ import {
   Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as Haptics from 'expo-haptics';
+import { useHaptics } from '../../hooks/useHaptics';
 import { Icon } from '../ui/Icon';
 import { GUTTER, SPACE, RADIUS, ON_GOLD } from '../ui/tokens';
 import { useBaseTheme } from '../../hooks/useTheme';
@@ -36,6 +36,7 @@ export function AddToCollectionSheet({ visible, quote, onClose }: Props) {
   const createCollection = useCollectionsStore((s) => s.createCollection);
   const addQuote = useCollectionsStore((s) => s.addQuote);
   const removeQuote = useCollectionsStore((s) => s.removeQuote);
+  const haptics = useHaptics();
 
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
@@ -47,7 +48,7 @@ export function AddToCollectionSheet({ visible, quote, onClose }: Props) {
   };
 
   const toggle = (collectionId: string, already: boolean) => {
-    Haptics.selectionAsync();
+    haptics.selection();
     if (already) removeQuote(collectionId, quote.id);
     else addQuote(collectionId, quote);
   };
@@ -55,7 +56,7 @@ export function AddToCollectionSheet({ visible, quote, onClose }: Props) {
   const handleCreate = () => {
     const trimmed = name.trim();
     if (!trimmed) return;
-    Haptics.selectionAsync();
+    haptics.selection();
     const id = createCollection(trimmed);
     addQuote(id, quote);
     setCreating(false);

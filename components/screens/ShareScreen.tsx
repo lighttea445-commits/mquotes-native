@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import * as Haptics from 'expo-haptics';
+import { useHaptics } from '../../hooks/useHaptics';
 import { Icon } from '../ui/Icon';
 import * as ExpoSharing from 'expo-sharing';
 import { useBaseTheme } from '../../hooks/useTheme';
@@ -45,6 +45,7 @@ export default function ShareScreen({ onClose }: { onClose?: () => void }) {
   const [isBusy, setIsBusy] = useState(false);
   const [showCollections, setShowCollections] = useState(false);
   const cardRef = useRef<View>(null);
+  const haptics = useHaptics();
 
   const savedToAny = collections.some(c => c.quotes.some(q => q.id === quoteId));
 
@@ -52,16 +53,16 @@ export default function ShareScreen({ onClose }: { onClose?: () => void }) {
   const cardPreviewWidth = Math.min(W - 80, 280);
 
   const handleCopyText = useCallback(async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    haptics.impact();
     await Clipboard?.setStringAsync(quote);
     setCopiedFeedback(true);
     setTimeout(() => setCopiedFeedback(false), 1500);
     analytics.track('quote_copied', { author });
-  }, [quote, author]);
+  }, [quote, author, haptics]);
 
   const handleShare = useCallback(async () => {
     if (isBusy) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    haptics.impact();
     analytics.track('quote_shared', { author });
     setIsBusy(true);
     try {
@@ -80,10 +81,10 @@ export default function ShareScreen({ onClose }: { onClose?: () => void }) {
     } finally {
       setIsBusy(false);
     }
-  }, [isBusy, quote, author]);
+  }, [isBusy, quote, author, haptics]);
 
   const handleToggleWatermark = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    haptics.impact();
     if (!isPro) {
       close();
       setTimeout(() => {
@@ -92,7 +93,7 @@ export default function ShareScreen({ onClose }: { onClose?: () => void }) {
       return;
     }
     setWatermarkRemoved(!watermarkRemoved);
-  }, [isPro, watermarkRemoved, setWatermarkRemoved, close, modal]);
+  }, [isPro, watermarkRemoved, setWatermarkRemoved, close, modal, haptics]);
 
   return (
     <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom + 16 }]}>
@@ -136,7 +137,7 @@ export default function ShareScreen({ onClose }: { onClose?: () => void }) {
       {/* Extra action buttons */}
       <View style={styles.actions}>
         <TouchableOpacity
-          onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowCollections(true); }}
+          onPress={() => { haptics.impact(); setShowCollections(true); }}
           style={styles.actionItem}
           accessibilityRole="button"
           accessibilityLabel="Add to collection"

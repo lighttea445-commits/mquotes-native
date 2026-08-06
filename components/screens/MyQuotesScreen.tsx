@@ -11,14 +11,13 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import * as Haptics from 'expo-haptics';
+import { useHaptics } from '../../hooks/useHaptics';
 import { SheetHeader } from '../ui/SheetHeader';
 import { SearchField } from '../ui/SearchField';
 import { QuoteListCard } from '../ui/QuoteListCard';
 import { ConfirmSheet } from '../ui/ConfirmSheet';
 import { GUTTER, SPACE, RADIUS, ON_GOLD } from '../ui/tokens';
 import { useTheme } from '../../hooks/useTheme';
-import { useAppStore } from '../../store/useAppStore';
 import { useUserQuotesStore, UserQuote } from '../../store/useUserQuotesStore';
 import { useShareStore } from '../../store/useShareStore';
 import { useModal } from '../../contexts/ModalContext';
@@ -31,7 +30,7 @@ export default function MyQuotesScreen({ onClose, onBack }: { onClose?: () => vo
   const theme = useTheme();
   const router = useRouter();
   const modal = useModal();
-  const hapticsEnabled = useAppStore((s) => s.preferences.hapticsEnabled);
+  const haptics = useHaptics();
   const { userQuotes, addQuote, editQuote, removeQuote } = useUserQuotesStore();
   const setShareQuote = useShareStore((s) => s.setQuote);
 
@@ -62,14 +61,14 @@ export default function MyQuotesScreen({ onClose, onBack }: { onClose?: () => vo
   const handleSave = () => {
     const trimmed = draft.trim();
     if (!trimmed) return;
-    if (hapticsEnabled) Haptics.selectionAsync();
+    haptics.selection();
     if (editing) editQuote(editing.id, trimmed, 'Me');
     else addQuote(trimmed, 'Me');
     setMode('list');
   };
 
   const handleShare = (quote: UserQuote) => {
-    if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    haptics.impact();
     setShareQuote(quote.id, quote.text, quote.author);
     modal ? modal.openSheet('share') : router.push('/share');
   };

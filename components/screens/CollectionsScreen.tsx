@@ -11,13 +11,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import * as Haptics from 'expo-haptics';
+import { useHaptics } from '../../hooks/useHaptics';
 import { Icon } from '../ui/Icon';
 import { SheetHeader } from '../ui/SheetHeader';
 import { ConfirmSheet } from '../ui/ConfirmSheet';
 import { GUTTER, SPACE, RADIUS, ON_GOLD } from '../ui/tokens';
 import { useTheme } from '../../hooks/useTheme';
-import { useAppStore } from '../../store/useAppStore';
 import { useCollectionsStore } from '../../store/useCollectionsStore';
 import { useFavoritesStore } from '../../store/useFavoritesStore';
 import { useShareStore } from '../../store/useShareStore';
@@ -40,7 +39,7 @@ export default function CollectionsScreen({ onClose, onBack }: { onClose?: () =>
   const theme = useTheme();
   const router = useRouter();
   const modal = useModal();
-  const hapticsEnabled = useAppStore((s) => s.preferences.hapticsEnabled);
+  const haptics = useHaptics();
   const collections = useCollectionsStore((s) => s.collections);
   const createCollection = useCollectionsStore((s) => s.createCollection);
   const deleteCollection = useCollectionsStore((s) => s.deleteCollection);
@@ -60,7 +59,7 @@ export default function CollectionsScreen({ onClose, onBack }: { onClose?: () =>
   const handleSave = () => {
     const trimmed = name.trim();
     if (!trimmed) return;
-    if (hapticsEnabled) Haptics.selectionAsync();
+    haptics.selection();
     const id = createCollection(trimmed);
     setName('');
     setActiveId(id);
@@ -68,7 +67,7 @@ export default function CollectionsScreen({ onClose, onBack }: { onClose?: () =>
   };
 
   const handleShare = (q: { id: string; text: string; author: string }) => {
-    if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    haptics.impact();
     setShareQuote(q.id, q.text, q.author);
     modal ? modal.openSheet('share') : router.push('/share');
   };

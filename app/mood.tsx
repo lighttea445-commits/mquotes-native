@@ -3,7 +3,7 @@ import { FONTS } from '../constants/fonts';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import * as Haptics from 'expo-haptics';
+import { useHaptics } from '../hooks/useHaptics';
 import { ThemeBackground } from '../components/layout/ThemeBackground';
 import { useTheme } from '../hooks/useTheme';
 import { useAppStore } from '../store/useAppStore';
@@ -13,9 +13,10 @@ export default function MoodScreen() {
   const theme = useTheme();
   const router = useRouter();
   const { preferences, setMood } = useAppStore();
+  const haptics = useHaptics();
 
   const handleSelect = (moodId: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    haptics.impact();
     setMood(moodId === preferences.mood ? null : moodId);
     router.back();
   };

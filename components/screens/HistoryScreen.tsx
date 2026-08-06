@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import * as Haptics from 'expo-haptics';
+import { useHaptics } from '../../hooks/useHaptics';
 import { Icon } from '../ui/Icon';
 import { SheetHeader } from '../ui/SheetHeader';
 import { QuoteListCard } from '../ui/QuoteListCard';
@@ -10,7 +10,6 @@ import { ConfirmSheet } from '../ui/ConfirmSheet';
 import { AddToCollectionSheet } from '../collections/AddToCollectionSheet';
 import { GUTTER, SPACE, RADIUS, ON_GOLD } from '../ui/tokens';
 import { useTheme } from '../../hooks/useTheme';
-import { useAppStore } from '../../store/useAppStore';
 import { useRevenueCat } from '../../hooks/useRevenueCat';
 import { useHistoryStore, HistoryQuote } from '../../store/useHistoryStore';
 import { useFavoritesStore } from '../../store/useFavoritesStore';
@@ -26,7 +25,7 @@ export default function HistoryScreen({ onClose, onBack }: { onClose?: () => voi
   const theme = useTheme();
   const router = useRouter();
   const modal = useModal();
-  const hapticsEnabled = useAppStore((s) => s.preferences.hapticsEnabled);
+  const haptics = useHaptics();
   const { isPro, isLoading } = useRevenueCat();
   const { history, clearHistory } = useHistoryStore();
   const { toggleFavorite, favorites } = useFavoritesStore();
@@ -54,7 +53,7 @@ export default function HistoryScreen({ onClose, onBack }: { onClose?: () => voi
   };
 
   const handleShare = (quote: HistoryQuote) => {
-    if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    haptics.impact();
     setShareQuote(quote.id, quote.text, quote.author);
     modal ? modal.openSheet('share') : router.push('/share');
   };
@@ -131,7 +130,7 @@ export default function HistoryScreen({ onClose, onBack }: { onClose?: () => voi
                       : 'Add to favorites',
                     color: favoriteIds.has(item.id) ? (theme.favorite ?? theme.gold) : theme.textMuted,
                     onPress: () => {
-                      if (hapticsEnabled) Haptics.selectionAsync();
+                      haptics.selection();
                       toggleFavorite({
                         id: item.id,
                         text: item.text,

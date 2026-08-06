@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { View, Text, FlatList, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import * as Haptics from 'expo-haptics';
+import { useHaptics } from '../../hooks/useHaptics';
 import { SheetHeader } from '../ui/SheetHeader';
 import { IconButton } from '../ui/IconButton';
 import { SearchField } from '../ui/SearchField';
@@ -11,7 +11,6 @@ import { ConfirmSheet } from '../ui/ConfirmSheet';
 import { AddToCollectionSheet } from '../collections/AddToCollectionSheet';
 import { GUTTER, SPACE } from '../ui/tokens';
 import { useTheme } from '../../hooks/useTheme';
-import { useAppStore } from '../../store/useAppStore';
 import { useFavoritesStore, FavoriteQuote } from '../../store/useFavoritesStore';
 import { useCollectionsStore } from '../../store/useCollectionsStore';
 import { useShareStore } from '../../store/useShareStore';
@@ -23,7 +22,7 @@ export default function FavoritesScreen({ onClose, onBack }: { onClose?: () => v
   const theme = useTheme();
   const router = useRouter();
   const modal = useModal();
-  const hapticsEnabled = useAppStore((s) => s.preferences.hapticsEnabled);
+  const haptics = useHaptics();
   const { favorites, removeFavorite, clearFavorites } = useFavoritesStore();
   const collections = useCollectionsStore((s) => s.collections);
   const setShareQuote = useShareStore((s) => s.setQuote);
@@ -54,12 +53,12 @@ export default function FavoritesScreen({ onClose, onBack }: { onClose?: () => v
   }, [favorites, query, order]);
 
   const handleUnfavorite = (quote: FavoriteQuote) => {
-    if (hapticsEnabled) Haptics.selectionAsync();
+    haptics.selection();
     removeFavorite(quote.id);
   };
 
   const handleShare = (quote: FavoriteQuote) => {
-    if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    haptics.impact();
     setShareQuote(quote.id, quote.text, quote.author);
     modal ? modal.openSheet('share') : router.push('/share');
   };

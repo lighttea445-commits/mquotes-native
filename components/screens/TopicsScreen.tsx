@@ -9,13 +9,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import * as Haptics from 'expo-haptics';
+import { useHaptics } from '../../hooks/useHaptics';
 import { Icon } from '../ui/Icon';
 import { SheetHeader } from '../ui/SheetHeader';
 import { GUTTER, SPACE, RADIUS, ON_GOLD } from '../ui/tokens';
 import { useTheme } from '../../hooks/useTheme';
 import { useRevenueCat } from '../../hooks/useRevenueCat';
-import { useAppStore } from '../../store/useAppStore';
 import { useTopicsStore } from '../../store/useTopicsStore';
 import { useModal } from '../../contexts/ModalContext';
 import { FONTS } from '../../constants/fonts';
@@ -45,7 +44,7 @@ export default function TopicsScreen({ onClose, onBack }: { onClose?: () => void
   const router = useRouter();
   const modal = useModal();
   const { isPro } = useRevenueCat();
-  const hapticsEnabled = useAppStore((s) => s.preferences.hapticsEnabled);
+  const haptics = useHaptics();
   const followed = useTopicsStore((s) => s.followed);
   const toggleTopic = useTopicsStore((s) => s.toggleTopic);
   const followAll = useTopicsStore((s) => s.followAll);
@@ -88,14 +87,14 @@ export default function TopicsScreen({ onClose, onBack }: { onClose?: () => void
     // General is the fallback feed — unfollowing everything would leave the
     // home screen with nothing to show.
     if (row.id === TOPIC_GENERAL && followed.length === 1 && followed[0] === TOPIC_GENERAL) return;
-    if (hapticsEnabled) Haptics.selectionAsync();
+    haptics.selection();
     toggleTopic(row.id);
   };
 
   const handleFollowAll = (rows: Row[]) => {
     const unlockable = rows.filter(r => !r.locked).map(r => r.id);
     if (unlockable.length === 0) { openPaywall(); return; }
-    if (hapticsEnabled) Haptics.selectionAsync();
+    haptics.selection();
     followAll(unlockable);
   };
 

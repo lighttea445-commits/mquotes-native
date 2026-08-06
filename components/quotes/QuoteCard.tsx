@@ -21,9 +21,9 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useRouter } from 'expo-router';
-import * as Haptics from 'expo-haptics';
 import { Icon } from '../ui/Icon';
 import { useTheme } from '../../hooks/useTheme';
+import { useHaptics } from '../../hooks/useHaptics';
 import { useRevenueCat } from '../../hooks/useRevenueCat';
 import { useFavoritesStore } from '../../store/useFavoritesStore';
 import { useHistoryStore } from '../../store/useHistoryStore';
@@ -58,7 +58,7 @@ export function QuoteCard() {
   const router = useRouter();
   const modal = useModal();
   const setShareQuote = useShareStore((s) => s.setQuote);
-  const hapticsEnabled = useAppStore((s) => s.preferences.hapticsEnabled);
+  const haptics = useHaptics();
   const showAuthor = useAppStore((s) => s.preferences.showAuthor);
   const { isPro } = useRevenueCat();
   const { followed, loadQuotesForTopics } = useTopics();
@@ -236,7 +236,7 @@ export function QuoteCard() {
       quotes = await loadQuotesForTopics();
     } catch (err) {
       if (gen !== loadGenRef.current) return; // cancelled by deep-link
-      if (hapticsEnabled) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      haptics.notification();
       errorReporting.captureError(err, { context: 'loadQuotes', followed: followedKey });
       setFetchError("Couldn't load quotes. Check your connection.");
       setLoading(false);
@@ -253,7 +253,7 @@ export function QuoteCard() {
     }
     // Network failure — all fetchers returned empty
     if (quotes.length === 0) {
-      if (hapticsEnabled) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      haptics.notification();
       setFetchError("Couldn't load quotes. Check your connection.");
       setLoading(false);
       return;
@@ -306,7 +306,8 @@ export function QuoteCard() {
     const nextIdx = currentIndex + 1;
     if (nextIdx >= buffer.length - 3) prefetchMore();
     if (nextIdx >= buffer.length) { loadQuotes(); return; }
-    if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    // No haptic here. Moving between quotes is the app's most repeated
+    // gesture, and a buzz per swipe turns a calm read into a rattle.
     animateOut('up', () => {
       const q = buffer[nextIdx]; // capture before potential trim
       if (nextIdx > BUFFER_TRIM_THRESHOLD) {
@@ -328,7 +329,7 @@ export function QuoteCard() {
   const goPrev = useCallback(() => {
     if (currentIndex <= 0) return;
     setHasSwiped(true);
-    if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    // Silent, same as goNext.
     animateOut('down', () => {
       setCurrentIndex(prev => prev - 1);
       runOnJS(animateIn)('down');
@@ -336,14 +337,14 @@ export function QuoteCard() {
   }, [currentIndex]);
 
   const handleShare = useCallback(() => {
-    if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    haptics.impact();
     setShareQuote(converted?.id ?? '', converted?.text ?? '', converted?.author ?? '');
     modal ? modal.openSheet('share') : router.push('/share');
-  }, [converted, hapticsEnabled, setShareQuote, modal, router]);
+  }, [converted, haptics, setShareQuote, modal, router]);
 
   const handleFavorite = useCallback(() => {
     if (!converted) return;
-    if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    haptics.impact();
     const willFavorite = !favorited;
     analytics.track(willFavorite ? 'quote_favorited' : 'quote_unfavorited', {
       author: converted.author,
@@ -368,7 +369,7 @@ export function QuoteCard() {
         withDelay(320, withTiming(0, { duration: 400 })),
       );
     }
-  }, [converted, favorited, toggleFavorite]);
+  }, [converted, favorited, toggleFavorite, haptics]);
 
   // Pan gesture — require 15px vertical movement before activating so taps
   // on the share/heart buttons pass through cleanly to TouchableOpacity.
@@ -492,7 +493,7 @@ export function QuoteCard() {
           {/* Left: profile */}
           <Animated.View style={chromeStyle} pointerEvents={chromeHidden ? 'none' : 'auto'}>
           <TouchableOpacity
-            onPress={() => { if (hapticsEnabled) Haptics.selectionAsync(); modal ? modal.openSheet('profile') : router.push('/profile'); }}
+            onPress={() => { haptics.selection(); modal ? modal.openSheet('profile') : router.push('/profile'); }}
             style={[styles.profileBtn, { backgroundColor: theme.surface }]}
             accessibilityLabel="Open profile"
           >
@@ -529,7 +530,7 @@ export function QuoteCard() {
           <Animated.View style={chromeStyle} pointerEvents={chromeHidden ? 'none' : 'auto'}>
           <TouchableOpacity
             onPress={() => {
-              if (hapticsEnabled) Haptics.selectionAsync();
+              haptics.selection();
               if (isPro) setShowPremiumModal(true);
               else modal ? modal.openSheet('trial') : undefined;
             }}
@@ -599,7 +600,7 @@ export function QuoteCard() {
         {/* Left: browse topics — the glyph never changes, so it stays a stable
             landmark whatever collection is active */}
         <TouchableOpacity
-          onPress={() => { if (hapticsEnabled) Haptics.selectionAsync(); modal ? modal.openSheet('categories') : router.push('/categories'); }}
+          onPress={() => { haptics.selection(); modal ? modal.openSheet('categories') : router.push('/categories'); }}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           style={[styles.collectionFloat, { backgroundColor: theme.surface, bottom: BTN_BOTTOM, left: BTN_BOTTOM }]}
           accessibilityLabel="Browse topics"
@@ -609,7 +610,7 @@ export function QuoteCard() {
 
         {/* Right: theme picker */}
         <TouchableOpacity
-          onPress={() => { if (hapticsEnabled) Haptics.selectionAsync(); modal ? modal.openSheet('themes') : router.push('/themes'); }}
+          onPress={() => { haptics.selection(); modal ? modal.openSheet('themes') : router.push('/themes'); }}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           style={[styles.themesFloat, { backgroundColor: theme.surface, bottom: BTN_BOTTOM, right: BTN_BOTTOM }]}
           accessibilityLabel="Change theme"

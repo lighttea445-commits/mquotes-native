@@ -9,14 +9,13 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import * as Haptics from 'expo-haptics';
+import { useHaptics } from '../../hooks/useHaptics';
 import { Icon, IconName } from '../ui/Icon';
 import { SheetHeader } from '../ui/SheetHeader';
 import { GUTTER, SPACE, RADIUS, ON_GOLD } from '../ui/tokens';
 import { useTheme } from '../../hooks/useTheme';
 import { useRevenueCat } from '../../hooks/useRevenueCat';
 import { useTopicsStore } from '../../store/useTopicsStore';
-import { useAppStore } from '../../store/useAppStore';
 import {
   CATEGORIES,
   Category,
@@ -40,7 +39,7 @@ export default function CategoriesScreen({ onClose }: { onClose?: () => void }) 
   const { isPro } = useRevenueCat();
   const followed = useTopicsStore((s) => s.followed);
   const toggleTopic = useTopicsStore((s) => s.toggleTopic);
-  const hapticsEnabled = useAppStore((s) => s.preferences.hapticsEnabled);
+  const haptics = useHaptics();
 
   const groups = useMemo(
     () => TOPIC_GROUP_ORDER.map(group => ({
@@ -86,7 +85,7 @@ export default function CategoriesScreen({ onClose }: { onClose?: () => void }) 
         ]}
         onPress={() => {
           if (locked) { openPaywall(); return; }
-          if (hapticsEnabled) Haptics.selectionAsync();
+          haptics.selection();
           analytics.track(following ? 'topic_unfollowed' : 'topic_followed', { topicId: cat.id });
           toggleTopic(cat.id);
         }}
