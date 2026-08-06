@@ -469,7 +469,7 @@ export function QuoteCard() {
           {emptyMessage}
         </Text>
         <TouchableOpacity
-          onPress={() => modal ? modal.openSheet('topics') : router.push('/topics')}
+          onPress={() => { haptics.selection(); modal ? modal.openSheet('topics') : router.push('/topics'); }}
           style={[styles.emptyBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}
         >
           <Text style={[styles.emptyBtnText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>

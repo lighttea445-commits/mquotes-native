@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useTheme } from '../../hooks/useTheme';
+import { useHaptics } from '../../hooks/useHaptics';
 import { OB, ON_GOLD } from './tokens';
 
 interface Props {
@@ -18,10 +19,16 @@ interface Props {
  */
 export function ContinueButton({ onPress, label = 'Continue', disabled = false, variant = 'gold' }: Props) {
   const theme = useTheme();
+  const haptics = useHaptics();
+
+  const press = () => {
+    haptics.selection();
+    onPress();
+  };
 
   if (variant === 'ghost') {
     return (
-      <TouchableOpacity onPress={onPress} disabled={disabled} style={cta.ghost} activeOpacity={0.7}>
+      <TouchableOpacity onPress={press} disabled={disabled} style={cta.ghost} activeOpacity={0.7}>
         <Text style={[cta.ghostLabel, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
           {label}
         </Text>
@@ -36,7 +43,7 @@ export function ContinueButton({ onPress, label = 'Continue', disabled = false, 
     <View style={cta.wrap}>
       <TouchableOpacity
         style={[cta.btn, { backgroundColor: bg, opacity: disabled ? 0.3 : 1 }]}
-        onPress={onPress}
+        onPress={press}
         disabled={disabled}
         activeOpacity={0.85}
       >

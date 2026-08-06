@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Icon } from '../ui/Icon';
 import { useTheme } from '../../hooks/useTheme';
+import { useHaptics } from '../../hooks/useHaptics';
 import { OB } from './tokens';
 
 interface Props {
@@ -18,6 +19,7 @@ interface Props {
  */
 export function OnboardingHeader({ progress, onBack, onSkip, title }: Props) {
   const theme = useTheme();
+  const haptics = useHaptics();
 
   return (
     <View style={hdr.wrap}>
@@ -34,7 +36,7 @@ export function OnboardingHeader({ progress, onBack, onSkip, title }: Props) {
 
       <View style={hdr.row}>
         {onBack ? (
-          <TouchableOpacity style={hdr.side} onPress={onBack} hitSlop={12}>
+          <TouchableOpacity style={hdr.side} onPress={() => { haptics.selection(); onBack(); }} hitSlop={12}>
             <Icon name="chevron-left" size={20} color={theme.textMuted} />
             <Text style={[hdr.backText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
               Back
@@ -53,7 +55,7 @@ export function OnboardingHeader({ progress, onBack, onSkip, title }: Props) {
         )}
 
         {onSkip ? (
-          <TouchableOpacity style={hdr.side} onPress={onSkip} hitSlop={12}>
+          <TouchableOpacity style={hdr.side} onPress={() => { haptics.selection(); onSkip(); }} hitSlop={12}>
             <Text style={[hdr.skip, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
               Skip
             </Text>

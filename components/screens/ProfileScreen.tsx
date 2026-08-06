@@ -13,6 +13,7 @@ import { Icon, IconName } from '../ui/Icon';
 import { SheetHeader } from '../ui/SheetHeader';
 import { GUTTER, SPACE, RADIUS, ON_GOLD } from '../ui/tokens';
 import { useTheme } from '../../hooks/useTheme';
+import { useHaptics } from '../../hooks/useHaptics';
 import { useStreak } from '../../hooks/useStreak';
 import { useAppStore } from '../../store/useAppStore';
 import { StreakCard } from '../ui/StreakCard';
@@ -33,6 +34,7 @@ type ArtComponent = React.ComponentType<{ size?: number; color: string; bg?: str
 
 export default function ProfileScreen({ onClose }: { onClose?: () => void }) {
   const theme = useTheme();
+  const haptics = useHaptics();
   const router = useRouter();
   const { width } = useWindowDimensions();
   const { streakCount, weekData } = useStreak();
@@ -44,8 +46,10 @@ export default function ProfileScreen({ onClose }: { onClose?: () => void }) {
 
   const TILE_W = (width - GUTTER * 2 - GAP) / 2;
 
-  const go = (sheet: Parameters<NonNullable<typeof modal>['openSheet']>[0], route: string) =>
-    modal ? modal.openSheet(sheet) : router.push(route as never);
+  const go = (sheet: Parameters<NonNullable<typeof modal>['openSheet']>[0], route: string) => {
+    haptics.selection();
+    return modal ? modal.openSheet(sheet) : router.push(route as never);
+  };
 
   const openUpsell = () => go('trial', '/subscriptions');
 

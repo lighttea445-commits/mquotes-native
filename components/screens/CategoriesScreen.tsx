@@ -51,8 +51,10 @@ export default function CategoriesScreen({ onClose }: { onClose?: () => void }) 
   );
 
   const close = onClose ?? (() => router.back());
-  const go = (sheet: Parameters<NonNullable<typeof modal>['openSheet']>[0], route: string) =>
-    modal ? modal.openSheet(sheet) : router.push(route as never);
+  const go = (sheet: Parameters<NonNullable<typeof modal>['openSheet']>[0], route: string) => {
+    haptics.selection();
+    return modal ? modal.openSheet(sheet) : router.push(route as never);
+  };
   const openPaywall = () => go('trial', '/subscriptions');
 
   const gatedOpen = (fn: () => void) => () => {
