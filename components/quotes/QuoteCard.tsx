@@ -4,6 +4,7 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
+  Pressable,
   ActivityIndicator,
   useWindowDimensions,
 } from 'react-native';
@@ -572,7 +573,15 @@ export function QuoteCard() {
         {/* ── QUOTE ONLY — this is what animates ── */}
         <Animated.View style={[styles.quoteAnimated, animatedStyle]}>
           <GestureDetector gesture={longPressGesture}>
-          <View style={[styles.quoteBody, { paddingBottom: QUOTE_BODY_PB }]}>
+          {/* A tap on the quote area advances, same as a swipe up. Left as a
+              Pressable rather than a Tap gesture so RN's own responder rules
+              apply: the share and heart buttons nested below win the touch,
+              and the pan cancels the press the moment a swipe starts. */}
+          <Pressable
+            onPress={goNext}
+            accessible={false}
+            style={[styles.quoteBody, { paddingBottom: QUOTE_BODY_PB }]}
+          >
             <View style={styles.quoteWrapper}>
               <Text
                 style={[styles.quoteText, { color: theme.text, fontFamily: theme.quoteFontFamily, fontSize: QUOTE_FONT_SIZE, lineHeight: QUOTE_LINE_HEIGHT }]}
@@ -603,7 +612,7 @@ export function QuoteCard() {
                 />
               </TouchableOpacity>
             </View>
-          </View>
+          </Pressable>
           </GestureDetector>
         </Animated.View>
 
