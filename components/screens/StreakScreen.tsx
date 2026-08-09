@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { SheetHeader } from '../ui/SheetHeader';
@@ -7,8 +7,10 @@ import { Toggle } from '../ui/Toggle';
 import { GUTTER, SPACE, RADIUS } from '../ui/tokens';
 import { useTheme } from '../../hooks/useTheme';
 import { useAppStore } from '../../store/useAppStore';
+import { useModal } from '../../contexts/ModalContext';
 import {
   requestPermissions,
+  canAskForPermissions,
   getPermissionStatus,
   rescheduleAll,
 } from '../../lib/notifications';
@@ -30,42 +32,68 @@ export default function StreakScreen({ onClose, onBack }: Props) {
   const trackingEnabled = preferences.streakTrackingEnabled ?? true;
   const remindersEnabled = preferences.streakEnabled ?? true;
 
+  const modal = useModal();
+  // Sheets stay mounted after their first open, so status is re-read whenever
+  // this one comes back on screen rather than once at mount. Picks up a grant
+  // or a revocation made in system settings.
+  const isVisible = modal ? modal.activeSheet === 'streak' : true;
+  const [permissionGranted, setPermissionGranted] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (!isVisible) return;
+    getPermissionStatus().then(s => setPermissionGranted(s === 'granted')).catch(console.warn);
+  }, [isVisible]);
+
   /**
    * The streak reminder is one of the repeating notification slots, so a change
    * here has to go through the same reschedule the notifications screen uses —
    * flipping the preference alone would leave the old notification scheduled.
    */
-  const applyReminders = (next: boolean) => {
+  const commitReminders = (next: boolean) => {
     setPreferences({ streakEnabled: next });
     const p = { ...preferences, streakEnabled: next };
     const anyEnabled = (p.quotesEnabled ?? true) || (p.qodEnabled ?? true) || next;
     if (!anyEnabled) return;
 
-    requestPermissions()
-      .then(granted => {
-        if (!granted) return;
-        return getPermissionStatus().then(status => {
-          if (status !== 'granted') return;
-          return rescheduleAll({
-            enabled: true,
-            days: p.notificationDays ?? [],
-            quotesEnabled: p.quotesEnabled ?? true,
-            showAuthor: p.notificationShowAuthor ?? false,
-            quoteCount: p.notificationCount ?? 5,
-            startHHMM: p.notificationStartTime ?? '09:00',
-            endHHMM: p.notificationEndTime ?? '22:00',
-            qodEnabled: p.qodEnabled ?? true,
-            qodTime: p.qodTime ?? '08:00',
-            quoteSource: p.notifQuoteSource,
-            qodSource: p.notifQodSource,
-            streakEnabled: next,
-            streakTime: p.streakTime ?? '21:00',
-          }).then(() => {
-            setPreferences({ lastNotifScheduledAt: new Date().toISOString() });
-          });
+    getPermissionStatus()
+      .then(status => {
+        if (status !== 'granted') return;
+        return rescheduleAll({
+          enabled: true,
+          days: p.notificationDays ?? [],
+          quotesEnabled: p.quotesEnabled ?? true,
+          showAuthor: p.notificationShowAuthor ?? false,
+          quoteCount: p.notificationCount ?? 5,
+          startHHMM: p.notificationStartTime ?? '09:00',
+          endHHMM: p.notificationEndTime ?? '22:00',
+          qodEnabled: p.qodEnabled ?? true,
+          qodTime: p.qodTime ?? '08:00',
+          quoteSource: p.notifQuoteSource,
+          qodSource: p.notifQodSource,
+          streakEnabled: next,
+          streakTime: p.streakTime ?? '21:00',
+        }).then(() => {
+          setPreferences({ lastNotifScheduledAt: new Date().toISOString() });
         });
       })
       .catch(console.warn);
+  };
+
+  /**
+   * Turning the reminder on needs a live grant, the same gate the reminders
+   * screen applies: ask while the OS will still show a dialog, and fall back to
+   * Settings once it will not, since that is the only route left. Without this
+   * the switch sat on while the OS silently dropped everything behind it.
+   */
+  const applyReminders = (next: boolean) => {
+    if (!next) { commitReminders(false); return; }
+    (async () => {
+      const couldAsk = await canAskForPermissions();
+      const granted = await requestPermissions();
+      setPermissionGranted(granted);
+      if (granted) commitReminders(true);
+      else if (!couldAsk) await Linking.openSettings();
+    })().catch(console.warn);
   };
 
   const handleTracking = (next: boolean) => {
@@ -106,7 +134,7 @@ export default function StreakScreen({ onClose, onBack }: Props) {
               Streak reminders
             </Text>
             <Toggle
-              value={trackingEnabled && remindersEnabled}
+              value={trackingEnabled && remindersEnabled && permissionGranted !== false}
               onValueChange={applyReminders}
               disabled={!trackingEnabled}
               accessibilityLabel="Streak reminders"
