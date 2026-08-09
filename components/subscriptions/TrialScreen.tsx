@@ -24,16 +24,15 @@ import { analytics } from '../../lib/analytics';
 import { SheetHeader } from '../ui/SheetHeader';
 import { Toggle } from '../ui/Toggle';
 import { FONTS } from '../../constants/fonts';
-import { GUTTER, SPACE, RADIUS, ON_GOLD } from '../ui/tokens';
+import { GUTTER, SPACE, RADIUS, HIT, ON_GOLD } from '../ui/tokens';
 
 const TRIAL_REMINDER_KEY = '@trial_reminder_notif_id';
 
 /**
- * Subscription terms. Both stores require this link on a paywall — paste the
- * real URL here and the Terms item appears in the footer. Left blank rather
- * than pointed at a made-up address.
+ * Subscription terms. Both stores require this link on a paywall. Blank hides
+ * the footer item rather than pointing it at a dead address.
  */
-const TERMS_URL = '';
+const TERMS_URL = 'https://my-site-drh2pzq2-kovoapps.wix-vibe-site.com/';
 
 /**
  * Advertised prices, shown only until the store's own strings arrive. The real
@@ -430,7 +429,13 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
           </Text>
 
           {TERMS_URL ? (
-            <Pressable onPress={() => Linking.openURL(TERMS_URL)} hitSlop={8} style={styles.footerItem}>
+            <Pressable
+              onPress={() => Linking.openURL(TERMS_URL)}
+              hitSlop={HIT}
+              style={styles.footerItem}
+              accessibilityRole="link"
+              accessibilityLabel="Terms"
+            >
               <Text style={[styles.footerText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
                 Terms
               </Text>
@@ -517,11 +522,13 @@ const styles = StyleSheet.create({
   },
   footerItem: {
     alignSelf: 'center',
-    paddingVertical: SPACE.xs,
+    marginTop: -SPACE.sm,
   },
   footerText: {
-    fontSize: 13,
+    fontSize: 11,
+    lineHeight: 15,
     textAlign: 'center',
+    opacity: 0.8,
   },
   toggleRow: {
     flexDirection: 'row',
