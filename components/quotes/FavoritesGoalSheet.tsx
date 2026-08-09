@@ -106,13 +106,13 @@ export function FavoritesGoalSheet({ visible, onClose }: Props) {
             <Icon name="heart" size={132} color={theme.favorite ?? theme.gold} />
           </View>
 
-          {/* Non-breaking space keeps "like you" together, so the headline
-              always breaks after "sound" rather than orphaning "you". */}
+          {/* The headline binds "like you" with a non-breaking space and the subhead
+              breaks by hand, so neither line strands a word on its own. */}
           <Text style={[styles.headline, { color: theme.text }]}>
             {'Quotes that sound like\u00A0you'}
           </Text>
           <Text style={[styles.subhead, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-            Favorite quotes so we can find the ones that resonate with you
+            {'Favorite quotes so we can find the\nones that resonate with you'}
           </Text>
 
           <Pressable
