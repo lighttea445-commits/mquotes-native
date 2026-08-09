@@ -599,7 +599,7 @@ export function QuoteCard() {
                 </Text>
               ) : null}
               <Animated.View style={[styles.bigHeartOverlay, bigHeartAnimStyle]} pointerEvents="none">
-                <Icon name="heart" size={155} color={favoriteColor} />
+                <Icon name="heart" size={160} color={favoriteColor} />
               </Animated.View>
             </View>
             <View style={styles.actionRow}>
