@@ -529,9 +529,13 @@ export function QuoteCard() {
 
           {/* Center: favorites progress nudge */}
           <View style={styles.topBarCenter}>
-            {favorites.length < 5 && (
+            {favorites.length < FAVORITES_GOAL && (
               <Animated.View style={chromeStyle} pointerEvents={chromeHidden ? 'none' : 'auto'}>
-                <View style={[styles.progressPill, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                <TouchableOpacity
+                  onPress={() => { haptics.selection(); setShowGoalSheet(true); }}
+                  style={[styles.progressPill, { backgroundColor: theme.surface, borderColor: theme.border }]}
+                  accessibilityLabel={`${progressNumerator} of ${progressDenominator} favorites added. What is this?`}
+                >
                   <Icon name="heart" size={13} color={theme.gold} />
                   <Text style={[styles.progressText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
                     {progressNumerator}/{progressDenominator}
@@ -547,7 +551,7 @@ export function QuoteCard() {
                       ]}
                     />
                   </View>
-                </View>
+                </TouchableOpacity>
               </Animated.View>
             )}
           </View>

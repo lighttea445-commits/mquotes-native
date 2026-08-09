@@ -29,6 +29,10 @@ import { ConfirmSheet } from '../ui/ConfirmSheet';
 import { useRevenueCat, setForcePro } from '../../hooks/useRevenueCat';
 import { ON_GOLD } from '../ui/tokens';
 
+// TEMP: forced on so the developer section survives an EAS build.
+// Set back to __DEV__ before publishing.
+const SHOW_DEV_SETTINGS = true;
+
 export default function SettingsScreen({ onClose, onBack }: { onClose?: () => void; onBack?: () => void }) {
   const theme = useTheme();
   const router = useRouter();
@@ -174,7 +178,7 @@ export default function SettingsScreen({ onClose, onBack }: { onClose?: () => vo
           </View>
 
           {/* Developer */}
-          {__DEV__ && (
+          {SHOW_DEV_SETTINGS && (
             <View style={styles.section}>
               <Text style={[styles.sectionLabel, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
                 DEVELOPER

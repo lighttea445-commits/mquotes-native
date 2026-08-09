@@ -3,6 +3,12 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { zustandMMKVStorage } from '../lib/storage';
 import { CATEGORIES } from '../constants/categories';
 
+/**
+ * Favorites needed before the feed counts as personalised. Drives the goal pill
+ * on the quote screen, its explainer sheet, and the completion toast.
+ */
+export const FAVORITES_GOAL = 5;
+
 export interface FavoriteQuote {
   id: string;
   text: string;

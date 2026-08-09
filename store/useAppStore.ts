@@ -86,6 +86,12 @@ interface AppState {
    * hidden from them retroactively.
    */
   postOnboardingQuoteViews?: number;
+  /**
+   * Latched once the "add 5 favorites" goal has been acknowledged, so the
+   * completion toast plays exactly once and never returns if the count dips
+   * back under the goal and climbs again.
+   */
+  favoritesGoalCelebrated: boolean;
   streak: StreakData;
   showStreakBanner: boolean;
   reviewPrompt: ReviewPromptState;
@@ -101,6 +107,8 @@ interface AppState {
   completeOnboarding: () => void;
   /** Counts a quote toward the first-run reveal. No-op once past the threshold. */
   noteQuoteViewed: () => void;
+  /** Latches the favorites goal so its completion toast never plays again. */
+  markFavoritesGoalCelebrated: () => void;
   updateStreak: () => void;
   dismissStreakBanner: () => void;
   /** Adds elapsed foreground time toward the review-prompt threshold. */
@@ -187,6 +195,7 @@ export const useAppStore = create<AppState>()(
     (set, get) => ({
       preferences: defaultPreferences,
       onboardingComplete: false,
+      favoritesGoalCelebrated: false,
       streak: defaultStreak,
       showStreakBanner: false,
       reviewPrompt: defaultReviewPrompt,
@@ -223,6 +232,8 @@ export const useAppStore = create<AppState>()(
         if (seen === undefined || seen > QUOTES_BEFORE_REVEAL) return;
         set({ postOnboardingQuoteViews: seen + 1 });
       },
+
+      markFavoritesGoalCelebrated: () => set({ favoritesGoalCelebrated: true }),
 
       updateStreak: () => {
         // Tracking off — leave the stored streak untouched so turning it back
@@ -326,6 +337,7 @@ export const useAppStore = create<AppState>()(
         set({
           preferences: defaultPreferences,
           onboardingComplete: false,
+          favoritesGoalCelebrated: false,
           streak: defaultStreak,
           showStreakBanner: false,
           reviewPrompt: defaultReviewPrompt,
