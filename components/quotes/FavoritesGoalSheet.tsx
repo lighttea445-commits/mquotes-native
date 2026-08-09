@@ -120,7 +120,7 @@ export function FavoritesGoalSheet({ visible, onClose }: Props) {
             onPress={close}
             accessibilityRole="button"
           >
-            <Text style={[styles.ctaLabel, { color: theme.background }]}>Got it</Text>
+            <Text style={[styles.ctaLabel, { color: theme.background }]}>Got it!</Text>
           </Pressable>
         </Animated.View>
       </View>

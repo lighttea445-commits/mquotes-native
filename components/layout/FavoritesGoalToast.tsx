@@ -84,7 +84,7 @@ export function FavoritesGoalToast() {
       <View style={[styles.card, { backgroundColor: theme.surface }]}>
         <Icon name="heart-outline" size={26} color={theme.text} />
         <Text style={[styles.label, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
-          Your feed is tuned. Every heart from here sharpens it.
+          Your feed is set up. Favorite more quotes to customize it further!
         </Text>
       </View>
     </Animated.View>
