@@ -31,6 +31,7 @@ import {
 } from '../../constants/categories';
 import {
   requestPermissions,
+  canAskForPermissions,
   getPermissionStatus,
   rescheduleAll,
   cancelAllNotifications,
@@ -224,6 +225,29 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => { applySettings(s); flashSaved(); }, 400);
   }, [applySettings, flashSaved]);
+
+  /**
+   * Gate in front of anything that would schedule.
+   *
+   * Raises the OS dialog while one can still be shown. Once it cannot, the OS
+   * refuses silently: iOS reports `canAskAgain: false` the moment a request is
+   * refused and never shows that dialog again, so Settings is the only route
+   * left to a grant. Whether a dialog was available is read *before* asking,
+   * so refusing the dialog just leaves the reminder off rather than dropping
+   * the user into Settings, which would be arguing with the answer they gave.
+   */
+  const ensurePermission = useCallback(async (): Promise<boolean> => {
+    const couldAsk = await canAskForPermissions();
+    const granted = await requestPermissions();
+    setPermissionGranted(granted);
+    if (!granted && !couldAsk) await Linking.openSettings();
+    return granted;
+  }, []);
+
+  /** Runs `apply` only once the OS grant is in hand. */
+  const enableWithPermission = useCallback((apply: () => void) => {
+    ensurePermission().then(granted => { if (granted) apply(); }).catch(console.warn);
+  }, [ensurePermission]);
 
   function handleToggleDay(day: number) {
     const next = days.includes(day) ? (days.length > 1 ? days.filter(d => d !== day) : days) : [...days, day];
@@ -645,8 +669,14 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
               title="Daily Quotes"
               timeLabel={`${formatHHMMto12h(startTime)} - ${formatHHMMto12h(endTime)}`}
               countLabel={`${count}×`}
-              isEnabled={quotesEnabled}
-              onToggle={v => { setQuotesEnabled(v); debouncedApply(buildSettings({ quotesEnabled: v })); }}
+              isEnabled={permissionGranted !== false && quotesEnabled}
+              onToggle={v => {
+                if (!v) { setQuotesEnabled(false); debouncedApply(buildSettings({ quotesEnabled: false })); return; }
+                enableWithPermission(() => {
+                  setQuotesEnabled(true);
+                  debouncedApply(buildSettings({ quotesEnabled: true }));
+                });
+              }}
               onPress={() => setActiveCard('quotes')}
             />
 
@@ -656,11 +686,14 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
               title="Quote of the Day"
               timeLabel={formatHHMMto12h(qodTime)}
               countLabel="1×"
-              isEnabled={isPro && qodEnabled}
+              isEnabled={isPro && permissionGranted !== false && qodEnabled}
               onToggle={v => {
                 if (!isPro) { if (!onContinue) openPaywall(); return; }
-                setQodEnabled(v);
-                debouncedApply(buildSettings({ qodEnabled: v }));
+                if (!v) { setQodEnabled(false); debouncedApply(buildSettings({ qodEnabled: false })); return; }
+                enableWithPermission(() => {
+                  setQodEnabled(true);
+                  debouncedApply(buildSettings({ qodEnabled: true }));
+                });
               }}
               onPress={() => { if (!isPro) { if (!onContinue) openPaywall(); return; } setActiveCard('qod'); }}
               locked={!isPro}
@@ -672,11 +705,14 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
               title="Streak Reminder"
               timeLabel={formatHHMMto12h(streakTime)}
               countLabel="1×"
-              isEnabled={isPro && streakEnabled}
+              isEnabled={isPro && permissionGranted !== false && streakEnabled}
               onToggle={v => {
                 if (!isPro) { if (!onContinue) openPaywall(); return; }
-                setStreakEnabled(v);
-                debouncedApply(buildSettings({ streakEnabled: v }));
+                if (!v) { setStreakEnabled(false); debouncedApply(buildSettings({ streakEnabled: false })); return; }
+                enableWithPermission(() => {
+                  setStreakEnabled(true);
+                  debouncedApply(buildSettings({ streakEnabled: true }));
+                });
               }}
               onPress={() => { if (!isPro) { if (!onContinue) openPaywall(); return; } setActiveCard('streak'); }}
               locked={!isPro}
