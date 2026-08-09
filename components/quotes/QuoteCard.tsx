@@ -599,7 +599,7 @@ export function QuoteCard() {
                 </Text>
               ) : null}
               <Animated.View style={[styles.bigHeartOverlay, bigHeartAnimStyle]} pointerEvents="none">
-                <Icon name="heart" size={180} color={favoriteColor} />
+                <Icon name="heart" size={120} color={favoriteColor} />
               </Animated.View>
             </View>
             <View style={styles.actionRow}>
@@ -813,7 +813,7 @@ const styles = StyleSheet.create({
   },
 
   // Wraps quote text so the big heart overlay positions relative to it.
-  // minHeight matches the heart icon size so short quotes don't clip it.
+  // minHeight stays above the heart icon size so short quotes don't clip it.
   quoteWrapper: {
     position: 'relative',
     minHeight: 180,
