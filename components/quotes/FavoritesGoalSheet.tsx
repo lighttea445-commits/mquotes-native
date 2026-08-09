@@ -14,7 +14,6 @@ import { Icon } from '../ui/Icon';
 import { useTheme } from '../../hooks/useTheme';
 import { FONTS } from '../../constants/fonts';
 import { GUTTER, RADIUS } from '../ui/tokens';
-import { FAVORITES_GOAL } from '../../store/useFavoritesStore';
 
 interface Props {
   visible: boolean;
@@ -107,11 +106,13 @@ export function FavoritesGoalSheet({ visible, onClose }: Props) {
             <Icon name="heart" size={132} color={theme.favorite ?? theme.gold} />
           </View>
 
+          {/* Non-breaking space keeps "like you" together, so the headline
+              always breaks after "sound" rather than orphaning "you". */}
           <Text style={[styles.headline, { color: theme.text }]}>
-            Quotes that sound like you
+            {'Quotes that sound like\u00A0you'}
           </Text>
           <Text style={[styles.subhead, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-            Heart {FAVORITES_GOAL} quotes and your feed starts leaning toward what you save.
+            Favorite quotes so we can find the ones that resonate with you
           </Text>
 
           <Pressable
