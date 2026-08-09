@@ -42,7 +42,11 @@ export default function ShareScreen({ onClose }: { onClose?: () => void }) {
   const router = useRouter();
   const modal = useModal();
   const { isPro } = useRevenueCat();
-  const { quoteId, quote, author, watermarkRemoved, setWatermarkRemoved } = useShareStore();
+  const quoteId = useShareStore((s) => s.quoteId);
+  const quote = useShareStore((s) => s.quote);
+  const author = useShareStore((s) => s.author);
+  const watermarkRemoved = useShareStore((s) => s.watermarkRemoved);
+  const setWatermarkRemoved = useShareStore((s) => s.setWatermarkRemoved);
   const collections = useCollectionsStore((s) => s.collections);
   const [copiedFeedback, setCopiedFeedback] = useState(false);
   const [isBusy, setIsBusy] = useState(false);

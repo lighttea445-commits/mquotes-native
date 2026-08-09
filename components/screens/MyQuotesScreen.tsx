@@ -31,7 +31,10 @@ export default function MyQuotesScreen({ onClose, onBack }: { onClose?: () => vo
   const router = useRouter();
   const modal = useModal();
   const haptics = useHaptics();
-  const { userQuotes, addQuote, editQuote, removeQuote } = useUserQuotesStore();
+  const userQuotes = useUserQuotesStore((s) => s.userQuotes);
+  const addQuote = useUserQuotesStore((s) => s.addQuote);
+  const editQuote = useUserQuotesStore((s) => s.editQuote);
+  const removeQuote = useUserQuotesStore((s) => s.removeQuote);
   const setShareQuote = useShareStore((s) => s.setQuote);
 
   const [mode, setMode] = useState<Mode>('list');

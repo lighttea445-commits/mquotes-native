@@ -83,7 +83,8 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
   const close = onClose ?? (() => router.back());
   const back = onBack ?? close;
   const { isPro } = useRevenueCat();
-  const { preferences, setPreferences } = useAppStore();
+  const preferences = useAppStore((s) => s.preferences);
+  const setPreferences = useAppStore((s) => s.setPreferences);
 
   const openPaywall = () => {
     if (modal) modal.openSheet('trial');

@@ -52,7 +52,10 @@ type Answers = Partial<Record<AnswerKey, string | string[] | number | null>>;
 export default function OnboardingScreen() {
   const router = useRouter();
   const theme = useTheme();
-  const { setName, setPreferences, setTheme, completeOnboarding } = useAppStore();
+  const setName = useAppStore((s) => s.setName);
+  const setPreferences = useAppStore((s) => s.setPreferences);
+  const setTheme = useAppStore((s) => s.setTheme);
+  const completeOnboarding = useAppStore((s) => s.completeOnboarding);
   const { isInitialized, offerings } = useRevenueCat();
 
   const [step, setStep] = useState(0);

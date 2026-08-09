@@ -52,7 +52,7 @@ Breaking either path is a regression even if the other still works.
 - `contexts/ModalContext.tsx` — the sheet stack
 - `store/` — nine Zustand stores
 - `constants/` — `themes.ts`, `categories.ts`, `fonts.ts`, `icons.ts`, `moods.ts`, `onboardingSteps.ts`
-- `hooks/` — `useTheme`, `useRevenueCat`, `useSubscriptions`, `useStreak`, `useTopics`, `useHaptics`
+- `hooks/` — `useTheme`, `useRevenueCat`, `useStreak`, `useTopics`, `useHaptics`
 - `lib/` — API, storage, notifications, widget data, RevenueCat, analytics, error reporting
 - `widget/`, `tasks/` — Android widget
 - `targets/`, `native/ios/`, `modules/widget-bridge/`, `plugins/` — iOS widget

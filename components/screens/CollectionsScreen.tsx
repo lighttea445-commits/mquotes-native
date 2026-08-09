@@ -44,7 +44,8 @@ export default function CollectionsScreen({ onClose, onBack }: { onClose?: () =>
   const createCollection = useCollectionsStore((s) => s.createCollection);
   const deleteCollection = useCollectionsStore((s) => s.deleteCollection);
   const removeQuote = useCollectionsStore((s) => s.removeQuote);
-  const { toggleFavorite, isFavorite } = useFavoritesStore();
+  const toggleFavorite = useFavoritesStore((s) => s.toggleFavorite);
+  const isFavorite = useFavoritesStore((s) => s.isFavorite);
   const setShareQuote = useShareStore((s) => s.setQuote);
 
   const [view, setView] = useState<View_>('list');

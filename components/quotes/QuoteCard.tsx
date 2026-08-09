@@ -67,8 +67,10 @@ export function QuoteCard() {
   const { isPro } = useRevenueCat();
   const { followed, loadQuotesForTopics } = useTopics();
   const mood = useAppStore((s) => s.preferences.mood);
-  const { toggleFavorite, isFavorite, favorites } = useFavoritesStore();
-  const { addToHistory } = useHistoryStore();
+  const toggleFavorite = useFavoritesStore((s) => s.toggleFavorite);
+  const isFavorite = useFavoritesStore((s) => s.isFavorite);
+  const favorites = useFavoritesStore((s) => s.favorites);
+  const addToHistory = useHistoryStore((s) => s.addToHistory);
 
   const [buffer, setBuffer] = useState<ApiQuote[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -593,7 +595,7 @@ export function QuoteCard() {
               </Text>
               {showAuthor && converted?.author ? (
                 <Text style={[styles.authorText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-                  — {converted.author}
+                  - {converted.author}
                 </Text>
               ) : null}
               <Animated.View style={[styles.bigHeartOverlay, bigHeartAnimStyle]} pointerEvents="none">

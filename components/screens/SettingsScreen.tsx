@@ -33,7 +33,10 @@ export default function SettingsScreen({ onClose, onBack }: { onClose?: () => vo
   const theme = useTheme();
   const router = useRouter();
   const modal = useModal();
-  const { preferences, setName, setPreferences, resetApp } = useAppStore();
+  const preferences = useAppStore((s) => s.preferences);
+  const setName = useAppStore((s) => s.setName);
+  const setPreferences = useAppStore((s) => s.setPreferences);
+  const resetApp = useAppStore((s) => s.resetApp);
   const [nameValue, setNameValue] = useState(preferences.name || '');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const { isPro } = useRevenueCat();

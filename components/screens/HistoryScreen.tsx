@@ -27,8 +27,10 @@ export default function HistoryScreen({ onClose, onBack }: { onClose?: () => voi
   const modal = useModal();
   const haptics = useHaptics();
   const { isPro, isLoading } = useRevenueCat();
-  const { history, clearHistory } = useHistoryStore();
-  const { toggleFavorite, favorites } = useFavoritesStore();
+  const history = useHistoryStore((s) => s.history);
+  const clearHistory = useHistoryStore((s) => s.clearHistory);
+  const toggleFavorite = useFavoritesStore((s) => s.toggleFavorite);
+  const favorites = useFavoritesStore((s) => s.favorites);
   const collections = useCollectionsStore((s) => s.collections);
   const setShareQuote = useShareStore((s) => s.setQuote);
 

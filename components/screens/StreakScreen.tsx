@@ -21,7 +21,8 @@ interface Props {
 export default function StreakScreen({ onClose, onBack }: Props) {
   const theme = useTheme();
   const router = useRouter();
-  const { preferences, setPreferences } = useAppStore();
+  const preferences = useAppStore((s) => s.preferences);
+  const setPreferences = useAppStore((s) => s.setPreferences);
 
   const close = onClose ?? (() => router.back());
   const back = onBack ?? close;

@@ -23,7 +23,9 @@ export default function FavoritesScreen({ onClose, onBack }: { onClose?: () => v
   const router = useRouter();
   const modal = useModal();
   const haptics = useHaptics();
-  const { favorites, removeFavorite, clearFavorites } = useFavoritesStore();
+  const favorites = useFavoritesStore((s) => s.favorites);
+  const removeFavorite = useFavoritesStore((s) => s.removeFavorite);
+  const clearFavorites = useFavoritesStore((s) => s.clearFavorites);
   const collections = useCollectionsStore((s) => s.collections);
   const setShareQuote = useShareStore((s) => s.setQuote);
 

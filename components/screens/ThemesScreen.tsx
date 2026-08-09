@@ -34,7 +34,8 @@ export default function ThemesScreen({ onClose }: { onClose?: () => void }) {
   const router = useRouter();
   const modal = useModal();
   const { isPro } = useRevenueCat();
-  const { preferences, setTheme } = useAppStore();
+  const preferences = useAppStore((s) => s.preferences);
+  const setTheme = useAppStore((s) => s.setTheme);
   const haptics = useHaptics();
 
   const close = onClose ?? (() => router.back());

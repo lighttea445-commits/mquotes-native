@@ -12,7 +12,8 @@ import { MOODS } from '../constants/moods';
 export default function MoodScreen() {
   const theme = useTheme();
   const router = useRouter();
-  const { preferences, setMood } = useAppStore();
+  const preferences = useAppStore((s) => s.preferences);
+  const setMood = useAppStore((s) => s.setMood);
   const haptics = useHaptics();
 
   const handleSelect = (moodId: string) => {
