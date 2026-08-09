@@ -133,17 +133,35 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
   // Card stagger anims
   const cardAnims = useRef([0, 1, 2].map(() => new Animated.Value(0))).current;
 
+  // As a sheet this screen mounts on its first open and then stays mounted
+  // (BottomSheet keep-alive), so a mount-only ask would raise the OS dialog
+  // once per app launch. Following the sheet's own visibility asks on every
+  // open instead. As a route there is no modal context, so it is always shown.
+  const isVisible = modal ? modal.activeSheet === 'notifications' : true;
+  const visibleRef = useRef(isVisible);
+  visibleRef.current = isVisible;
+
   useEffect(() => {
-    requestPermissions().then(g => setPermissionGranted(g));
     Animated.stagger(70, cardAnims.map(a =>
       Animated.spring(a, { toValue: 1, useNativeDriver: true, tension: 65, friction: 12 }),
     )).start();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Opening the screen raises the dialog whenever the OS will still show one.
+  // requestPermissions is a no-op once permission is granted or hard-denied.
+  useEffect(() => {
+    if (!isVisible) return;
+    requestPermissions().then(g => setPermissionGranted(g)).catch(console.warn);
+  }, [isVisible]);
+
+  // Coming back from the background only re-reads status. Asking here as well
+  // would fire a second dialog on Android, where the first one backgrounds the
+  // app, and would prompt from behind a sheet that is no longer on screen.
   useEffect(() => {
     const sub = AppState.addEventListener('change', next => {
-      if (next === 'active') requestPermissions().then(g => setPermissionGranted(g));
+      if (next !== 'active' || !visibleRef.current) return;
+      getPermissionStatus().then(s => setPermissionGranted(s === 'granted')).catch(console.warn);
     });
     return () => sub.remove();
   }, []);
