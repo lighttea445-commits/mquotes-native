@@ -108,10 +108,10 @@ export function FavoritesGoalSheet({ visible, onClose }: Props) {
           </View>
 
           <Text style={[styles.headline, { color: theme.text }]}>
-            Get quotes that resonate with you
+            Quotes that sound like you
           </Text>
           <Text style={[styles.subhead, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-            Personalize your feed by adding at least {FAVORITES_GOAL} quotes to favorites
+            Heart {FAVORITES_GOAL} quotes and your feed starts leaning toward what you save.
           </Text>
 
           <Pressable
@@ -119,7 +119,7 @@ export function FavoritesGoalSheet({ visible, onClose }: Props) {
             onPress={close}
             accessibilityRole="button"
           >
-            <Text style={[styles.ctaLabel, { color: theme.background }]}>Got it!</Text>
+            <Text style={[styles.ctaLabel, { color: theme.background }]}>Got it</Text>
           </Pressable>
         </Animated.View>
       </View>

@@ -536,7 +536,7 @@ export function QuoteCard() {
                 <TouchableOpacity
                   onPress={() => { haptics.selection(); setShowGoalSheet(true); }}
                   style={[styles.progressPill, { backgroundColor: theme.surface, borderColor: theme.border }]}
-                  accessibilityLabel={`${progressNumerator} of ${progressDenominator} favorites added. What is this?`}
+                  accessibilityLabel={`Favorites goal, ${progressNumerator} of ${progressDenominator}. Learn more.`}
                 >
                   <Icon name="heart" size={13} color={theme.gold} />
                   <Text style={[styles.progressText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
