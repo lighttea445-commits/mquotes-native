@@ -8,6 +8,7 @@ import { QuoteCard } from '../components/quotes/QuoteCard';
 import { BottomSheet } from '../components/layout/BottomSheet';
 import { StreakBanner } from '../components/layout/StreakBanner';
 import { ReturnNudge } from '../components/layout/ReturnNudge';
+import { FavoritesGoalToast } from '../components/layout/FavoritesGoalToast';
 import { useStreak } from '../hooks/useStreak';
 import { useReturnNudge } from '../hooks/useReturnNudge';
 import { useTheme } from '../hooks/useTheme';
@@ -117,6 +118,8 @@ function HomeScreenInner() {
         weekData={weekData}
         onDismiss={dismissStreakBanner}
       />
+
+      <FavoritesGoalToast />
 
       <ReturnNudge
         onOpenNotifications={() => openSheet('notifications')}

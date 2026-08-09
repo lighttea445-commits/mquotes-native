@@ -26,7 +26,7 @@ import { Icon } from '../ui/Icon';
 import { useTheme } from '../../hooks/useTheme';
 import { useHaptics } from '../../hooks/useHaptics';
 import { useRevenueCat } from '../../hooks/useRevenueCat';
-import { useFavoritesStore } from '../../store/useFavoritesStore';
+import { FAVORITES_GOAL, useFavoritesStore } from '../../store/useFavoritesStore';
 import { useHistoryStore } from '../../store/useHistoryStore';
 import { useAppStore, QUOTES_BEFORE_REVEAL } from '../../store/useAppStore';
 import { ApiQuote, convertApiQuote, fetchMultipleRandomQuotes, fetchQuotesByCategory, inferCategory } from '../../lib/quotesApi';
@@ -36,6 +36,7 @@ import { useTopics } from '../../hooks/useTopics';
 import { useModal } from '../../contexts/ModalContext';
 import { useShareStore } from '../../store/useShareStore';
 import { PremiumModal } from '../subscriptions/PremiumModal';
+import { FavoritesGoalSheet } from './FavoritesGoalSheet';
 
 import { errorReporting } from '../../lib/errorReporting';
 import { analytics } from '../../lib/analytics';
@@ -78,6 +79,7 @@ export function QuoteCard() {
   const [isEmpty, setIsEmpty] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [showPremiumModal, setShowPremiumModal] = useState(false);
+  const [showGoalSheet, setShowGoalSheet] = useState(false);
   const isFetching = useRef(false);
   // Incremented by the deep-link effect to cancel any in-flight loadQuotes fetch.
   const loadGenRef = useRef(0);
@@ -154,8 +156,8 @@ export function QuoteCard() {
 
 
   // Progress pill: favorites toward 5 (unlocks For You section)
-  const progressNumerator = Math.min(favorites.length, 5);
-  const progressDenominator = 5;
+  const progressNumerator = Math.min(favorites.length, FAVORITES_GOAL);
+  const progressDenominator = FAVORITES_GOAL;
   const progressFraction = progressNumerator / progressDenominator;
 
   const followedKey = followed.join(',');
@@ -668,6 +670,7 @@ export function QuoteCard() {
         {containerContent}
       </GestureDetector>
       <PremiumModal visible={showPremiumModal} onClose={() => setShowPremiumModal(false)} />
+      <FavoritesGoalSheet visible={showGoalSheet} onClose={() => setShowGoalSheet(false)} />
     </>
   );
 }
