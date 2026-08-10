@@ -14,6 +14,7 @@ import { useRouter } from 'expo-router';
 import { useHaptics } from '../../hooks/useHaptics';
 import { Icon } from '../ui/Icon';
 import { SheetHeader } from '../ui/SheetHeader';
+import { IconButton } from '../ui/IconButton';
 import { ConfirmSheet } from '../ui/ConfirmSheet';
 import { GUTTER, SPACE, RADIUS, ON_GOLD } from '../ui/tokens';
 import { useTheme } from '../../hooks/useTheme';
@@ -217,8 +218,16 @@ export default function CollectionsScreen({ onClose, onBack }: { onClose?: () =>
           title="Collections"
           leading="back"
           onLeadingPress={back}
-          actionLabel="Add new"
-          onActionPress={() => setView('new')}
+          right={
+            <IconButton
+              icon="plus"
+              onPress={() => setView('new')}
+              filled={false}
+              iconSize={24}
+              color={theme.gold}
+              accessibilityLabel="New collection"
+            />
+          }
         />
 
         <ScrollView
