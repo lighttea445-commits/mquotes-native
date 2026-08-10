@@ -14,11 +14,16 @@
       "backgroundColor": "#0a0a0a"
     },
     "ios": {
+      "icon": {
+        "light": "./assets/icon-ios.png",
+        "dark": "./assets/icon-ios.png",
+        "tinted": "./assets/icon-ios-tinted.png"
+      },
       "supportsTablet": false,
       "newArchEnabled": true,
       "bundleIdentifier": "com.kovoapps.quotable",
       "appleTeamId": "HF7548K866",
-      "buildNumber": "28",
+      "buildNumber": "29",
       "entitlements": {
         "com.apple.security.application-groups": [
           "group.com.mquotes.shared"
