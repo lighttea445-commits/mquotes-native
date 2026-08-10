@@ -483,7 +483,7 @@ export default function WidgetsScreen({
             onPress={() => setRenaming(true)}
             activeOpacity={0.7}
           >
-            <Icon name="pencil-outline" size={22} color={theme.text} />
+            <Icon name="pencil-outline" size={22} color={theme.gold} />
             <Text style={[styles.nameText, { color: theme.text, fontFamily: FONTS.display.medium }]}>
               {active.customize ? active.name : 'Mirror the app'}
             </Text>

@@ -119,7 +119,7 @@ export default function ShareScreen({ onClose }: { onClose?: () => void }) {
           filled={glass}
           size={glass ? ICON_BTN.md : ICON_BTN.sm}
           iconSize={glass ? 22 : 26}
-          color={theme.text}
+          color={theme.gold}
           accessibilityLabel="Close"
         />
       </View>

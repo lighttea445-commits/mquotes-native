@@ -15,6 +15,8 @@ interface TopicsState {
   toggleTopic: (id: string) => void;
   /** Follow every id in one go — backs the "Follow all" section action. */
   followAll: (ids: string[]) => void;
+  /** Unfollow every id in one go — backs the "Unfollow all" section action. */
+  unfollowAll: (ids: string[]) => void;
   isFollowing: (id: string) => boolean;
   /** Back to just General, e.g. on account deletion. */
   resetTopics: () => void;
@@ -47,6 +49,13 @@ export const useTopicsStore = create<TopicsState>()(
         const next = new Set(get().followed);
         ids.forEach(id => next.add(id));
         set({ followed: [...next] });
+      },
+
+      unfollowAll: (ids) => {
+        const drop = new Set(ids);
+        const next = get().followed.filter(t => !drop.has(t));
+        // The feed can never be empty — General is the fallback.
+        set({ followed: next.length > 0 ? next : defaultFollowed });
       },
 
       isFollowing: (id) => get().followed.includes(id),

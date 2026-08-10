@@ -280,12 +280,12 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
       <View style={ss.stepperRow}>
         <TouchableOpacity onPress={onDecrement} activeOpacity={0.7}
           style={[ss.stepperBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-          <Icon name="minus" size={18} color={theme.text} />
+          <Icon name="minus" size={18} color={theme.gold} />
         </TouchableOpacity>
         <Text style={[ss.stepperValue, { color: theme.text, fontFamily: theme.uiFontFamily }]}>{label}</Text>
         <TouchableOpacity onPress={onIncrement} activeOpacity={0.7}
           style={[ss.stepperBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-          <Icon name="plus" size={18} color={theme.text} />
+          <Icon name="plus" size={18} color={theme.gold} />
         </TouchableOpacity>
       </View>
     );

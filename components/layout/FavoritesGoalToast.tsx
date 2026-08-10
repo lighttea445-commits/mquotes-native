@@ -82,7 +82,7 @@ export function FavoritesGoalToast() {
       accessibilityLiveRegion="polite"
     >
       <View style={[styles.card, { backgroundColor: theme.surface }]}>
-        <Icon name="heart-outline" size={26} color={theme.text} />
+        <Icon name="heart-outline" size={26} color={theme.gold} />
         <Text style={[styles.label, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
           Your feed is set up. Favorite more quotes to customize it further!
         </Text>

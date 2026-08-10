@@ -48,7 +48,7 @@ export function StreakCard({ streakCount, weekData, onShare, onMenu, title }: St
                 accessibilityRole="button"
                 accessibilityLabel="Share your streak"
               >
-                <Icon name="export-variant" size={22} color={theme.text} />
+                <Icon name="export-variant" size={22} color={theme.gold} />
               </TouchableOpacity>
             ) : null}
             {onMenu ? (
@@ -58,7 +58,7 @@ export function StreakCard({ streakCount, weekData, onShare, onMenu, title }: St
                 accessibilityRole="button"
                 accessibilityLabel="Streak settings"
               >
-                <Icon name="dots-vertical" size={22} color={theme.text} />
+                <Icon name="dots-vertical" size={22} color={theme.gold} />
               </TouchableOpacity>
             ) : null}
           </View>

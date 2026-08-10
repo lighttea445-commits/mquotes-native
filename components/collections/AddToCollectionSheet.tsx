@@ -181,7 +181,7 @@ export function AddToCollectionSheet({ visible, quote, onClose }: Props) {
                   style={[styles.newBtn, { borderColor: theme.border }]}
                   accessibilityRole="button"
                 >
-                  <Icon name="plus" size={20} color={theme.text} />
+                  <Icon name="plus" size={20} color={theme.gold} />
                   <Text style={[styles.newText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
                     New collection
                   </Text>

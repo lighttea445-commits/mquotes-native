@@ -98,7 +98,7 @@ export default function CategoriesScreen({ onClose }: { onClose?: () => void }) 
         }
       >
         <View style={[styles.tileIconWrap, { borderColor: theme.border }]}>
-          <Icon name={cat.icon} size={20} color={theme.text} />
+          <Icon name={cat.icon} size={20} color={theme.gold} />
         </View>
         <Text
           style={[styles.tileLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}
@@ -165,7 +165,7 @@ export default function CategoriesScreen({ onClose }: { onClose?: () => void }) 
                 activeOpacity={0.8}
                 accessibilityRole="button"
               >
-                <Icon name={icon} size={24} color={theme.text} />
+                <Icon name={icon} size={24} color={theme.gold} />
                 <Text
                   style={[styles.quickLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}
                   numberOfLines={2}

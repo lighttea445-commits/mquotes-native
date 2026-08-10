@@ -48,6 +48,7 @@ export default function TopicsScreen({ onClose, onBack }: { onClose?: () => void
   const followed = useTopicsStore((s) => s.followed);
   const toggleTopic = useTopicsStore((s) => s.toggleTopic);
   const followAll = useTopicsStore((s) => s.followAll);
+  const unfollowAll = useTopicsStore((s) => s.unfollowAll);
   const [query, setQuery] = useState('');
 
   const close = onClose ?? (() => router.back());
@@ -91,10 +92,17 @@ export default function TopicsScreen({ onClose, onBack }: { onClose?: () => void
     toggleTopic(row.id);
   };
 
+  // The section action flips to "Unfollow all" once every unlocked row in it is followed.
+  const allFollowed = (rows: Row[]) => {
+    const unlockable = rows.filter(r => !r.locked);
+    return unlockable.length > 0 && unlockable.every(r => followed.includes(r.id));
+  };
+
   const handleFollowAll = (rows: Row[]) => {
     const unlockable = rows.filter(r => !r.locked).map(r => r.id);
     if (unlockable.length === 0) { openPaywall(); return; }
     haptics.selection();
+    if (allFollowed(rows)) { unfollowAll(unlockable); return; }
     followAll(unlockable);
   };
 
@@ -139,7 +147,7 @@ export default function TopicsScreen({ onClose, onBack }: { onClose?: () => void
                     accessibilityRole="button"
                   >
                     <Text style={[styles.followAll, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
-                      Follow all
+                      {allFollowed(section.rows) ? 'Unfollow all' : 'Follow all'}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -179,7 +187,7 @@ export default function TopicsScreen({ onClose, onBack }: { onClose?: () => void
                           styles.followBtn,
                           following
                             ? { backgroundColor: theme.surfaceElevated ?? theme.border, borderColor: 'transparent' }
-                            : { borderColor: theme.text },
+                            : { borderColor: theme.gold },
                         ]}
                         accessibilityRole="button"
                         accessibilityLabel={`${following ? 'Unfollow' : 'Follow'} ${row.name}`}
@@ -187,7 +195,7 @@ export default function TopicsScreen({ onClose, onBack }: { onClose?: () => void
                         <Text
                           style={[
                             styles.followText,
-                            { color: following ? theme.textMuted : theme.text, fontFamily: theme.uiFontFamily },
+                            { color: following ? theme.textMuted : theme.gold, fontFamily: theme.uiFontFamily },
                           ]}
                         >
                           {following ? 'Following' : 'Follow'}

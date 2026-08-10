@@ -68,7 +68,7 @@ export function SheetHeader({
           filled={glass}
           size={glass ? ICON_BTN.md : ICON_BTN.sm}
           iconSize={glass ? 22 : 26}
-          color={theme.text}
+          color={theme.gold}
           accessibilityLabel={leading === 'back' ? 'Go back' : 'Close'}
           // The bare glyph needs pulling back into the gutter optically. A
           // glass circle already sits on the gutter correctly.
@@ -93,7 +93,7 @@ export function SheetHeader({
             onPress={onActionPress}
             size={ICON_BTN.md}
             iconSize={22}
-            color={theme.text}
+            color={theme.gold}
             accessibilityLabel={actionLabel}
           />
         ) : (

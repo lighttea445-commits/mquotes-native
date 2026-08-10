@@ -79,7 +79,7 @@ export default function FavoritesScreen({ onClose, onBack }: { onClose?: () => v
                 onPress={() => setOrder(o => (o === 'newest' ? 'oldest' : 'newest'))}
                 filled={false}
                 iconSize={22}
-                color={theme.text}
+                color={theme.gold}
                 accessibilityLabel={
                   order === 'newest' ? 'Sort by oldest saved first' : 'Sort by newest saved first'
                 }

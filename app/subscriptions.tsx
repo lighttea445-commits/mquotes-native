@@ -36,7 +36,7 @@ export default function SubscriptionsScreen() {
       {/* Header */}
       <View style={styles.header}>
         <Pressable onPress={() => router.back()}>
-          <Icon name="arrow-left" size={24} color={theme.text} />
+          <Icon name="arrow-left" size={24} color={theme.gold} />
         </Pressable>
         <Text style={[styles.headerTitle, { color: theme.text }]}>Quotable Premium</Text>
         <View style={{ width: 24 }} />

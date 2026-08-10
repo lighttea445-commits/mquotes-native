@@ -138,7 +138,7 @@ export default function ProfileScreen({ onClose }: { onClose?: () => void }) {
                 accessibilityRole="button"
               >
                 <View style={styles.tileArt} pointerEvents="none">
-                  <Art size={TILE_W * 0.66} color={theme.text} bg={theme.surface} />
+                  <Art size={TILE_W * 0.66} color={theme.gold} bg={theme.surface} />
                 </View>
                 <Text
                   style={[styles.tileLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}
@@ -167,7 +167,7 @@ export default function ProfileScreen({ onClose }: { onClose?: () => void }) {
                 >
                   {label}
                 </Text>
-                <Icon name={icon} size={28} color={theme.text} />
+                <Icon name={icon} size={28} color={theme.gold} />
               </TouchableOpacity>
             ))}
           </View>
