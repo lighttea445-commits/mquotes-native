@@ -47,6 +47,8 @@ export default function ShareScreen({ onClose }: { onClose?: () => void }) {
   const author = useShareStore((s) => s.author);
   const watermarkRemoved = useShareStore((s) => s.watermarkRemoved);
   const setWatermarkRemoved = useShareStore((s) => s.setWatermarkRemoved);
+  const showAuthor = useShareStore((s) => s.showAuthor);
+  const setShowAuthor = useShareStore((s) => s.setShowAuthor);
   const collections = useCollectionsStore((s) => s.collections);
   const [copiedFeedback, setCopiedFeedback] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
@@ -102,6 +104,11 @@ export default function ShareScreen({ onClose }: { onClose?: () => void }) {
     setWatermarkRemoved(!watermarkRemoved);
   }, [isPro, watermarkRemoved, setWatermarkRemoved, close, modal, haptics]);
 
+  const handleToggleAuthor = useCallback(() => {
+    haptics.impact();
+    setShowAuthor(!showAuthor);
+  }, [showAuthor, setShowAuthor, haptics]);
+
   return (
     <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom + 16 }]}>
       {/* Header — close only, matching the streak share sheet */}
@@ -137,6 +144,7 @@ export default function ShareScreen({ onClose }: { onClose?: () => void }) {
               theme={theme}
               size={cardPreviewWidth}
               showWatermark={!(isPro && watermarkRemoved)}
+              showAuthor={showAuthor}
             />
           </View>
         </View>
@@ -174,6 +182,26 @@ export default function ShareScreen({ onClose }: { onClose?: () => void }) {
             {copiedFeedback ? 'Copied!' : 'Copy\ntext'}
           </Text>
         </TouchableOpacity>
+
+        {!!author && (
+          <TouchableOpacity
+            onPress={handleToggleAuthor}
+            style={styles.actionItem}
+            accessibilityRole="button"
+            accessibilityLabel={showAuthor ? 'Hide author' : 'Show author'}
+          >
+            <View style={[styles.actionCircle, { backgroundColor: theme.surface, borderColor: showAuthor ? theme.gold : theme.border }]}>
+              <Icon
+                name="account-outline"
+                size={22}
+                color={showAuthor ? theme.gold : theme.text}
+              />
+            </View>
+            <Text style={[styles.actionLabel, { color: showAuthor ? theme.gold : theme.text, fontFamily: theme.uiFontFamily }]}>
+              {showAuthor ? 'Hide\nauthor' : 'Show\nauthor'}
+            </Text>
+          </TouchableOpacity>
+        )}
 
         <TouchableOpacity onPress={handleToggleWatermark} style={styles.actionItem}>
           <View style={[styles.actionCircle, { backgroundColor: theme.surface, borderColor: (isPro && watermarkRemoved) ? theme.gold : theme.border }]}>
@@ -235,12 +263,12 @@ const styles = StyleSheet.create({
     shadowRadius: 24,
     elevation: 18,
   },
-  // Same row as the streak sheet, with a tighter gap because three circles at
+  // Same row as the streak sheet, with a tighter gap because four circles at
   // 28 overflow a narrow screen.
   actions: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 18,
+    gap: 10,
     paddingTop: 20,
     paddingBottom: 8,
   },
