@@ -1,0 +1,30 @@
+{
+  "fill" : {
+    "solid" : "extended-srgb:0.05098,0.05098,0.05098,1.00000"
+  },
+  "groups" : [
+    {
+      "blur" : 0,
+      "layers" : [
+        {
+          "glass" : false,
+          "image-name" : "icon-ios-glyph.png",
+          "name" : "Quote mark"
+        }
+      ],
+      "lighting" : "individual",
+      "shadow" : {
+        "kind" : "none",
+        "opacity" : 0.5
+      },
+      "specular" : false,
+      "translucency" : {
+        "enabled" : false,
+        "value" : 0.5
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "squares" : "shared"
+  }
+}

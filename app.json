@@ -14,11 +14,7 @@
       "backgroundColor": "#0a0a0a"
     },
     "ios": {
-      "icon": {
-        "light": "./assets/icon-ios.png",
-        "dark": "./assets/icon-ios.png",
-        "tinted": "./assets/icon-ios-tinted.png"
-      },
+      "icon": "./assets/Quotable.icon",
       "supportsTablet": false,
       "newArchEnabled": true,
       "bundleIdentifier": "com.kovoapps.quotable",
