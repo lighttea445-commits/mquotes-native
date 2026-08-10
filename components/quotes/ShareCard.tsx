@@ -84,7 +84,7 @@ export const ShareCard = forwardRef<View, Props>(({ quote, author, theme, size, 
               textTransform: 'uppercase',
             }}
           >
-            {author}
+            {`- ${author}`}
           </Text>
         )}
       </View>

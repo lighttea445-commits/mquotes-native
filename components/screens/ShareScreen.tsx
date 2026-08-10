@@ -83,10 +83,10 @@ export default function ShareScreen({ onClose }: { onClose?: () => void }) {
           return;
         }
       }
-      await Share.share({ message: `"${quote}"\n\n— ${author}` });
+      await Share.share({ message: `"${quote}"\n\n- ${author}` });
     } catch (e) {
       errorReporting.captureError(e as Error, { context: 'ShareScreen:share' });
-      await Share.share({ message: `"${quote}"\n\n— ${author}` });
+      await Share.share({ message: `"${quote}"\n\n- ${author}` });
     } finally {
       setIsBusy(false);
     }
