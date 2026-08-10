@@ -11,7 +11,7 @@ import {
   Platform,
 } from 'react-native';
 import { useTheme } from '../../hooks/useTheme';
-import { RADIUS } from './tokens';
+import { ON_GOLD, RADIUS } from './tokens';
 
 interface EditNameDialogProps {
   visible: boolean;
@@ -137,12 +137,12 @@ export function EditNameDialog({
             </Pressable>
 
             <Pressable
-              style={[styles.btn, { backgroundColor: theme.text, opacity: trimmed ? 1 : 0.4 }]}
+              style={[styles.btn, { backgroundColor: theme.goldButton, opacity: trimmed ? 1 : 0.4 }]}
               onPress={handleSubmit}
               disabled={!trimmed}
               accessibilityRole="button"
             >
-              <Text style={[styles.btnText, { color: theme.background, fontFamily: theme.uiFontFamily }]}>
+              <Text style={[styles.btnText, { color: ON_GOLD, fontFamily: theme.uiFontFamily }]}>
                 {confirmLabel}
               </Text>
             </Pressable>

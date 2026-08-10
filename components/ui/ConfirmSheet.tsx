@@ -8,6 +8,7 @@ import {
   Animated,
 } from 'react-native';
 import { useTheme } from '../../hooks/useTheme';
+import { ON_GOLD } from './tokens';
 
 interface ConfirmSheetProps {
   visible: boolean;
@@ -104,13 +105,13 @@ export function ConfirmSheet({
               </Pressable>
             )}
             <Pressable
-              style={[styles.btn, { backgroundColor: destructive ? '#C0392B' : theme.text }]}
+              style={[styles.btn, { backgroundColor: destructive ? '#C0392B' : theme.goldButton }]}
               onPress={handleConfirm}
             >
               <Text
                 style={[
                   styles.btnText,
-                  { color: destructive ? theme.text : theme.background, fontFamily: theme.uiFontFamily },
+                  { color: destructive ? theme.text : ON_GOLD, fontFamily: theme.uiFontFamily },
                 ]}
               >
                 {confirmLabel}

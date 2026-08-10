@@ -13,7 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon } from '../ui/Icon';
 import { useTheme } from '../../hooks/useTheme';
 import { FONTS } from '../../constants/fonts';
-import { GUTTER, RADIUS } from '../ui/tokens';
+import { GUTTER, ON_GOLD, RADIUS } from '../ui/tokens';
 
 interface Props {
   visible: boolean;
@@ -116,11 +116,11 @@ export function FavoritesGoalSheet({ visible, onClose }: Props) {
           </Text>
 
           <Pressable
-            style={[styles.cta, { backgroundColor: theme.text }]}
+            style={[styles.cta, { backgroundColor: theme.goldButton }]}
             onPress={close}
             accessibilityRole="button"
           >
-            <Text style={[styles.ctaLabel, { color: theme.background }]}>Got it!</Text>
+            <Text style={[styles.ctaLabel, { color: ON_GOLD }]}>Got it!</Text>
           </Pressable>
         </Animated.View>
       </View>
