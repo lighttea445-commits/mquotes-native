@@ -92,7 +92,6 @@ async function syncConfigMetadata(isPro: boolean): Promise<void> {
       id: c.id,
       name: c.name,
       showBorder: c.showBorder,
-      showButtons: c.showButtons,
       rotateMinutes: REFRESH_FREQUENCY_MINUTES[c.updateInterval] ?? 60,
     })),
     isPro,
@@ -144,7 +143,6 @@ async function runRefresh(configId: string, { force = false }: { force?: boolean
     rotateMinutes,
     isPro,
     showBorder: config.showBorder,
-    showButtons: config.showButtons,
   });
 
   // Nothing reached the App Group. Leaving lastRefreshed alone keeps this
@@ -209,7 +207,6 @@ export async function pushIOSWidgetAppearance(configId: string): Promise<void> {
     rotateMinutes: REFRESH_FREQUENCY_MINUTES[config.updateInterval] ?? 60,
     isPro,
     showBorder: config.showBorder,
-    showButtons: config.showButtons,
   });
 
   // The queue itself is unchanged, so lastRefreshed stays put. Record the

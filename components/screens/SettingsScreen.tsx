@@ -135,7 +135,14 @@ export default function SettingsScreen({ onClose, onBack }: { onClose?: () => vo
               />
             </View>
 
-
+            <TouchableOpacity
+              style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border }]}
+              onPress={() => (modal ? modal.openSheet('streak') : router.push('/streak'))}
+            >
+              <Icon name="fire" size={20} color={theme.gold} />
+              <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>Streak</Text>
+              <Icon name="chevron-right" size={18} color={theme.textMuted} />
+            </TouchableOpacity>
           </View>
 
           {/* Account */}

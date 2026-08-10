@@ -106,6 +106,16 @@ function HomeScreenInner() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [widgetParams.src, widgetParams.widgetId, widgetParams.text, widgetParams.id]);
 
+  // The iOS widget's setup tap carries no quote, only a request to open the
+  // Widgets screen. widget-open.tsx parks it here because it navigates away
+  // immediately and can't own a sheet itself.
+  const pendingSheet = useDeepLinkStore((s) => s.pendingSheet);
+  useEffect(() => {
+    if (pendingSheet !== 'widgets') return;
+    useDeepLinkStore.getState().clearPendingSheet();
+    openSheet('widgets');
+  }, [pendingSheet, openSheet]);
+
   return (
     <ThemeBackground style={styles.root}>
       <SafeAreaView style={styles.safe} edges={['top']}>

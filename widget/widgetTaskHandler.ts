@@ -12,7 +12,7 @@ import { registerWidgetTaskHandler } from 'react-native-android-widget';
 import type { WidgetTaskHandlerProps } from 'react-native-android-widget';
 import { QuoteWidget } from './QuoteWidget';
 import { FALLBACK_WIDGET_QUOTE, resolveWidgetQuote } from '../lib/widgetQuotes';
-import { createConfig, nextConfigName, type WidgetConfig } from '../store/useWidgetStore';
+import { createConfig, isRefreshDue, nextConfigName, type WidgetConfig } from '../store/useWidgetStore';
 
 // Same key used by the Zustand persist middleware in useWidgetStore
 const WIDGET_STORE_KEY = 'widget-store-v2';
@@ -54,8 +54,10 @@ async function saveStore(store: RawStore): Promise<void> {
  * A widget can reach the task handler before the Widgets screen has ever run
  * its own reconcile pass — e.g. the very first WIDGET_ADDED after pinning. In
  * that case bind to the first config not already claimed by another widget,
- * creating one if the library is empty, exactly mirroring
- * useWidgetStore.claimConfigFor so a headless wake and the UI agree.
+ * creating one when every config is taken, which is exactly what
+ * useWidgetStore.claimConfigFor does. The two must stay in step: whichever
+ * runs first for a newly placed widget decides the binding, and if they
+ * disagree on the exhausted case the widget's quote depends on which won.
  */
 async function resolveConfig(widgetId: number): Promise<{ store: RawStore; config: WidgetConfig }> {
   const store = await loadStore();
@@ -123,12 +125,18 @@ async function widgetTaskHandler(props: WidgetTaskHandlerProps) {
     const { store, config } = await resolveConfig(widgetInfo.widgetId);
 
     // On WIDGET_ADDED/RESIZED use the cached quote (if any) to avoid a network
-    // call. On WIDGET_UPDATE fetch a fresh quote.
+    // call. On WIDGET_UPDATE fetch a fresh quote, but only once the config's
+    // own interval has elapsed: Android fires this every updatePeriodMillis
+    // (30 min), which is not the user's Refresh setting, so an ungated refetch
+    // rotates a "Once a day" widget every half hour.
     let quote: { id?: string; text: string; author: string } | null = config.cachedQuote
       ? { id: config.cachedQuote.quoteId, text: config.cachedQuote.text, author: config.cachedQuote.author }
       : null;
 
-    if (!quote || widgetAction === 'WIDGET_UPDATE') {
+    const due = widgetAction === 'WIDGET_UPDATE'
+      && isRefreshDue(config.lastRefreshed, config.updateInterval);
+
+    if (!quote || due) {
       const fetched = await resolveWidgetQuote(config.customize ? config.quoteType : 'general');
       if (fetched) {
         quote = fetched;
@@ -144,7 +152,7 @@ async function widgetTaskHandler(props: WidgetTaskHandlerProps) {
 
     renderWidget(React.createElement(QuoteWidget, {
       quote,
-      config: { showBorder: config.showBorder, showButtons: config.showButtons },
+      config: { showBorder: config.showBorder },
       widgetInfo,
     }));
 

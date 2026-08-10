@@ -55,7 +55,7 @@ export async function syncWidgets(configId: string, options: { refetchQuote?: bo
       await WidgetBridge.updateWidget({
         widgetId,
         quote,
-        config: { showBorder: config.showBorder, showButtons: config.showButtons },
+        config: { showBorder: config.showBorder },
       });
     }),
   );

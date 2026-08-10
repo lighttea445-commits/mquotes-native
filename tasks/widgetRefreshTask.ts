@@ -23,6 +23,7 @@ import {
   useWidgetStore,
   WidgetRefreshFrequency,
   REFRESH_FREQUENCY_MINUTES,
+  isRefreshDue,
 } from '../store/useWidgetStore';
 import { useFavoritesStore } from '../store/useFavoritesStore';
 import { useUserQuotesStore } from '../store/useUserQuotesStore';
@@ -75,12 +76,9 @@ if (TaskManager) {
 
         // Honour each widget's own refresh frequency. The background task runs
         // at the shortest interval (hourly), so daily/twice-daily widgets must
-        // gate themselves via their lastRefreshed timestamp.
-        if (config.lastRefreshed) {
-          const ageMs = Date.now() - new Date(config.lastRefreshed).getTime();
-          const intervalMs = REFRESH_FREQUENCY_MINUTES[config.updateInterval] * 60_000;
-          if (ageMs < intervalMs) continue; // not due yet
-        }
+        // gate themselves via their lastRefreshed timestamp. Shared with the
+        // headless WIDGET_UPDATE path so the two can't drift apart.
+        if (!isRefreshDue(config.lastRefreshed, config.updateInterval)) continue;
 
         // "Mirror the app" (customize off) behaves like the free General feed.
         const quoteType = config.customize ? config.quoteType : 'general';
@@ -114,7 +112,7 @@ if (TaskManager) {
         await WidgetBridge.updateWidget({
           widgetId,
           quote,
-          config: { showBorder: config.showBorder, showButtons: config.showButtons },
+          config: { showBorder: config.showBorder },
         });
 
         // Persist cachedQuote/lastRefreshed AFTER the widget has re-rendered so

@@ -85,7 +85,6 @@ export interface WidgetConfig {
   quoteType: WidgetQuoteType;
   showBorder: boolean;
   updateInterval: WidgetRefreshFrequency;
-  showButtons: boolean;
   cachedQuote: { text: string; author: string; quoteId?: string } | null;
   lastRefreshed: string | null;
   /**
@@ -123,11 +122,34 @@ export function createConfig(name: string): WidgetConfig {
     quoteType: 'general',
     showBorder: false,
     updateInterval: 'hourly',
-    showButtons: false,
     cachedQuote: null,
     lastRefreshed: null,
     queueLength: null,
   };
+}
+
+/**
+ * Whether a config is due for a fresh quote.
+ *
+ * Android refreshes on two independent clocks, neither of which is the user's
+ * setting: the OS fires WIDGET_UPDATE on the provider's updatePeriodMillis
+ * (30 min), and the background task runs on its own minimumInterval. Both must
+ * gate on this, or the widget changes on whichever timer is faster and a
+ * config set to "Once a day" rotates every half hour.
+ *
+ * iOS doesn't use this. There the interval is pushed to the extension as
+ * mq_rotate_<id> and WidgetKit walks the queue on its own.
+ */
+export function isRefreshDue(
+  lastRefreshed: string | null,
+  updateInterval: WidgetRefreshFrequency,
+  now: number = Date.now(),
+): boolean {
+  if (!lastRefreshed) return true;
+  const written = Date.parse(lastRefreshed);
+  if (Number.isNaN(written)) return true;
+  const intervalMs = (REFRESH_FREQUENCY_MINUTES[updateInterval] ?? 60) * 60_000;
+  return now - written >= intervalMs;
 }
 
 // ── Store ─────────────────────────────────────────────────────────────────────
@@ -145,7 +167,12 @@ interface WidgetStore {
 
   bindWidget: (widgetId: string, configId: string) => void;
   unbindWidget: (widgetId: string) => void;
-  /** Binds a newly placed widget to the first unused config, else the first one. */
+  /**
+   * Binds a newly placed widget to the first unused config, creating one when
+   * every config is already spoken for. Android only — iOS binds through its
+   * AppIntent, which picks an unused config the same way but can't create one
+   * from the extension.
+   */
   claimConfigFor: (widgetId: string) => WidgetConfig | undefined;
 
   getConfig: (configId: string) => WidgetConfig | undefined;
@@ -203,8 +230,16 @@ export const useWidgetStore = create<WidgetStore>()(
         }
 
         const used = new Set(Object.values(bindings));
-        const target = configs.find((c) => !used.has(c.id)) ?? configs[0];
-        if (!target) return undefined;
+        const free = configs.find((c) => !used.has(c.id));
+
+        // Nothing free means a new config, not a second widget on an existing
+        // one. Two widgets sharing a config share its cachedQuote, so they
+        // render the same quote side by side until one of them is re-pointed.
+        // This is also what the headless path does (widgetTaskHandler's
+        // resolveConfig), and the two must agree: whichever runs first for a
+        // newly placed widget decides the binding.
+        const target = free ?? createConfig(nextConfigName(configs));
+        if (!free) set((s) => ({ configs: [...s.configs, target] }));
 
         set((s) => ({ bindings: { ...s.bindings, [widgetId]: target.id } }));
         return target;

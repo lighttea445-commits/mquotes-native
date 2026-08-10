@@ -126,7 +126,7 @@ export default function CategoriesScreen({ onClose }: { onClose?: () => void }) 
 
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
         <SheetHeader
-          title="Explore topics"
+          title="Explore"
           leading="close"
           onLeadingPress={close}
           actionLabel="Edit"

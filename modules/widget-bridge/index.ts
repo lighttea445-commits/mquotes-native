@@ -39,7 +39,6 @@ export interface IOSQueuePayload {
   /** Gates every appearance setting below, all of which are Pro-only. */
   isPro: boolean;
   showBorder: boolean;
-  showButtons: boolean;
 }
 
 /** The metadata list backing the AppIntent's config picker in Apple's Edit Widget panel. */
@@ -48,7 +47,6 @@ export interface IOSConfigListPayload {
     id: string;
     name: string;
     showBorder: boolean;
-    showButtons: boolean;
     rotateMinutes: number;
   }[];
   isPro: boolean;
@@ -57,7 +55,7 @@ export interface IOSConfigListPayload {
 export interface RenderPayload {
   widgetId: number;
   quote: QuoteData;
-  config: Pick<WidgetConfig, 'showBorder' | 'showButtons'>;
+  config: Pick<WidgetConfig, 'showBorder'>;
 }
 
 class WidgetBridgeClass {
@@ -182,7 +180,6 @@ class WidgetBridgeClass {
           rotateMinutes: payload.rotateMinutes,
           isPro: payload.isPro,
           showBorder: payload.showBorder,
-          showButtons: payload.showButtons,
         }),
       );
     } catch (err) {

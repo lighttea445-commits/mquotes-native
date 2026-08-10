@@ -13,7 +13,12 @@ import type { WidgetConfig } from '../store/useWidgetStore';
 
 const WIDGET_BACKGROUND = '#0D0D0D' as const;
 const WIDGET_TEXT = '#E8E0D0' as const;
-const WIDGET_BORDER = '#2A2520' as const;
+// A band rather than a hairline, so the outline reads as a frame around the
+// card. At this width the old near-black line vanished against the background,
+// so the colour is the text tone knocked back over it — the flattened
+// equivalent of the 60% white the iOS stroke draws.
+const WIDGET_BORDER = '#908C82' as const;
+const WIDGET_BORDER_WIDTH = 6;
 const WIDGET_FONT = 'serif' as const;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -26,7 +31,7 @@ export interface QuoteData {
 
 interface Props {
   quote: QuoteData;
-  config: Pick<WidgetConfig, 'showBorder' | 'showButtons'>;
+  config: Pick<WidgetConfig, 'showBorder'>;
   widgetInfo: WidgetInfo;
 }
 
@@ -110,7 +115,11 @@ function fitQuoteSize(
 export function QuoteWidget({ quote, config, widgetInfo }: Props) {
   const family = getSizeFamily(widgetInfo.width, widgetInfo.height);
   const spec   = SIZE_SPEC[family];
-  const padding = spec.padding;
+  // The border is painted over the card rather than laid out, so its width has
+  // to come out of the padding by hand. Without this the band sits on top of
+  // the quote on the smaller families, whose padding is thinner than the band.
+  const border = config.showBorder ? WIDGET_BORDER_WIDTH : 0;
+  const padding = spec.padding + border;
 
   const innerW = Math.max(20, widgetInfo.width  - padding * 2);
   const innerH = Math.max(20, widgetInfo.height - padding * 2);
@@ -150,7 +159,7 @@ export function QuoteWidget({ quote, config, widgetInfo }: Props) {
         borderRadius: 16,
         backgroundColor: WIDGET_BACKGROUND,
         overflow: 'hidden',
-        ...(config.showBorder ? { borderWidth: 1, borderColor: WIDGET_BORDER } : {}),
+        ...(config.showBorder ? { borderWidth: WIDGET_BORDER_WIDTH, borderColor: WIDGET_BORDER } : {}),
       }}
       clickAction="OPEN_URI"
       clickActionData={{ uri: tapUri }}

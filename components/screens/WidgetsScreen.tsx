@@ -35,6 +35,7 @@ import {
 } from '../../store/useWidgetStore';
 import { WidgetBridge } from '../../modules/widget-bridge';
 import { syncWidgets } from '../../lib/widgetSync';
+import { isIOSConfigPending } from '../../lib/iosWidget';
 import { useRevenueCat } from '../../hooks/useRevenueCat';
 import { useModal } from '../../contexts/ModalContext';
 import { GUTTER, SPACE, RADIUS, ON_GOLD } from '../ui/tokens';
@@ -199,8 +200,8 @@ function WidgetPreview({
               previewStyles.face,
               {
                 backgroundColor: theme.background,
-                borderWidth: config.showBorder ? 1.5 : 0,
-                borderColor: theme.text,
+                borderWidth: config.showBorder ? 8 : 0,
+                borderColor: theme.textMuted,
               },
             ]}
           >
@@ -318,36 +319,71 @@ export default function WidgetsScreen({
   const [renaming, setRenaming] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
+  // A new page doesn't exist yet on the render that adds it, so the scroll
+  // target is parked here and fired from onContentSizeChange instead.
+  const pendingIndex = useRef<number | null>(null);
 
   // The screen is never empty: a first configuration is created on open so
   // there is always something to show and bind to. It syncs immediately, the
   // same as handleCreate — without that the new config reaches nothing until
   // the next foreground, and on iOS a placed widget has no config to resolve
   // until it does.
+  //
+  // Gated on hydration, or a cold start straight into this screen sees an
+  // empty list, seeds a config, syncs it, and then has it thrown away when the
+  // persisted state lands. app/_layout.tsx gates its own seeding the same way.
+  const [hydrated, setHydrated] = useState(() => useWidgetStore.persist.hasHydrated());
   useEffect(() => {
-    if (configs.length === 0) {
-      const created = addConfig();
-      syncWidgets(created.id).catch(() => {});
+    if (hydrated) return;
+    return useWidgetStore.persist.onFinishHydration(() => setHydrated(true));
+  }, [hydrated]);
+
+  useEffect(() => {
+    if (!hydrated || configs.length > 0) return;
+    const created = addConfig();
+    syncWidgets(created.id).catch(() => {});
+  }, [hydrated, configs.length, addConfig]);
+
+  // Which configs no placed widget is using. Android reads its own bindings;
+  // iOS has to infer it from the extension's mq_seen_ stamps, which is a
+  // 3-day-old signal at worst, so treat a "pending" label there as a hint
+  // rather than proof. Keyed by config id, absent means not yet determined.
+  const [pending, setPending] = useState<Record<string, boolean>>({});
+
+  const refreshPending = useCallback(async () => {
+    const { configs: current, isPending } = useWidgetStore.getState();
+    if (Platform.OS === 'android') {
+      setPending(Object.fromEntries(current.map((c) => [c.id, isPending(c.id)])));
+      return;
     }
-  }, [configs.length, addConfig]);
+    if (Platform.OS !== 'ios') return;
+    const flags = await Promise.all(current.map((c) => isIOSConfigPending(c.id)));
+    setPending(Object.fromEntries(current.map((c, n) => [c.id, flags[n]])));
+  }, []);
 
   // Android can enumerate placed widgets, so bindings are refreshed whenever
   // the screen is shown or the app returns to the foreground.
   const reconcile = useCallback(async () => {
-    if (Platform.OS !== 'android') return;
-    const placed = await WidgetBridge.getActiveWidgets();
-    const store = useWidgetStore.getState();
-    const placedIds = new Set(placed.map((w) => w.widgetId.toString()));
+    if (Platform.OS === 'android') {
+      const placed = await WidgetBridge.getActiveWidgets();
+      const store = useWidgetStore.getState();
+      const placedIds = new Set(placed.map((w) => w.widgetId.toString()));
 
-    for (const widgetId of Object.keys(store.bindings)) {
-      if (!placedIds.has(widgetId)) store.unbindWidget(widgetId);
+      for (const widgetId of Object.keys(store.bindings)) {
+        if (!placedIds.has(widgetId)) store.unbindWidget(widgetId);
+      }
+      for (const id of placedIds) {
+        store.claimConfigFor(id);
+      }
     }
-    for (const id of placedIds) {
-      store.claimConfigFor(id);
-    }
-  }, []);
+    await refreshPending();
+  }, [refreshPending]);
 
   useEffect(() => { reconcile(); }, [reconcile]);
+
+  // A config added on this screen starts unused by definition, and nothing
+  // above re-runs on that.
+  useEffect(() => { refreshPending(); }, [configs.length, refreshPending]);
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (next) => {
@@ -384,7 +420,7 @@ export default function WidgetsScreen({
     const created = addConfig();
     const newIndex = useWidgetStore.getState().configs.length - 1;
     setIndex(newIndex);
-    scrollRef.current?.scrollTo({ x: newIndex * width, animated: true });
+    pendingIndex.current = newIndex;
     syncWidgets(created.id).catch(() => {});
   };
 
@@ -423,6 +459,11 @@ export default function WidgetsScreen({
             pagingEnabled
             showsHorizontalScrollIndicator={false}
             onMomentumScrollEnd={handleScrollEnd}
+            onContentSizeChange={() => {
+              if (pendingIndex.current === null) return;
+              scrollRef.current?.scrollTo({ x: pendingIndex.current * width, animated: true });
+              pendingIndex.current = null;
+            }}
             style={{ marginHorizontal: -GUTTER }}
           >
             {configs.map((c) => (
@@ -447,6 +488,19 @@ export default function WidgetsScreen({
               {active.customize ? active.name : 'Mirror the app'}
             </Text>
           </TouchableOpacity>
+
+          {/* Absent means the lookup hasn't landed yet. Rendering the "in use"
+              copy in that gap claims the opposite of the truth for a config
+              that was just created, which is exactly when it's read. */}
+          {pending[active.id] !== undefined && (
+            <Text style={[styles.statusText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+              {pending[active.id]
+                ? Platform.OS === 'ios'
+                  ? 'Not on your Home Screen yet. Add a widget, then hold it, tap Edit Widget, and choose this name.'
+                  : 'Not on your Home Screen yet. Add a Quotable widget to start using it.'
+                : 'In use on your Home Screen.'}
+            </Text>
+          )}
 
           <ConfigCard
             config={active}
@@ -499,9 +553,10 @@ export default function WidgetsScreen({
         cancelLabel="Cancel"
         destructive
         onConfirm={() => {
+          const next = Math.max(0, index - 1);
           removeConfig(active.id);
-          setIndex((i) => Math.max(0, i - 1));
-          scrollRef.current?.scrollTo({ x: 0, animated: false });
+          setIndex(next);
+          pendingIndex.current = next;
         }}
       />
 
@@ -537,6 +592,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACE.md,
   },
   nameText: { fontSize: 22, flex: 1 },
+  statusText: { fontSize: 13, lineHeight: 19, marginBottom: SPACE.md },
   card: { borderRadius: RADIUS.row, overflow: 'hidden' },
   deleteBtn: { alignItems: 'center', paddingVertical: SPACE.xl },
   deleteText: { fontSize: 18 },

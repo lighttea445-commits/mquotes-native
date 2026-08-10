@@ -124,8 +124,21 @@ struct WidgetConfigQuery: EntityQuery {
     loadConfigMetas().map { WidgetConfigEntity(id: $0.id, name: $0.name) }
   }
 
+  /// Prefers a config nothing is using yet, so placing several widgets spreads
+  /// them across the library instead of stacking every one on the first entry.
+  /// Two widgets on one config aren't just similar, they're identical forever:
+  /// position is derived from that config's shared queue and epoch, so they
+  /// rotate in lockstep.
+  ///
+  /// The claim is stamped here rather than left to the first timeline render,
+  /// or two widgets placed back to back both resolve to the same free entry.
   func defaultResult() async -> WidgetConfigEntity? {
-    loadConfigMetas().first.map { WidgetConfigEntity(id: $0.id, name: $0.name) }
+    let metas = loadConfigMetas()
+    guard let chosen = metas.first(where: { !isConfigInUse($0.id) }) ?? metas.first else {
+      return nil
+    }
+    markClaimed(configId: chosen.id)
+    return WidgetConfigEntity(id: chosen.id, name: chosen.name)
   }
 }
 
@@ -188,6 +201,34 @@ private func loadQuotes(configId: String) -> [StoredQuote] {
 private func markSeen(configId: String) {
   guard let defaults = UserDefaults(suiteName: kAppGroupId) else { return }
   defaults.set(Date().timeIntervalSince1970 * 1000, forKey: "mq_seen_\(configId)")
+}
+
+/// Stamps that the picker handed this config out as a new widget's default.
+///
+/// Deliberately NOT mq_seen_: the system can ask for a default outside a real
+/// placement, and the app reads mq_seen_ to decide whether to tell the user a
+/// config is on their Home Screen. Writing this one keeps a speculative call
+/// from turning into a claim the UI repeats back as fact.
+private func markClaimed(configId: String) {
+  guard let defaults = UserDefaults(suiteName: kAppGroupId) else { return }
+  defaults.set(Date().timeIntervalSince1970 * 1000, forKey: "mq_claimed_\(configId)")
+}
+
+/// Mirrors SEEN_WINDOW_MS in lib/iosWidget.ts. Long, because the only proof a
+/// config is still in use is the extension rendering it, and WidgetKit can go
+/// a while between timeline requests on a rarely viewed Home Screen page.
+private let kSeenWindow: TimeInterval = 3 * 24 * 60 * 60
+
+/// Rendered recently, or handed out recently. Only the picker asks this — it's
+/// about which config to give the NEXT widget, not what to show the user.
+private func isConfigInUse(_ configId: String) -> Bool {
+  guard let defaults = UserDefaults(suiteName: kAppGroupId) else { return false }
+  let now = Date().timeIntervalSince1970
+  for key in ["mq_seen_\(configId)", "mq_claimed_\(configId)"] {
+    let ms = defaults.double(forKey: key)
+    if ms > 0 && now - ms / 1000 < kSeenWindow { return true }
+  }
+  return false
 }
 
 /// Heartbeat for the whole extension, not one config.
@@ -481,17 +522,27 @@ struct QuoteWidgetView: View {
 
       Spacer(minLength: 0)
     }
-    .padding(family == .systemSmall ? 12 : 16)
+    // Absorbs WidgetKit's 16pt default content margin, which
+    // `.contentMarginsDisabled()` removes so the border can reach the real card
+    // edge. The visible text inset is unchanged: 12/16 of its own plus the 16
+    // the system used to add. Change these together with that modifier.
+    .padding(family == .systemSmall ? 28 : 32)
     // Stretch to the full container, so the quote centres on the card rather
     // than collapsing to its own height.
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     // Drawn as an overlay stroke rather than a filled shape. A stroke keeps its
     // geometry in accented rendering, so the outline survives on a Tinted or
     // Clear Home Screen where a coloured fill would be flattened away.
+    //
+    // It cannot move into .containerBackground() to reach the edge instead: the
+    // system drops that background entirely in accented mode (see isFullColor),
+    // which is exactly where the stroke has to survive. ContainerRelativeShape
+    // takes the widget's own corner radius, so the outline follows the card
+    // rather than guessing at it.
     .overlay {
       if entry.showBorder {
-        RoundedRectangle(cornerRadius: 22, style: .continuous)
-          .strokeBorder((isFullColor ? kWidgetText : Color.primary).opacity(0.35), lineWidth: 1)
+        ContainerRelativeShape()
+          .strokeBorder((isFullColor ? kWidgetText : Color.primary).opacity(0.6), lineWidth: 6)
       }
     }
     .widgetURL(tapURL(for: entry))
@@ -561,6 +612,11 @@ struct QuotesWidget: Widget {
     AppIntentConfiguration(kind: kind, intent: QuoteWidgetIntent.self, provider: QuoteProvider()) { entry in
       QuoteWidgetView(entry: entry)
     }
+    // The border setting draws the outline of the card itself, so the content
+    // has to own the full widget bounds. With the default 16pt margins in place
+    // the stroke sat inset from the edge, floating inside the card. The home
+    // screen body adds that 16pt back as padding of its own.
+    .contentMarginsDisabled()
     .configurationDisplayName("Quotes")
     .description("Display an inspiring quote on your home screen or lock screen.")
     .supportedFamilies([

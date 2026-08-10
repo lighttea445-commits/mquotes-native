@@ -27,7 +27,6 @@ describe('createConfig', () => {
     expect(cfg.name).toBe('My widget');
     expect(cfg.customize).toBe(false);
     expect(cfg.showBorder).toBe(false);
-    expect(cfg.showButtons).toBe(false);
     expect(cfg.updateInterval).toBe('hourly');
     expect(cfg.quoteType).toBe('general');
     expect(cfg.cachedQuote).toBeNull();
@@ -205,13 +204,16 @@ describe('claimConfigFor', () => {
     expect(useWidgetStore.getState().bindings['2']).toBe(b.id);
   });
 
-  it('falls back to the first config when none are Pending', () => {
+  it('creates a config when none are Pending rather than doubling up', () => {
     const { useWidgetStore } = require('../../store/useWidgetStore');
     const a = useWidgetStore.getState().addConfig('A');
     useWidgetStore.getState().bindWidget('1', a.id);
 
     const claimed = useWidgetStore.getState().claimConfigFor('2');
-    expect(claimed?.id).toBe(a.id);
+
+    expect(claimed?.id).not.toBe(a.id);
+    expect(useWidgetStore.getState().configs).toHaveLength(2);
+    expect(useWidgetStore.getState().bindings['2']).toBe(claimed?.id);
   });
 
   it('returns the already-bound config on a repeat call rather than reclaiming', () => {
@@ -224,9 +226,53 @@ describe('claimConfigFor', () => {
     expect(claimed?.id).toBe(a.id);
   });
 
-  it('returns undefined when the library is empty', () => {
+  it('seeds a config when the library is empty', () => {
     const { useWidgetStore } = require('../../store/useWidgetStore');
-    expect(useWidgetStore.getState().claimConfigFor('1')).toBeUndefined();
+
+    const claimed = useWidgetStore.getState().claimConfigFor('1');
+
+    expect(claimed).toBeDefined();
+    expect(useWidgetStore.getState().configs).toHaveLength(1);
+    expect(useWidgetStore.getState().bindings['1']).toBe(claimed?.id);
+  });
+});
+
+// ── isRefreshDue ────────────────────────────────────────────────────────────
+//
+// Gates both Android refresh paths. Android's own clocks (updatePeriodMillis
+// at 30 min, and the background task's minimumInterval) are faster than the
+// slower settings, so without this a "daily" widget rotates every half hour.
+
+describe('isRefreshDue', () => {
+  const MIN = 60_000;
+
+  it('is due when the config has never been refreshed', () => {
+    const { isRefreshDue } = require('../../store/useWidgetStore');
+    expect(isRefreshDue(null, 'daily')).toBe(true);
+  });
+
+  it('is due when the timestamp is unparseable', () => {
+    const { isRefreshDue } = require('../../store/useWidgetStore');
+    expect(isRefreshDue('not a date', 'hourly')).toBe(true);
+  });
+
+  it('holds a daily config across an Android 30-minute WIDGET_UPDATE', () => {
+    const { isRefreshDue } = require('../../store/useWidgetStore');
+    const now = Date.parse('2026-08-10T12:00:00.000Z');
+    const written = new Date(now - 30 * MIN).toISOString();
+    expect(isRefreshDue(written, 'daily', now)).toBe(false);
+  });
+
+  it('releases each frequency exactly at its own interval', () => {
+    const { isRefreshDue, REFRESH_FREQUENCY_MINUTES } = require('../../store/useWidgetStore');
+    const now = Date.parse('2026-08-10T12:00:00.000Z');
+
+    for (const [freq, minutes] of Object.entries(REFRESH_FREQUENCY_MINUTES)) {
+      const justShort = new Date(now - ((minutes as number) - 1) * MIN).toISOString();
+      const exactly = new Date(now - (minutes as number) * MIN).toISOString();
+      expect(isRefreshDue(justShort, freq, now)).toBe(false);
+      expect(isRefreshDue(exactly, freq, now)).toBe(true);
+    }
   });
 });
 

@@ -4,6 +4,7 @@
  * When the user taps a home-screen widget, the OPEN_URI click action fires:
  *   quotable://widget-open?widgetId=<id>                (Android)
  *   quotable://widget-open?src=ios&cfg=<id>&i=<index>   (iOS)
+ *   quotable://widget-open?src=ios&setup=1              (iOS, no config resolved)
  *
  * iOS has no widget ids, so the tap URL instead carries which config the
  * placed widget was bound to (chosen in Apple's Edit Widget panel) plus the
@@ -36,18 +37,62 @@ import type { WidgetQuote } from '../lib/widgetQuotes';
 
 export default function WidgetOpenScreen() {
   const router = useRouter();
-  const { widgetId, src, i, cfg } = useLocalSearchParams<{
+  const { widgetId, src, i, cfg, setup } = useLocalSearchParams<{
     widgetId?: string;
     src?: string;
     i?: string;
     cfg?: string;
+    setup?: string;
   }>();
 
   useEffect(() => {
     async function handleAndNavigate() {
       const wid = String(widgetId ?? '');
 
-      if (src === 'ios' && cfg) {
+      if (src === 'ios' && setup === '1') {
+        // The widget resolved no config, so there is no quote to carry back.
+        // Make sure one exists and reaches the App Group, then put the user on
+        // the Widgets screen: the extension needs mq_configs before it can
+        // render anything, and picking a config is a manual Edit Widget step
+        // the app can neither perform nor observe.
+        try {
+          const { useWidgetStore } = await import('../store/useWidgetStore');
+          const { ensureIOSConfigMetadata, refreshAllIOSWidgets } = await import('../lib/iosWidget');
+          // Cold start: creating before rehydration would seed a config that
+          // the persisted state then overwrites.
+          if (!useWidgetStore.persist.hasHydrated()) {
+            await new Promise<void>((resolve) => {
+              let unsub: (() => void) | undefined;
+              let timer: ReturnType<typeof setTimeout> | undefined;
+              const settle = () => {
+                unsub?.();
+                if (timer) clearTimeout(timer);
+                resolve();
+              };
+              unsub = useWidgetStore.persist.onFinishHydration(settle);
+              timer = setTimeout(settle, 2000);
+              // Hydration can land between the check above and the subscribe,
+              // and then the listener never fires. This screen is invisible
+              // and navigates away at the end, so a missed resolve strands the
+              // user on a black screen.
+              if (useWidgetStore.persist.hasHydrated()) settle();
+            });
+          }
+          if (useWidgetStore.getState().configs.length === 0) {
+            useWidgetStore.getState().addConfig();
+          }
+          // Only the metadata write is awaited: it's a native UserDefaults
+          // write and it's the part the extension needs to resolve a config at
+          // all. Filling the queues fetches quotes, and this screen is
+          // invisible and navigates away at the end, so awaiting the network
+          // here would hold the user on a black screen for its duration.
+          await ensureIOSConfigMetadata();
+          refreshAllIOSWidgets().catch(() => {});
+        } catch {
+          // Non-critical — still open the screen so the user isn't stranded.
+        }
+        useDeepLinkStore.getState().setPendingSheet('widgets');
+      } else if (src === 'ios' && cfg) {
         try {
           const raw = await AsyncStorage.getItem(`${IOS_WIDGET_QUEUE_KEY_PREFIX}${cfg}`);
           const queue = raw ? (JSON.parse(raw) as WidgetQuote[]) : [];

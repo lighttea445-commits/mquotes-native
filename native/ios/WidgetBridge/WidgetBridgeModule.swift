@@ -28,7 +28,7 @@ class WidgetBridgeModule: NSObject {
   /// resolves back to the exact quote that was on screen.
   ///
   /// Payload: `{ configId: String, quotes: [{ text, author, id }],
-  ///             rotateMinutes: Int, isPro: Bool, showBorder: Bool, showButtons: Bool }`
+  ///             rotateMinutes: Int, isPro: Bool, showBorder: Bool }`
   @objc
   func updateWidgetQueue(
     _ jsonPayload: String,
@@ -75,7 +75,6 @@ class WidgetBridgeModule: NSObject {
 
     defaults.set(json["rotateMinutes"] as? Int ?? 60, forKey: "mq_rotate_\(configId)")
     defaults.set(json["showBorder"] as? Bool ?? false, forKey: "mq_border_\(configId)")
-    defaults.set(json["showButtons"] as? Bool ?? false, forKey: "mq_buttons_\(configId)")
     // Pro gate is shared across configs — one entitlement, not per-config.
     defaults.set(json["isPro"] as? Bool ?? false, forKey: "mq_is_pro")
     defaults.synchronize()
@@ -93,7 +92,7 @@ class WidgetBridgeModule: NSObject {
   /// list in Apple's Edit Widget panel — every config the user has created, so
   /// any placed widget can be pointed at any of them.
   ///
-  /// Payload: `{ configs: [{ id, name, showBorder, showButtons, rotateMinutes }], isPro: Bool }`
+  /// Payload: `{ configs: [{ id, name, showBorder, rotateMinutes }], isPro: Bool }`
   @objc
   func updateConfigList(
     _ jsonPayload: String,
