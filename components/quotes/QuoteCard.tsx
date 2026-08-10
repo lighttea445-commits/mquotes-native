@@ -44,6 +44,9 @@ import { analytics } from '../../lib/analytics';
 // Pixels per second past which a swipe commits regardless of how far it
 // travelled. Low enough that a casual flick counts.
 const FLING_VELOCITY = 450;
+// Divisor on the drag distance. 1 is 1:1 with the finger; higher makes the
+// card trail behind it.
+const SCROLL_RESISTANCE = 1.25;
 // Maximum quotes to keep prefetched ahead. Prevents unbounded buffer growth.
 const MAX_BUFFER_AHEAD = 20;
 // Trim old quotes from buffer when past this many to free memory.
@@ -399,9 +402,7 @@ export function QuoteCard() {
     .activeOffsetY([-8, 8])
     .onStart(() => { startY.value = translateY.value; })
     .onUpdate((e) => {
-      const dy = e.translationY;
-      // 1:1 with the finger. Any damping factor here reads as the card
-      // resisting the drag.
+      const dy = e.translationY / SCROLL_RESISTANCE;
       translateY.value = startY.value + dy;
       const absProgress = Math.abs(dy) / SCREEN_HEIGHT;
       scale.value = 1 - absProgress * 0.03;
