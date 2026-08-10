@@ -154,24 +154,28 @@ class WidgetBridgeClass {
    * mirrored into AsyncStorage so a widget tap can resolve which quote was on
    * screen from the index in its URL.
    *
-   * Silently no-ops when the native module isn't linked (Expo Go).
+   * The App Group write comes FIRST and the mirror only follows on success.
+   * The tap URL carries an index into whatever the extension is rendering, so
+   * a mirror that runs ahead of the App Group resolves that index against the
+   * wrong array and opens the wrong quote. One version behind is recoverable;
+   * one version ahead is silently wrong.
+   *
+   * Returns false when nothing reached the App Group — the caller must not
+   * treat the config as refreshed in that case. Not linked (Expo Go) is
+   * reported separately from a native throw.
    */
-  async updateIOSQueue(payload: IOSQueuePayload): Promise<void> {
-    if (Platform.OS !== 'ios') return;
-    if (payload.quotes.length === 0) return;
+  async updateIOSQueue(payload: IOSQueuePayload): Promise<boolean> {
+    if (Platform.OS !== 'ios') return false;
+    if (payload.quotes.length === 0) return false;
 
-    try {
-      const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
-      await AsyncStorage.setItem(
-        `${IOS_WIDGET_QUEUE_KEY_PREFIX}${payload.configId}`,
-        JSON.stringify(payload.quotes),
-      );
-    } catch {
-      // Non-critical — the widget still renders; only tap resolution degrades.
+    const native = NativeModules.WidgetBridge;
+    if (typeof native?.updateWidgetQueue !== 'function') {
+      console.warn('[WidgetBridge] updateIOSQueue: native module not linked');
+      return false;
     }
 
     try {
-      await NativeModules.WidgetBridge?.updateWidgetQueue(
+      await native.updateWidgetQueue(
         JSON.stringify({
           configId: payload.configId,
           quotes: payload.quotes.map((q) => ({ text: q.text, author: q.author, id: q.id ?? '' })),
@@ -183,7 +187,21 @@ class WidgetBridgeClass {
       );
     } catch (err) {
       console.warn('[WidgetBridge] updateIOSQueue error:', err);
+      return false;
     }
+
+    try {
+      const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+      await AsyncStorage.setItem(
+        `${IOS_WIDGET_QUEUE_KEY_PREFIX}${payload.configId}`,
+        JSON.stringify(payload.quotes),
+      );
+    } catch {
+      // Non-critical — the widget still renders the new queue; tap resolution
+      // falls back to the previous mirror until the next successful write.
+    }
+
+    return true;
   }
 
   /**

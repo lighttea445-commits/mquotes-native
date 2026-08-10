@@ -28,15 +28,34 @@ import { WidgetBridge, IOS_WIDGET_QUEUE_SIZE, IOS_WIDGET_QUEUE_KEY_PREFIX } from
 /** How recently a config must have been rendered to count as bound, not Pending. */
 const SEEN_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
 
-function staleAfterMinutes(rotateMinutes: number): number {
-  return Math.min(rotateMinutes * IOS_WIDGET_QUEUE_SIZE, 24 * 60);
+/**
+ * Upper bound on how long a queue may run before fresh quotes are fetched.
+ *
+ * Exists only so a slow rotation interval can't leave the widget on a queue
+ * fetched months ago. The queue is normally rewritten when it has been walked
+ * through, not on a clock.
+ */
+const MAX_STALE_MINUTES = 7 * 24 * 60;
+
+/**
+ * How long this config's queue lasts: one rotation per stored quote.
+ *
+ * Keyed off the queue's real length rather than IOS_WIDGET_QUEUE_SIZE, because
+ * the length varies by source (a favorites config holds as many quotes as the
+ * user has saved). Rewriting the queue sooner than this resets the widget's
+ * position to the start of the array, so a window shorter than the walk means
+ * the tail of the queue is never seen.
+ */
+function staleAfterMinutes(rotateMinutes: number, queueLength: number): number {
+  return Math.min(rotateMinutes * Math.max(1, queueLength), MAX_STALE_MINUTES);
 }
 
 function isStale(config: WidgetConfig, rotateMinutes: number): boolean {
   if (!config.lastRefreshed) return true;
   const written = Date.parse(config.lastRefreshed);
   if (Number.isNaN(written)) return true;
-  return Date.now() - written >= staleAfterMinutes(rotateMinutes) * 60_000;
+  const window = staleAfterMinutes(rotateMinutes, config.queueLength ?? 1);
+  return Date.now() - written >= window * 60_000;
 }
 
 /**
@@ -49,6 +68,20 @@ async function readIsPro(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/**
+ * Pushes the id/name/appearance list to the App Group.
+ *
+ * This is what backs the AppIntent's option list in Apple's Edit Widget panel,
+ * and it is also what the extension falls back to when no config has been
+ * picked yet. Until mq_configs exists the extension can resolve no config at
+ * all, so it renders the setup state and its tap URL carries nothing to
+ * resolve. Every path that can run before a queue exists must call this.
+ */
+export async function ensureIOSConfigMetadata(): Promise<void> {
+  if (Platform.OS !== 'ios') return;
+  await syncConfigMetadata(await readIsPro());
 }
 
 /** Pushes the id/name/appearance list every config-editing action needs synced. */
@@ -94,15 +127,18 @@ async function runRefresh(configId: string, { force = false }: { force?: boolean
   const rotateMinutes = REFRESH_FREQUENCY_MINUTES[config.updateInterval] ?? 60;
   if (!force && !isStale(config, rotateMinutes)) return false;
 
+  // Ahead of the fetch on purpose. The metadata list is what lets the extension
+  // resolve a config at all, and it must land even when the network doesn't.
+  const isPro = await readIsPro();
+  await syncConfigMetadata(isPro);
+
   const quoteType = config.customize ? config.quoteType : 'general';
   const quotes = await resolveWidgetQuotes(quoteType, IOS_WIDGET_QUEUE_SIZE);
 
   // Network failed and nothing was returned — leave the existing queue in place.
   if (quotes.length === 0) return false;
 
-  const isPro = await readIsPro();
-  await syncConfigMetadata(isPro);
-  await WidgetBridge.updateIOSQueue({
+  const delivered = await WidgetBridge.updateIOSQueue({
     configId,
     quotes,
     rotateMinutes,
@@ -111,9 +147,15 @@ async function runRefresh(configId: string, { force = false }: { force?: boolean
     showButtons: config.showButtons,
   });
 
+  // Nothing reached the App Group. Leaving lastRefreshed alone keeps this
+  // config stale so the next foreground retries instead of waiting out the
+  // window on a queue the widget never received.
+  if (!delivered) return false;
+
   useWidgetStore.getState().updateConfig(configId, {
     cachedQuote: { text: quotes[0].text, author: quotes[0].author, quoteId: quotes[0].id },
     lastRefreshed: new Date().toISOString(),
+    queueLength: quotes.length,
   });
 
   return true;
@@ -127,6 +169,9 @@ async function runRefresh(configId: string, { force = false }: { force?: boolean
 export async function refreshAllIOSWidgets(options: { force?: boolean } = {}): Promise<void> {
   if (Platform.OS !== 'ios') return;
   const configs = useWidgetStore.getState().configs;
+  // Unconditional: every per-config refresh below may no-op on freshness, and
+  // the picker still has to list them.
+  await ensureIOSConfigMetadata();
   await Promise.all(configs.map((c) => refreshIOSWidget(c.id, options)));
 }
 
@@ -158,7 +203,7 @@ export async function pushIOSWidgetAppearance(configId: string): Promise<void> {
 
   const isPro = await readIsPro();
   await syncConfigMetadata(isPro);
-  await WidgetBridge.updateIOSQueue({
+  const delivered = await WidgetBridge.updateIOSQueue({
     configId,
     quotes,
     rotateMinutes: REFRESH_FREQUENCY_MINUTES[config.updateInterval] ?? 60,
@@ -166,6 +211,13 @@ export async function pushIOSWidgetAppearance(configId: string): Promise<void> {
     showBorder: config.showBorder,
     showButtons: config.showButtons,
   });
+
+  // The queue itself is unchanged, so lastRefreshed stays put. Record the
+  // length for a config persisted before queueLength existed, so its staleness
+  // window stops being computed from the fallback of 1.
+  if (delivered && config.queueLength !== quotes.length) {
+    useWidgetStore.getState().updateConfig(configId, { queueLength: quotes.length });
+  }
 }
 
 /**

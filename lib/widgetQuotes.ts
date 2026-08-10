@@ -105,8 +105,9 @@ export async function resolveWidgetQuotes(
       return fetchGeneral(wanted);
     }
 
-    // Category tag (wisdom, motivational, etc.)
-    const byCategory = await fetchQuotesByCategory(quoteType);
+    // Category tag (wisdom, motivational, etc.). The larger page is only worth
+    // requesting when the caller wants more than the default holds.
+    const byCategory = await fetchQuotesByCategory(quoteType, wanted > 25 ? 50 : 25);
     return sample(byCategory, wanted).map((q) => ({ id: q._id, text: q.content, author: q.author }));
   } catch {
     return [];

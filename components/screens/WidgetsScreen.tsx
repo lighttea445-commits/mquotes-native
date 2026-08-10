@@ -320,9 +320,15 @@ export default function WidgetsScreen({
   const scrollRef = useRef<ScrollView>(null);
 
   // The screen is never empty: a first configuration is created on open so
-  // there is always something to show and bind to.
+  // there is always something to show and bind to. It syncs immediately, the
+  // same as handleCreate — without that the new config reaches nothing until
+  // the next foreground, and on iOS a placed widget has no config to resolve
+  // until it does.
   useEffect(() => {
-    if (configs.length === 0) addConfig();
+    if (configs.length === 0) {
+      const created = addConfig();
+      syncWidgets(created.id).catch(() => {});
+    }
   }, [configs.length, addConfig]);
 
   // Android can enumerate placed widgets, so bindings are refreshed whenever

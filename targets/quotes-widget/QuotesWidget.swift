@@ -19,6 +19,11 @@ private let kMaxEntries = 64
 /// Last-resort text when the App Group holds nothing at all.
 private let kFallbackText = "The journey of a thousand miles begins with a single step."
 
+/// Shown when no configuration can be resolved: the app has never written
+/// mq_configs, so there is no queue to walk and nothing for a tap to resolve.
+/// Naming the state beats showing a quote the widget cannot actually rotate.
+private let kSetupText = "Open Quotable to set up your widget."
+
 /// The Minimal theme's background and text, mirrored from constants/themes.ts
 /// (#0D0D0D and #E8E0D0). The extension cannot reach the app's tokens, so the
 /// two values are restated here and must be changed together with the theme.
@@ -185,6 +190,20 @@ private func markSeen(configId: String) {
   defaults.set(Date().timeIntervalSince1970 * 1000, forKey: "mq_seen_\(configId)")
 }
 
+/// Heartbeat for the whole extension, not one config.
+///
+/// A blank or stuck widget has three causes that look identical from the
+/// outside: the bridge never linked so nothing was ever written, the App Group
+/// is unreachable so the write went to a container the extension can't see, or
+/// no config exists yet. Without a Mac there is no Console.app to tell them
+/// apart, so the extension records that it ran and what it found. Nothing reads
+/// these keys today; they exist so a reader can be added without another guess.
+private func markStatus(_ status: String) {
+  guard let defaults = UserDefaults(suiteName: kAppGroupId) else { return }
+  defaults.set(Date().timeIntervalSince1970 * 1000, forKey: "mq_ext_last_run")
+  defaults.set(status, forKey: "mq_ext_last_status")
+}
+
 // MARK: - Timeline provider
 
 struct QuoteProvider: AppIntentTimelineProvider {
@@ -200,18 +219,37 @@ struct QuoteProvider: AppIntentTimelineProvider {
     )
   }
 
+  // Rendered for real while the timeline loads, so it must agree with what the
+  // timeline is about to show: the setup state when no config resolves, and the
+  // current cursor rather than the first quote. Only the gallery preview keeps
+  // the placeholder.
   func snapshot(for configuration: QuoteWidgetIntent, in context: Context) async -> QuoteEntry {
+    let now = Date()
     if context.isPreview { return placeholder(in: context) }
-    guard let configId = resolveConfigId(configuration) else { return placeholder(in: context) }
+    guard let configId = resolveConfigId(configuration) else { return setupEntry(date: now) }
     let quotes = loadQuotes(configId: configId)
-    return entry(configId: configId, at: 0, date: Date(), quote: quotes.first, appearance: resolveAppearance(configId: configId))
+    let index = cursor(configId: configId, count: quotes.count, at: now)
+    return entry(
+      configId: configId,
+      at: index,
+      date: now,
+      quote: quotes.isEmpty ? nil : quotes[index],
+      appearance: resolveAppearance(configId: configId)
+    )
   }
 
   func timeline(for configuration: QuoteWidgetIntent, in context: Context) async -> Timeline<QuoteEntry> {
+    let now = Date()
+
     guard let configId = resolveConfigId(configuration) else {
-      // No config exists yet, or none was ever created — nothing to show.
-      let retry = Date().addingTimeInterval(15 * 60)
-      return Timeline(entries: [placeholder(in: context)], policy: .after(retry))
+      // No config exists yet, or the App Group is unreachable. Logged before
+      // the guard rather than after it, because this branch used to produce no
+      // record at all: a widget stuck here looked identical to one that had
+      // never run.
+      kLog.info("timeline requested: no config available")
+      markStatus("no-config")
+      let retry = now.addingTimeInterval(15 * 60)
+      return Timeline(entries: [setupEntry(date: now)], policy: .after(retry))
     }
 
     markSeen(configId: configId)
@@ -219,11 +257,11 @@ struct QuoteProvider: AppIntentTimelineProvider {
     let appearance = resolveAppearance(configId: configId)
     let quotes = loadQuotes(configId: configId)
     let minutes = resolveRotateMinutes(configId: configId)
-    let now = Date()
 
     kLog.info("timeline requested: config \(configId, privacy: .public), \(quotes.count, privacy: .public) quote(s), rotate every \(minutes, privacy: .public) min")
 
     guard !quotes.isEmpty else {
+      markStatus("empty-queue:\(configId)")
       let retry = now.addingTimeInterval(15 * 60)
       return Timeline(
         entries: [entry(configId: configId, at: 0, date: now, quote: nil, appearance: appearance)],
@@ -231,17 +269,81 @@ struct QuoteProvider: AppIntentTimelineProvider {
       )
     }
 
-    let entries = quotes.enumerated().map { offset, quote in
-      entry(
-        configId: configId,
-        at: offset,
-        date: now.addingTimeInterval(TimeInterval(offset * minutes * 60)),
-        quote: quote,
-        appearance: appearance
-      )
+    markStatus("ok:\(configId)")
+
+    let count = quotes.count
+    let step = TimeInterval(minutes * 60)
+    let start = cursor(configId: configId, count: count, at: now)
+    let steps = elapsedSteps(configId: configId, step: step, at: now)
+    let nextBoundary = epochDate(configId: configId, fallback: now)
+      .addingTimeInterval(Double(steps + 1) * step)
+
+    // The first entry is dated `now`, not on a rotation boundary: WidgetKit
+    // leaves the previous render in place if a timeline opens in the future.
+    var entries: [QuoteEntry] = [
+      entry(configId: configId, at: start, date: now, quote: quotes[start], appearance: appearance)
+    ]
+
+    // `at:` carries the index into the stored array, never the timeline offset,
+    // so the tap URL still resolves against the app's unrotated mirror.
+    if count > 1 {
+      for k in 1..<min(count, kMaxEntries) {
+        let idx = (start + k) % count
+        entries.append(
+          entry(
+            configId: configId,
+            at: idx,
+            date: nextBoundary.addingTimeInterval(Double(k - 1) * step),
+            quote: quotes[idx],
+            appearance: appearance
+          )
+        )
+      }
     }
 
     return Timeline(entries: entries, policy: .atEnd)
+  }
+
+  // MARK: - Rotation position
+  //
+  // Position comes from elapsed wall clock against the epoch the app stamps
+  // when the queue's *contents* change, not from position in a freshly built
+  // timeline. Every reload used to restart at quote 0, so an appearance change,
+  // a Pro flip or a routine queue rewrite threw away the rotation. Deriving it
+  // instead makes a reload idempotent, and makes snapshot and timeline agree.
+
+  private func epochDate(configId: String, fallback: Date) -> Date {
+    let ms = UserDefaults(suiteName: kAppGroupId)?.double(forKey: "mq_epoch_\(configId)") ?? 0
+    return ms > 0 ? Date(timeIntervalSince1970: ms / 1000) : fallback
+  }
+
+  /// Clamped at zero so a clock moved backwards reads as "no rotations yet"
+  /// rather than a negative index.
+  private func elapsedSteps(configId: String, step: TimeInterval, at date: Date) -> Int {
+    let epoch = epochDate(configId: configId, fallback: date)
+    return max(0, Int(date.timeIntervalSince(epoch) / step))
+  }
+
+  /// Index into the stored queue, wrapped. A one-quote queue always yields 0,
+  /// which is correct rather than a stall.
+  private func cursor(configId: String, count: Int, at date: Date) -> Int {
+    guard count > 1 else { return 0 }
+    let step = TimeInterval(resolveRotateMinutes(configId: configId) * 60)
+    return elapsedSteps(configId: configId, step: step, at: date) % count
+  }
+
+  /// Distinct from `placeholder(in:)`, which is the gallery and redacted
+  /// preview and is never tappable. This one is rendered for real and its tap
+  /// URL carries `setup=1` so it opens the app instead of doing nothing.
+  private func setupEntry(date: Date) -> QuoteEntry {
+    QuoteEntry(
+      date: date,
+      configId: "",
+      index: 0,
+      quoteText: kSetupText,
+      quoteAuthor: "",
+      showBorder: false
+    )
   }
 
   /// The intent's own parameter when the user picked one, else the first
@@ -276,9 +378,17 @@ struct QuoteProvider: AppIntentTimelineProvider {
 // index is resolved against that config's own queue mirrored into
 // AsyncStorage, so the app shows exactly the quote that was on the widget
 // face. See app/widget-open.tsx.
+//
+// The setup state has no config to name, so it carries src=ios&setup=1
+// instead. It must still return a URL: .widgetURL(nil) makes the whole widget
+// a dead target, and that state is exactly when the user most needs the tap to
+// take them into the app. widget-open.tsx already falls through to the home
+// screen when cfg is absent, so no new handling is needed there.
 
 private func tapURL(for entry: QuoteEntry) -> URL? {
-  guard !entry.configId.isEmpty else { return nil }
+  if entry.configId.isEmpty {
+    return URL(string: "quotable://widget-open?src=ios&setup=1")
+  }
   return URL(string: "quotable://widget-open?src=ios&cfg=\(entry.configId)&i=\(entry.index)")
 }
 

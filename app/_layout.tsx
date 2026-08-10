@@ -238,10 +238,21 @@ function RootLayoutInner() {
   // every return to foreground; refreshAllIOSWidgets() no-ops per-config when
   // that config's queue is still fresh, and no-ops entirely on non-iOS
   // platforms (Android has registerWidgetRefreshTask above).
+  //
+  // A config is seeded here rather than only in the Widgets screen. Nothing
+  // reaches the App Group until one exists, so a widget placed by a user who
+  // never opened that screen had no config to resolve: it rendered the setup
+  // state and its tap carried nothing. Seeding inside topUp keeps it after
+  // hydration on both branches below.
   useEffect(() => {
     if (Platform.OS !== 'ios') return;
 
-    const topUp = () => { refreshAllIOSWidgets().catch(() => {}); };
+    const topUp = () => {
+      if (useWidgetStore.getState().configs.length === 0) {
+        useWidgetStore.getState().addConfig();
+      }
+      refreshAllIOSWidgets().catch(() => {});
+    };
 
     let unsubHydration: (() => void) | undefined;
     if (useWidgetStore.persist.hasHydrated()) {

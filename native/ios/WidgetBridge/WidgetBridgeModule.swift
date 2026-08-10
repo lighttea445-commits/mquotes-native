@@ -64,7 +64,15 @@ class WidgetBridgeModule: NSObject {
       return
     }
 
+    // The epoch the extension counts rotations from. Stamped only when the
+    // queue's contents actually change, so an appearance push or a Pro flip
+    // reloads the timeline without moving the widget back to the first quote.
+    let previous = defaults.string(forKey: "mq_queue_\(configId)")
     defaults.set(quotesString, forKey: "mq_queue_\(configId)")
+    if previous != quotesString {
+      defaults.set(Date().timeIntervalSince1970 * 1000, forKey: "mq_epoch_\(configId)")
+    }
+
     defaults.set(json["rotateMinutes"] as? Int ?? 60, forKey: "mq_rotate_\(configId)")
     defaults.set(json["showBorder"] as? Bool ?? false, forKey: "mq_border_\(configId)")
     defaults.set(json["showButtons"] as? Bool ?? false, forKey: "mq_buttons_\(configId)")

@@ -14,7 +14,7 @@ EAS project ID: 7076af1d-0e03-4913-813f-3fa8061e252d
 
 - [ ] app.json — confirm ios.bundleIdentifier, ios.entitlements App Group, and all four plugins are present: @bacons/apple-targets, ./plugins/withWidgetBridgeModule, ./plugins/withWidgetExported, ./plugins/withWidgetPreview
 - [ ] eas.json — confirm ios build profiles exist for development (simulator), preview (simulator), production (Release + autoIncrement)
-- [ ] targets/quotes-widget/QuotesWidget.swift — full WidgetKit implementation. Reads from UserDefaults suite group.com.mquotes.shared. Serves .systemSmall/Medium/Large and .accessoryCircular/Rectangular/Inline. Verify: theme names in themeColors dict match constants/themes.ts, lock screen families are guarded by @available(iOSApplicationExtension 16.0, *)
+- [ ] targets/quotes-widget/QuotesWidget.swift — full WidgetKit implementation. Reads from UserDefaults suite group.com.mquotes.shared. Serves .systemSmall/Medium/Large plus .accessoryRectangular/Inline. .accessoryCircular is deliberately absent: the area below the clock accepts both circular and rectangular, so declaring both lists Quotable twice. No themes are offered, because the system discards widget colours in accented rendering
 - [ ] native/ios/WidgetBridge/WidgetBridgeModule.swift — writes quote data to shared UserDefaults, calls WidgetCenter.shared.reloadAllTimelines(). Verify App Group ID string matches exactly
 - [ ] native/ios/WidgetBridge/WidgetBridgeModule.m — Obj-C bridge registering the Swift module. Verify module name matches Swift class name
 - [ ] plugins/withWidgetBridgeModule.js — copies WidgetBridge files into generated /ios and adds them to main app target (not widget extension). Verify after prebuild
@@ -86,11 +86,13 @@ EAS project ID: 7076af1d-0e03-4913-813f-3fa8061e252d
 
 These exist in code but have never run against a real iOS build:
 - WidgetBridgeModule end-to-end (UserDefaults write + WidgetCenter reload)
-- QuotesWidget visual output across all six widget families
-- The quote queue (mq_quotes) and its multi-entry rotating timeline
-- Widget tap deep link (quotable://widget-open?src=ios&i=N)
-- Apple's Edit Widget panel (theme / text size / author via QuoteWidgetIntent)
-- The mq_is_pro render-path gate on those three settings
+- QuotesWidget visual output across all five widget families
+- The per-config quote queue (mq_queue_<configId>) and its multi-entry rotating timeline
+- Rotation position surviving a reload, via the mq_epoch_<configId> stamp
+- Widget tap deep link (quotable://widget-open?src=ios&cfg=<configId>&i=N, and the setup=1 variant when no config resolves)
+- Apple's Edit Widget panel (the config picker via QuoteWidgetIntent, backed by mq_configs)
+- The mq_is_pro render-path gate on the border
+- The mq_ext_last_run / mq_ext_last_status heartbeat the extension writes
 
 Note: the widget moved from StaticConfiguration to AppIntentConfiguration. Any
 widget placed by an older build must be removed and re-added — iOS will not

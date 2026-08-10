@@ -225,10 +225,17 @@ export async function fetchMultipleRandomQuotes(count = 20): Promise<ApiQuote[]>
 /**
  * Fetch quotes for a category using Quotable's server-side tag filter.
  * `category` is the app's internal id (e.g. 'wisdom').
+ *
+ * `limit` exists for the iOS widget queue, which is 48 long: at the default of
+ * 25 a category-backed widget rotated through half the quotes a general one
+ * did. Card-stack callers keep the smaller page.
  */
-export async function fetchQuotesByCategory(category: string): Promise<ApiQuote[]> {
+export async function fetchQuotesByCategory(
+  category: string,
+  limit: 25 | 50 = 25,
+): Promise<ApiQuote[]> {
   const tag = getCategoryApiTag(category);
-  return shuffleArray(await fetchFromApi(25, tag));
+  return shuffleArray(await fetchFromApi(limit, tag));
 }
 
 /** Topics delegate to category fetching. */

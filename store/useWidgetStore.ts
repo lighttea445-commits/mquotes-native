@@ -88,6 +88,13 @@ export interface WidgetConfig {
   showButtons: boolean;
   cachedQuote: { text: string; author: string; quoteId?: string } | null;
   lastRefreshed: string | null;
+  /**
+   * iOS only. How many quotes the last delivered queue held, which is how long
+   * the widget takes to walk it. The refresh window is derived from this, so a
+   * queue is rewritten once it has been walked rather than on a fixed clock.
+   * Null on a config persisted before this field existed, and on Android.
+   */
+  queueLength: number | null;
 }
 
 /** Ids only need to be unique within one device's store, not globally. */
@@ -119,6 +126,7 @@ export function createConfig(name: string): WidgetConfig {
     showButtons: false,
     cachedQuote: null,
     lastRefreshed: null,
+    queueLength: null,
   };
 }
 

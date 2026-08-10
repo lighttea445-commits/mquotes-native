@@ -107,7 +107,13 @@ The two platforms use deliberately different models. Do not try to unify them.
 
 **Android** — `react-native-android-widget`. `BasicWidget` is declared in `app.json`. `widget/QuoteWidget.tsx` renders it, `widget/widgetTaskHandler.ts` handles widget events, `tasks/widgetRefreshTask.ts` is the registered background refresh. Each placed widget has its own config keyed by widget id in `useWidgetStore`.
 
-**iOS** — the OS gives the app no widget ids and cannot wake JS in the background, so the Android model does not carry over. Instead, all iOS widgets share one config under `IOS_WIDGET_CONFIG_ID`, and the app pre-writes a batch of quotes into the App Group `group.com.mquotes.shared`. The extension walks that queue on its own timeline. Appearance is configured in Apple's Edit Widget panel, not in the app.
+**iOS** — the OS gives the app no widget ids and cannot wake JS in the background, so the Android model does not carry over. Every config in the library gets its own queue in the App Group `group.com.mquotes.shared`, keyed by config id (`mq_queue_<id>`, `mq_rotate_<id>`, `mq_border_<id>`, `mq_epoch_<id>`). Which config a *placed* widget uses is chosen in Apple's Edit Widget panel through an AppIntent, backed by the `mq_configs` metadata list. iOS never reports that choice back, so the app cannot drive it.
+
+Nothing renders until `mq_configs` exists, so every path that can run before a queue does must call `ensureIOSConfigMetadata()`. A config is seeded at first iOS launch in `app/_layout.tsx` rather than waiting for the Widgets screen.
+
+The extension walks its queue on its own timeline. Position is derived from elapsed wall clock against `mq_epoch_<id>`, which the bridge stamps only when the queue's *contents* change, so an appearance push or a Pro flip reloads without resetting to the first quote. The queue is rewritten once it has been walked (`rotateMinutes × queueLength`, capped at 7 days), not on a fixed clock.
+
+Two keys flow extension-to-app: `mq_seen_<id>` (this config was rendered) and `mq_ext_last_run` / `mq_ext_last_status` (the extension ran, and what it found). Nothing reads the latter pair yet; they exist because a blank widget has three indistinguishable causes and there is no Mac in the loop.
 
 - `lib/iosWidget.ts` — the data pump, and the best explanation of the model
 - `targets/quotes-widget/QuotesWidget.swift` — the WidgetKit extension, deployment target 17.0, bundle id `com.kovoapps.quotable.quotes-widget`
@@ -117,7 +123,15 @@ The two platforms use deliberately different models. Do not try to unify them.
 
 ### Deep links
 
-Scheme `quotable`. A widget tap opens `quotable://widget-open?src=<platform>&i=<index>`, handled by `app/widget-open.tsx` through `useDeepLinkStore`. `app/index.tsx` keeps a fallback for the older `quotable://?src=widget&...` format still baked into widgets rendered before the change.
+Scheme `quotable`. A widget tap opens one of:
+
+- `quotable://widget-open?widgetId=<id>` (Android)
+- `quotable://widget-open?src=ios&cfg=<configId>&i=<index>` (iOS)
+- `quotable://widget-open?src=ios&setup=1` (iOS, no config resolved yet)
+
+Handled by `app/widget-open.tsx` through `useDeepLinkStore`, with a `Linking` fallback in `app/_layout.tsx` for repeat taps on an unchanged URL. `cfg` is required on the iOS path: both handlers gate on it, and `i` indexes that config's queue mirrored into AsyncStorage under `IOS_WIDGET_QUEUE_KEY_PREFIX`. `app/index.tsx` keeps a fallback for the older `quotable://?src=widget&...` format still baked into widgets rendered before the change.
+
+The extension must never emit `.widgetURL(nil)`, which makes the whole widget a dead tap target.
 
 ### Notifications
 
