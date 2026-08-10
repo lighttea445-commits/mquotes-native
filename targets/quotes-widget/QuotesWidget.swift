@@ -19,6 +19,18 @@ private let kMaxEntries = 64
 /// Last-resort text when the App Group holds nothing at all.
 private let kFallbackText = "The journey of a thousand miles begins with a single step."
 
+/// The Minimal theme's background and text, mirrored from constants/themes.ts
+/// (#0D0D0D and #E8E0D0). The extension cannot reach the app's tokens, so the
+/// two values are restated here and must be changed together with the theme.
+///
+/// These are used only in full colour rendering. They give the widget an opaque
+/// card of its own instead of letting iOS 26's Liquid Glass container show
+/// through, and they are fixed rather than `Color.primary` because the widget is
+/// always dark: `Color.primary` follows the device's light/dark setting and
+/// would render the quote near-black on this background in light mode.
+private let kWidgetBackground = Color(red: 0.051, green: 0.051, blue: 0.051)
+private let kWidgetText = Color(red: 0.910, green: 0.878, blue: 0.816)
+
 // MARK: - Data model
 
 struct QuoteEntry: TimelineEntry {
@@ -327,7 +339,7 @@ struct QuoteWidgetView: View {
 
       Text(entry.quoteText)
         .font(.custom("Georgia", size: quoteFontSize))
-        .foregroundColor(isFullColor ? Color.primary : nil)
+        .foregroundColor(isFullColor ? kWidgetText : nil)
         .multilineTextAlignment(.center)
         // No line limit — the quote must be shown in full, so it wraps freely
         // and shrinks to fit rather than truncating with an ellipsis.
@@ -353,15 +365,21 @@ struct QuoteWidgetView: View {
     .overlay {
       if entry.showBorder {
         RoundedRectangle(cornerRadius: 22, style: .continuous)
-          .strokeBorder(Color.primary.opacity(0.35), lineWidth: 1)
+          .strokeBorder((isFullColor ? kWidgetText : Color.primary).opacity(0.35), lineWidth: 1)
       }
     }
     .widgetURL(tapURL(for: entry))
-    // Clear, so the system's own widget material shows through — iOS 26 draws a
-    // Liquid Glass container behind every home screen widget, and an opaque fill
-    // here simply paints over it. Matches the accessory views, which have always
-    // deferred to the system background.
-    .containerBackground(.clear, for: .widget)
+    // Opaque on purpose. Left clear, the widget shows iOS 26's Liquid Glass
+    // container instead of a card of its own, and the glass reads as bright
+    // refracted edges down the left and right sides.
+    //
+    // This is the only place the background may be drawn. As content — a
+    // Rectangle, a .background() — it would be recoloured along with the text in
+    // accented rendering and flatten the whole widget into a pale card. As the
+    // container background the system drops it entirely in that mode and
+    // substitutes its own material, so a Tinted or Clear Home Screen is
+    // unaffected by this fill (see isFullColor).
+    .containerBackground(kWidgetBackground, for: .widget)
   }
 }
 
