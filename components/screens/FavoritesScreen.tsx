@@ -4,7 +4,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useHaptics } from '../../hooks/useHaptics';
 import { SheetHeader } from '../ui/SheetHeader';
-import { IconButton } from '../ui/IconButton';
 import { SearchField } from '../ui/SearchField';
 import { QuoteListCard } from '../ui/QuoteListCard';
 import { ConfirmSheet } from '../ui/ConfirmSheet';
@@ -15,8 +14,6 @@ import { useFavoritesStore, FavoriteQuote } from '../../store/useFavoritesStore'
 import { useCollectionsStore } from '../../store/useCollectionsStore';
 import { useShareStore } from '../../store/useShareStore';
 import { useModal } from '../../contexts/ModalContext';
-
-type Order = 'newest' | 'oldest';
 
 export default function FavoritesScreen({ onClose, onBack }: { onClose?: () => void; onBack?: () => void }) {
   const theme = useTheme();
@@ -36,23 +33,21 @@ export default function FavoritesScreen({ onClose, onBack }: { onClose?: () => v
   );
 
   const [query, setQuery] = useState('');
-  const [order, setOrder] = useState<Order>('newest');
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [saving, setSaving] = useState<FavoriteQuote | null>(null);
 
   const close = onClose ?? (() => router.back());
   const back = onBack ?? close;
 
+  // The store already holds newest first.
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const matched = q
+    return q
       ? favorites.filter(
           f => f.text.toLowerCase().includes(q) || f.author.toLowerCase().includes(q),
         )
       : favorites;
-    // The store already holds newest first, so only the reverse needs sorting.
-    return order === 'newest' ? matched : [...matched].reverse();
-  }, [favorites, query, order]);
+  }, [favorites, query]);
 
   const handleUnfavorite = (quote: FavoriteQuote) => {
     haptics.selection();
@@ -72,20 +67,6 @@ export default function FavoritesScreen({ onClose, onBack }: { onClose?: () => v
           title="Favorites"
           leading="back"
           onLeadingPress={back}
-          right={
-            favorites.length > 1 ? (
-              <IconButton
-                icon="sort-variant"
-                onPress={() => setOrder(o => (o === 'newest' ? 'oldest' : 'newest'))}
-                filled={false}
-                iconSize={22}
-                color={theme.gold}
-                accessibilityLabel={
-                  order === 'newest' ? 'Sort by oldest saved first' : 'Sort by newest saved first'
-                }
-              />
-            ) : undefined
-          }
           actionLabel={favorites.length > 0 ? 'Clear all' : undefined}
           onActionPress={favorites.length > 0 ? () => setShowClearConfirm(true) : undefined}
         />
