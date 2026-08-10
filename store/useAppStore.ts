@@ -10,7 +10,7 @@ export interface UserPreferences {
   categories: string[];
   notificationsEnabled: boolean;
   notificationTime: string; // HH:mm format e.g. "08:00" (legacy, kept for onboarding compat)
-  notificationCount: number; // 1–10, default 5
+  notificationCount: number; // 1–20, default 5
   notificationStartTime: string; // HH:mm, default "09:00"
   notificationEndTime: string; // HH:mm, default "22:00"
   notificationDays: number[]; // JS weekdays 0=Sun..6=Sat; empty = all 7

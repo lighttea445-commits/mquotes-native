@@ -178,7 +178,7 @@ function RootLayoutInner() {
   }, [lastNotifResponse]);
 
   // ── Refresh notification quotes on launch ───────────────────────────────
-  // Guard: skip if a reschedule already happened within the last 18 hours.
+  // Guard: skip if a reschedule already happened within the last 6 hours.
   // Without this guard, every app open cancels all pending notifications and
   // re-schedules them, which can silently drop same-day notifications that
   // haven't fired yet (e.g. a 3 PM notification cancelled at 2:59 PM gets

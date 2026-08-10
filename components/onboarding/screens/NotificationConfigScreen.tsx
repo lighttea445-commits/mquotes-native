@@ -20,7 +20,10 @@ import { OnboardingHeader } from '../OnboardingHeader';
 import { ContinueButton } from '../ContinueButton';
 import { OB, ON_GOLD } from '../tokens';
 
-const MIN_COUNT = 0;
+// Floors at 1 to match the Reminders screen. At 0 the scheduler skips daily
+// quotes entirely while the toggle still reads as on, so a free user could
+// finish onboarding with permission granted and nothing scheduled at all.
+const MIN_COUNT = 1;
 const MAX_COUNT = 20;
 
 export interface NotificationConfig {

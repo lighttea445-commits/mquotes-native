@@ -21,6 +21,32 @@ export interface NotifQuote {
   id: string;
 }
 
+/**
+ * Page size for category-backed reminders. iOS holds up to 64 pending
+ * notifications, so the default 25 meant a topic-backed schedule started
+ * repeating itself less than halfway through.
+ */
+const CATEGORY_PAGE = 50;
+
+/**
+ * Last resort when the device is offline at reschedule time and every source
+ * comes back empty. More than one, because the scheduler cycles this list
+ * across every slot it fills: a single entry meant a full offline schedule of
+ * identical notifications.
+ */
+const OFFLINE_FALLBACK: NotifQuote[] = [
+  { content: 'The only way to do great work is to love what you do.', author: 'Steve Jobs', id: 'fallback-1' },
+  { content: 'What we think, we become.', author: 'Buddha', id: 'fallback-2' },
+  { content: 'It always seems impossible until it is done.', author: 'Nelson Mandela', id: 'fallback-3' },
+  { content: 'The best way out is always through.', author: 'Robert Frost', id: 'fallback-4' },
+  { content: 'Whether you think you can or you think you cannot, you are right.', author: 'Henry Ford', id: 'fallback-5' },
+  { content: 'Well done is better than well said.', author: 'Benjamin Franklin', id: 'fallback-6' },
+  { content: 'The journey of a thousand miles begins with one step.', author: 'Lao Tzu', id: 'fallback-7' },
+  { content: 'He who has a why to live can bear almost any how.', author: 'Friedrich Nietzsche', id: 'fallback-8' },
+  { content: 'Everything you want is on the other side of fear.', author: 'George Addair', id: 'fallback-9' },
+  { content: 'Quality is not an act, it is a habit.', author: 'Aristotle', id: 'fallback-10' },
+];
+
 const toNotif = (q: ApiQuote): NotifQuote => ({
   content: q.content,
   author: q.author,
@@ -64,7 +90,7 @@ async function followedQuotes(count: number): Promise<NotifQuote[]> {
 
   const pools: NotifQuote[][] = [];
   if (realTopics.length > 0) {
-    const fetched = await Promise.all(realTopics.map(t => fetchQuotesByCategory(t)));
+    const fetched = await Promise.all(realTopics.map(t => fetchQuotesByCategory(t, CATEGORY_PAGE)));
     pools.push(...fetched.map(list => list.map(toNotif)));
   }
   if (followed.includes(TOPIC_GENERAL) || realTopics.length === 0) {
@@ -104,7 +130,7 @@ export async function resolveNotificationQuotes(
     } else if (source === TOPIC_GENERAL) {
       quotes = (await fetchQuotesForNotifications(count)).map(toNotif);
     } else {
-      quotes = (await fetchQuotesByCategory(source)).map(toNotif);
+      quotes = (await fetchQuotesByCategory(source, CATEGORY_PAGE)).map(toNotif);
     }
   } catch {
     quotes = [];
@@ -115,12 +141,10 @@ export async function resolveNotificationQuotes(
   // Source came back empty — an emptied collection, no favorites yet, or a
   // failed request. Fall back rather than schedule nothing.
   try {
-    return (await fetchQuotesForNotifications(count)).map(toNotif);
+    const general = (await fetchQuotesForNotifications(count)).map(toNotif);
+    if (general.length > 0) return general;
   } catch {
-    return [{
-      content: 'The only way to do great work is to love what you do.',
-      author: 'Steve Jobs',
-      id: 'fallback',
-    }];
+    // Offline or the API is down — fall through.
   }
+  return OFFLINE_FALLBACK;
 }

@@ -1,22 +1,24 @@
 /**
  * Unit tests for lib/notifications.ts
  *
- * Bugs exercised:
- * B1 — iOS 64-notification limit overflow: when all 4 reminder types are on,
- *      count=10, and 5+ specific weekdays are selected, total notifications > 64.
- * B2 — buildTimes edge: endTime ≤ startTime falls back to startTime+60.
- * B3 — WEEKLY vs DAILY trigger selection by day count.
- * B4 — scheduleQuoteNotifications (legacy) delegates correctly.
- * B5 — Race guard: only the last rescheduleAll call completes.
+ * The scheduler mixes two trigger models, and most of what can go wrong lives
+ * in the seam between them:
+ *   Daily quotes  → one-shot DATE triggers, one per slot per future day, so
+ *                   every notification can carry its own quote.
+ *   QoD / streak  → repeating DAILY (all days) or WEEKLY (a subset of days),
+ *                   since their content is static.
+ *
+ * `new Date()` decides which days get filled, so every rescheduleAll suite
+ * runs against a frozen clock.
  */
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
-// Hoisted outside the factory so they remain stable across jest.resetModules()
-const mockGetPermissions    = jest.fn().mockResolvedValue({ status: 'granted' });
+// Hoisted outside the factories so they survive jest.resetModules().
+const mockGetPermissions     = jest.fn().mockResolvedValue({ status: 'granted' });
 const mockRequestPermissions = jest.fn().mockResolvedValue({ status: 'granted' });
-const mockCancel    = jest.fn().mockResolvedValue(undefined);
-const mockSchedule  = jest.fn().mockResolvedValue('id');
+const mockCancel     = jest.fn().mockResolvedValue(undefined);
+const mockSchedule   = jest.fn().mockResolvedValue('id');
 const mockSetChannel = jest.fn().mockResolvedValue(undefined);
 
 jest.mock('expo-notifications', () => ({
@@ -27,50 +29,53 @@ jest.mock('expo-notifications', () => ({
   setNotificationChannelAsync: mockSetChannel,
   AndroidImportance: { DEFAULT: 3 },
   SchedulableTriggerInputTypes: {
+    DATE: 'date',
     DAILY: 'daily',
     WEEKLY: 'weekly',
   },
 }));
 
-jest.mock('react-native', () => ({
-  Platform: { OS: 'ios' },
-}));
+// Mutable so a single suite can flip platforms. rescheduleAll reads Platform.OS
+// at call time, not at import time.
+const mockPlatform = { OS: 'ios' as 'ios' | 'android' };
+jest.mock('react-native', () => ({ Platform: mockPlatform }));
 
-jest.mock('../../lib/quotesApi', () => ({
-  fetchQuotesForNotifications: jest.fn().mockResolvedValue([
-    { content: 'Quote one', author: 'Author A', _id: 'q1' },
-    { content: 'Quote two', author: 'Author B', _id: 'q2' },
-    { content: 'Quote three', author: 'Author C', _id: 'q3' },
-  ]),
-}));
+// Distinct quotes, as many as asked for, so "every slot gets its own quote" is
+// observable rather than hidden behind a three-item fixture.
+const mockResolveQuotes = jest.fn(async (_source: string, count: number) =>
+  Array.from({ length: count }, (_, i) => ({
+    content: `Quote ${i}`,
+    author: `Author ${i}`,
+    id: `q${i}`,
+  })),
+);
 
-// rescheduleAll resolves quotes through this module, which reaches into the
-// zustand stores (and so AsyncStorage). Mocked so these tests stay focused on
-// scheduling behaviour rather than store wiring.
 jest.mock('../../lib/notificationQuotes', () => ({
   SOURCE_FOLLOWING: 'following',
   COLLECTION_PREFIX: 'collection:',
-  resolveNotificationQuotes: jest.fn().mockResolvedValue([
-    { content: 'Quote one', author: 'Author A', id: 'q1' },
-    { content: 'Quote two', author: 'Author B', id: 'q2' },
-    { content: 'Quote three', author: 'Author C', id: 'q3' },
-  ]),
+  resolveNotificationQuotes: mockResolveQuotes,
 }));
 
 // Quote of the Day and the streak reminder are Premium-gated inside
-// rescheduleAll; these tests assert the scheduling itself, so run as a member.
-jest.mock('../../hooks/useRevenueCat', () => ({
-  getIsPro: () => true,
-}));
+// rescheduleAll. Mutable so the gate itself can be tested.
+let mockIsPro = true;
+jest.mock('../../hooks/useRevenueCat', () => ({ getIsPro: () => mockIsPro }));
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/** iOS hard cap on scheduled notifications */
+/** iOS hard cap on pending notifications. */
 const IOS_NOTIF_LIMIT = 64;
 
-const ALL_TYPES_OPTS = {
+/**
+ * Frozen clock: 08:00 local, early enough that a 09:00–22:00 window still has
+ * all of today's slots ahead of it.
+ */
+const NOW = new Date(2026, 2, 10, 8, 0, 0); // 10 March 2026
+const TODAY_DOW = NOW.getDay();
+
+const BASE_OPTS = {
   enabled: true,
-  days: [] as number[], // all 7 days → DAILY triggers
+  days: [] as number[], // all 7 days
   quotesEnabled: true,
   showAuthor: false,
   quoteCount: 5,
@@ -82,14 +87,32 @@ const ALL_TYPES_OPTS = {
   streakTime: '21:00',
 };
 
+type Call = { content: any; trigger: any };
+const calls = (): Call[] => mockSchedule.mock.calls.map((c) => c[0]);
+const triggers = () => calls().map((c) => c.trigger);
+const byCategory = (cat: string) => calls().filter((c) => c.content.data?.category === cat);
+
+function freshScheduler() {
+  jest.resetModules();
+  return require('../../lib/notifications');
+}
+
+function resetAll() {
+  mockSchedule.mockClear();
+  mockCancel.mockClear();
+  mockSetChannel.mockClear();
+  mockResolveQuotes.mockClear();
+  mockPlatform.OS = 'ios';
+  mockIsPro = true;
+}
+
 // ── formatHHMMto12h ───────────────────────────────────────────────────────────
 
 describe('formatHHMMto12h', () => {
   let formatHHMMto12h: (hhmm: string) => string;
 
   beforeEach(() => {
-    jest.resetModules();
-    ({ formatHHMMto12h } = require('../../lib/notifications'));
+    ({ formatHHMMto12h } = freshScheduler());
   });
 
   it('formats midnight (00:00) as 12:00 AM', () => {
@@ -117,7 +140,7 @@ describe('formatHHMMto12h', () => {
   });
 });
 
-// ── requestPermissions ────────────────────────────────────────────────────────
+// ── Permissions ───────────────────────────────────────────────────────────────
 
 describe('requestPermissions', () => {
   beforeEach(() => {
@@ -165,342 +188,591 @@ describe('requestPermissions', () => {
   });
 });
 
-// ── rescheduleAll — trigger types ─────────────────────────────────────────────
-
-describe('rescheduleAll — trigger types', () => {
+describe('canAskForPermissions', () => {
   beforeEach(() => {
     jest.resetModules();
-    mockSchedule.mockClear();
-    mockCancel.mockClear();
+    mockGetPermissions.mockReset();
   });
 
-  it('uses DAILY triggers when all 7 days are selected (empty array)', async () => {
-    const { rescheduleAll } = require('../../lib/notifications');
-    await rescheduleAll({ ...ALL_TYPES_OPTS, days: [] });
-
-    const triggers = mockSchedule.mock.calls.map((c) => c[0].trigger.type);
-    expect(triggers.every((t) => t === 'daily')).toBe(true);
+  it('is false once granted — there is no dialog left to show', async () => {
+    mockGetPermissions.mockResolvedValueOnce({ status: 'granted' });
+    const { canAskForPermissions } = require('../../lib/notifications');
+    expect(await canAskForPermissions()).toBe(false);
   });
 
-  it('uses DAILY triggers when all 7 specific days are listed', async () => {
-    const { rescheduleAll } = require('../../lib/notifications');
-    await rescheduleAll({ ...ALL_TYPES_OPTS, days: [0, 1, 2, 3, 4, 5, 6] });
-
-    const triggers = mockSchedule.mock.calls.map((c) => c[0].trigger.type);
-    expect(triggers.every((t) => t === 'daily')).toBe(true);
+  it('is false when hard-denied — Settings is the only route left', async () => {
+    mockGetPermissions.mockResolvedValueOnce({ status: 'denied', canAskAgain: false });
+    const { canAskForPermissions } = require('../../lib/notifications');
+    expect(await canAskForPermissions()).toBe(false);
   });
 
-  it('uses WEEKLY triggers when a subset of days is selected', async () => {
-    const { rescheduleAll } = require('../../lib/notifications');
-    await rescheduleAll({ ...ALL_TYPES_OPTS, days: [1, 2, 3] }); // Mon–Wed
-
-    const triggers = mockSchedule.mock.calls.map((c) => c[0].trigger.type);
-    expect(triggers.every((t) => t === 'weekly')).toBe(true);
-  });
-
-  it('assigns correct Expo weekday numbers (JS 0-based + 1)', async () => {
-    const { rescheduleAll } = require('../../lib/notifications');
-    // JS Sunday=0 → Expo weekday=1, JS Saturday=6 → Expo weekday=7
-    await rescheduleAll({ ...ALL_TYPES_OPTS, days: [0, 6], quotesEnabled: false, qodEnabled: true, qodTime: '08:00', streakEnabled: false });
-
-    const weekdays = mockSchedule.mock.calls.map((c) => c[0].trigger.weekday);
-    expect(weekdays).toContain(1); // Sunday
-    expect(weekdays).toContain(7); // Saturday
+  it('is true when denied but still re-askable', async () => {
+    mockGetPermissions.mockResolvedValueOnce({ status: 'denied', canAskAgain: true });
+    const { canAskForPermissions } = require('../../lib/notifications');
+    expect(await canAskForPermissions()).toBe(true);
   });
 });
 
-// ── rescheduleAll — disabled ───────────────────────────────────────────────────
+// ── rescheduleAll ─────────────────────────────────────────────────────────────
 
-describe('rescheduleAll — disabled', () => {
+describe('rescheduleAll', () => {
+  beforeAll(() => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
+    jest.setSystemTime(NOW);
+  });
+
+  afterAll(() => {
+    jest.useRealTimers();
+  });
+
   beforeEach(() => {
-    jest.resetModules();
-    mockSchedule.mockClear();
-    mockCancel.mockClear();
+    resetAll();
+    mockGetPermissions.mockResolvedValue({ status: 'granted' });
   });
 
-  it('cancels all and schedules nothing when enabled=false', async () => {
-    const { rescheduleAll } = require('../../lib/notifications');
-    await rescheduleAll({ ...ALL_TYPES_OPTS, enabled: false });
+  // ── Trigger model ─────────────────────────────────────────────────────────
 
-    expect(mockCancel).toHaveBeenCalledTimes(1);
-    expect(mockSchedule).not.toHaveBeenCalled();
-  });
+  describe('trigger model', () => {
+    it('gives daily quotes one-shot DATE triggers, not repeating ones', async () => {
+      const { rescheduleAll } = freshScheduler();
+      await rescheduleAll(BASE_OPTS);
 
-  it('cancels all and schedules nothing when all sub-types disabled', async () => {
-    const { rescheduleAll } = require('../../lib/notifications');
-    await rescheduleAll({
-      ...ALL_TYPES_OPTS,
-      quotesEnabled: false,
-      qodEnabled: false,
-      streakEnabled: false,
+      expect(byCategory('daily-quote').length).toBeGreaterThan(0);
+      expect(byCategory('daily-quote').every((c) => c.trigger.type === 'date')).toBe(true);
+      expect(byCategory('daily-quote').every((c) => c.trigger.date instanceof Date)).toBe(true);
     });
 
-    expect(mockCancel).toHaveBeenCalledTimes(1);
-    expect(mockSchedule).not.toHaveBeenCalled();
+    it('gives QoD and streak DAILY triggers when all 7 days are selected', async () => {
+      const { rescheduleAll } = freshScheduler();
+      await rescheduleAll({ ...BASE_OPTS, days: [] });
+
+      expect(byCategory('qod').map((c) => c.trigger.type)).toEqual(['daily']);
+      expect(byCategory('streak').map((c) => c.trigger.type)).toEqual(['daily']);
+    });
+
+    it('treats an explicit all-7 list the same as an empty one', async () => {
+      const { rescheduleAll } = freshScheduler();
+      await rescheduleAll({ ...BASE_OPTS, days: [0, 1, 2, 3, 4, 5, 6] });
+
+      expect(byCategory('qod').map((c) => c.trigger.type)).toEqual(['daily']);
+      expect(byCategory('streak').map((c) => c.trigger.type)).toEqual(['daily']);
+    });
+
+    it('gives QoD and streak WEEKLY triggers, one per day, on a subset', async () => {
+      const { rescheduleAll } = freshScheduler();
+      const days = [1, 2, 3]; // Mon–Wed
+      await rescheduleAll({ ...BASE_OPTS, days });
+
+      const qod = byCategory('qod');
+      expect(qod).toHaveLength(days.length);
+      expect(qod.every((c) => c.trigger.type === 'weekly')).toBe(true);
+      expect(byCategory('streak')).toHaveLength(days.length);
+    });
+
+    it('converts JS weekdays to Expo weekdays (0-based + 1)', async () => {
+      const { rescheduleAll } = freshScheduler();
+      // JS Sunday=0 → Expo weekday=1, JS Saturday=6 → Expo weekday=7
+      await rescheduleAll({
+        ...BASE_OPTS,
+        days: [0, 6],
+        quotesEnabled: false,
+        streakEnabled: false,
+      });
+
+      expect(byCategory('qod').map((c) => c.trigger.weekday).sort()).toEqual([1, 7]);
+    });
+
+    it('only fills dates matching the selected weekdays', async () => {
+      const { rescheduleAll } = freshScheduler();
+      const days = [1, 3, 5];
+      await rescheduleAll({ ...BASE_OPTS, days, qodEnabled: false, streakEnabled: false });
+
+      const dows = byCategory('daily-quote').map((c) => (c.trigger.date as Date).getDay());
+      expect(dows.length).toBeGreaterThan(0);
+      expect(dows.every((d) => days.includes(d))).toBe(true);
+    });
+  });
+
+  // ── Disabled ──────────────────────────────────────────────────────────────
+
+  describe('disabled', () => {
+    it('cancels all and schedules nothing when enabled=false', async () => {
+      const { rescheduleAll } = freshScheduler();
+      await rescheduleAll({ ...BASE_OPTS, enabled: false });
+
+      expect(mockCancel).toHaveBeenCalledTimes(1);
+      expect(mockSchedule).not.toHaveBeenCalled();
+    });
+
+    it('cancels all and schedules nothing when every sub-type is off', async () => {
+      const { rescheduleAll } = freshScheduler();
+      await rescheduleAll({
+        ...BASE_OPTS,
+        quotesEnabled: false,
+        qodEnabled: false,
+        streakEnabled: false,
+      });
+
+      expect(mockCancel).toHaveBeenCalledTimes(1);
+      expect(mockSchedule).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── Premium gating ────────────────────────────────────────────────────────
+
+  describe('premium gating', () => {
+    it('drops QoD and streak for a free user even when the prefs say on', async () => {
+      mockIsPro = false;
+      const { rescheduleAll } = freshScheduler();
+      await rescheduleAll(BASE_OPTS);
+
+      expect(byCategory('qod')).toHaveLength(0);
+      expect(byCategory('streak')).toHaveLength(0);
+      expect(byCategory('daily-quote').length).toBeGreaterThan(0);
+    });
+
+    // The cap is spent in whole days, so the two slots QoD and streak reserve
+    // only buy back a day when they tip the division: 16 a day fits 3 days
+    // inside 62 slots but 4 inside all 64.
+    it('reclaims the reserved slots for daily quotes', async () => {
+      const { rescheduleAll } = freshScheduler();
+      await rescheduleAll({ ...BASE_OPTS, quoteCount: 16 });
+      const proQuotes = byCategory('daily-quote').length;
+
+      mockSchedule.mockClear();
+      mockIsPro = false;
+      await rescheduleAll({ ...BASE_OPTS, quoteCount: 16 });
+
+      expect(byCategory('daily-quote').length).toBeGreaterThan(proQuotes);
+      expect(mockSchedule.mock.calls.length).toBeLessThanOrEqual(IOS_NOTIF_LIMIT);
+    });
+  });
+
+  // ── Volume and the iOS cap ────────────────────────────────────────────────
+
+  describe('volume', () => {
+    it('fills several days ahead so one launch covers more than today', async () => {
+      const { rescheduleAll } = freshScheduler();
+      await rescheduleAll({ ...BASE_OPTS, quoteCount: 5 });
+
+      const days = new Set(
+        byCategory('daily-quote').map((c) => (c.trigger.date as Date).toDateString()),
+      );
+      expect(days.size).toBeGreaterThan(1);
+      expect(byCategory('daily-quote')).toHaveLength(days.size * 5);
+    });
+
+    it('never exceeds the iOS 64-notification cap', async () => {
+      const { rescheduleAll } = freshScheduler();
+
+      const configs = [
+        { quoteCount: 20, days: [] as number[] },
+        { quoteCount: 12, days: [1, 2, 3, 4, 5] },
+        { quoteCount: 1, days: [] as number[] },
+        { quoteCount: 20, days: [0, 1, 2, 3, 4, 5] },
+      ];
+
+      for (const cfg of configs) {
+        mockSchedule.mockClear();
+        await rescheduleAll({ ...BASE_OPTS, ...cfg });
+        expect(mockSchedule.mock.calls.length).toBeLessThanOrEqual(IOS_NOTIF_LIMIT);
+      }
+    });
+
+    it('reserves cap room for QoD and streak before filling quote slots', async () => {
+      const { rescheduleAll } = freshScheduler();
+      await rescheduleAll({ ...BASE_OPTS, quoteCount: 20, days: [] });
+
+      // The repeating pair is scheduled last, so it only lands if the quote
+      // loop left room for it.
+      expect(byCategory('qod')).toHaveLength(1);
+      expect(byCategory('streak')).toHaveLength(1);
+      expect(mockSchedule.mock.calls.length).toBeLessThanOrEqual(IOS_NOTIF_LIMIT);
+    });
+
+    it('is not capped on Android', async () => {
+      mockPlatform.OS = 'android';
+      const { rescheduleAll } = freshScheduler();
+      await rescheduleAll({ ...BASE_OPTS, quoteCount: 20, days: [] });
+
+      expect(mockSchedule.mock.calls.length).toBeGreaterThan(IOS_NOTIF_LIMIT);
+    });
+
+    it('gives every slot its own quote', async () => {
+      const { rescheduleAll } = freshScheduler();
+      await rescheduleAll({ ...BASE_OPTS, quoteCount: 5, qodEnabled: false, streakEnabled: false });
+
+      const ids = byCategory('daily-quote').map((c) => c.content.data.quoteId);
+      expect(new Set(ids).size).toBe(ids.length);
+    });
+
+    it('cycles a short source rather than scheduling nothing', async () => {
+      mockResolveQuotes.mockResolvedValueOnce([
+        { content: 'Only one', author: 'Solo', id: 'only' },
+      ]);
+      const { rescheduleAll } = freshScheduler();
+      await rescheduleAll({ ...BASE_OPTS, quoteCount: 3, qodEnabled: false, streakEnabled: false });
+
+      const quotes = byCategory('daily-quote');
+      expect(quotes.length).toBeGreaterThan(1);
+      expect(quotes.every((c) => c.content.title === 'Only one')).toBe(true);
+    });
+  });
+
+  // ── Count clamping ────────────────────────────────────────────────────────
+
+  describe('count clamping', () => {
+    // Older onboarding builds let the stepper reach 0, which left the reminder
+    // reading as on with nothing scheduled behind it.
+    it('treats a stored count of 0 as 1 rather than scheduling nothing', async () => {
+      const { rescheduleAll } = freshScheduler();
+      await rescheduleAll({ ...BASE_OPTS, quoteCount: 0, qodEnabled: false, streakEnabled: false });
+
+      const quotes = byCategory('daily-quote');
+      expect(quotes.length).toBeGreaterThan(0);
+
+      const perDay = new Map<string, number>();
+      for (const c of quotes) {
+        const key = (c.trigger.date as Date).toDateString();
+        perDay.set(key, (perDay.get(key) ?? 0) + 1);
+      }
+      expect([...perDay.values()].every((n) => n === 1)).toBe(true);
+    });
+
+    it('clamps an absurd count to 20 per day', async () => {
+      const { rescheduleAll } = freshScheduler();
+      mockPlatform.OS = 'android'; // no cap, so the clamp is what limits it
+      await rescheduleAll({ ...BASE_OPTS, quoteCount: 500, qodEnabled: false, streakEnabled: false });
+
+      const perDay = new Map<string, number>();
+      for (const c of byCategory('daily-quote')) {
+        const key = (c.trigger.date as Date).toDateString();
+        perDay.set(key, (perDay.get(key) ?? 0) + 1);
+      }
+      expect(Math.max(...perDay.values())).toBe(20);
+    });
+
+    it('still schedules nothing when quotesEnabled is false', async () => {
+      const { rescheduleAll } = freshScheduler();
+      await rescheduleAll({ ...BASE_OPTS, quotesEnabled: false, quoteCount: 0 });
+
+      expect(byCategory('daily-quote')).toHaveLength(0);
+    });
+  });
+
+  // ── Times ─────────────────────────────────────────────────────────────────
+
+  describe('time windows', () => {
+    const timesOn = (dateStr: string) =>
+      byCategory('daily-quote')
+        .map((c) => c.trigger.date as Date)
+        .filter((d) => d.toDateString() === dateStr)
+        .map((d) => ({ h: d.getHours(), m: d.getMinutes() }));
+
+    it('distributes quote slots evenly across the window', async () => {
+      const { rescheduleAll } = freshScheduler();
+      // 09:00..13:00 (240 min) with 3 quotes → 09:00, 11:00, 13:00
+      await rescheduleAll({
+        ...BASE_OPTS,
+        quoteCount: 3,
+        startHHMM: '09:00',
+        endHHMM: '13:00',
+        qodEnabled: false,
+        streakEnabled: false,
+      });
+
+      expect(timesOn(NOW.toDateString())).toEqual([
+        { h: 9, m: 0 },
+        { h: 11, m: 0 },
+        { h: 13, m: 0 },
+      ]);
+    });
+
+    it('puts a single daily quote at the start of the window', async () => {
+      const { rescheduleAll } = freshScheduler();
+      await rescheduleAll({
+        ...BASE_OPTS,
+        quoteCount: 1,
+        startHHMM: '09:15',
+        endHHMM: '20:00',
+        qodEnabled: false,
+        streakEnabled: false,
+      });
+
+      expect(timesOn(NOW.toDateString())).toEqual([{ h: 9, m: 15 }]);
+    });
+
+    it('falls back to a one-hour window when endTime <= startTime', async () => {
+      const { rescheduleAll } = freshScheduler();
+      // Zero-width window: should not throw, and the midpoint of 10:00..11:00
+      // for two slots is 10:00 and 11:00.
+      await rescheduleAll({
+        ...BASE_OPTS,
+        quoteCount: 2,
+        startHHMM: '10:00',
+        endHHMM: '10:00',
+        qodEnabled: false,
+        streakEnabled: false,
+      });
+
+      expect(timesOn(NOW.toDateString())).toEqual([
+        { h: 10, m: 0 },
+        { h: 11, m: 0 },
+      ]);
+    });
+
+    it('never schedules a DATE trigger in the past', async () => {
+      const { rescheduleAll } = freshScheduler();
+      await rescheduleAll({ ...BASE_OPTS, startHHMM: '00:00', endHHMM: '23:00' });
+
+      const past = byCategory('daily-quote').filter(
+        (c) => (c.trigger.date as Date).getTime() <= NOW.getTime(),
+      );
+      expect(past).toHaveLength(0);
+    });
+
+    it('skips today entirely once the whole window has passed', async () => {
+      jest.setSystemTime(new Date(2026, 2, 10, 23, 30, 0));
+      try {
+        const { rescheduleAll } = freshScheduler();
+        await rescheduleAll({
+          ...BASE_OPTS,
+          startHHMM: '09:00',
+          endHHMM: '22:00',
+          qodEnabled: false,
+          streakEnabled: false,
+        });
+
+        const today = byCategory('daily-quote').filter(
+          (c) => (c.trigger.date as Date).toDateString() === NOW.toDateString(),
+        );
+        expect(today).toHaveLength(0);
+        expect(byCategory('daily-quote').length).toBeGreaterThan(0);
+      } finally {
+        jest.setSystemTime(NOW);
+      }
+    });
+
+    it('fires QoD at the configured hour and minute', async () => {
+      const { rescheduleAll } = freshScheduler();
+      await rescheduleAll({ ...BASE_OPTS, quotesEnabled: false, qodTime: '07:30', streakEnabled: false });
+
+      expect(byCategory('qod')[0].trigger).toMatchObject({ hour: 7, minute: 30 });
+    });
+
+    it('fires the streak reminder at the configured hour and minute', async () => {
+      const { rescheduleAll } = freshScheduler();
+      await rescheduleAll({ ...BASE_OPTS, quotesEnabled: false, qodEnabled: false, streakTime: '21:45' });
+
+      expect(byCategory('streak')[0].trigger).toMatchObject({ hour: 21, minute: 45 });
+    });
+  });
+
+  // ── Content ───────────────────────────────────────────────────────────────
+
+  describe('content', () => {
+    it('omits the body when showAuthor is false', async () => {
+      const { rescheduleAll } = freshScheduler();
+      await rescheduleAll({ ...BASE_OPTS, showAuthor: false, qodEnabled: false, streakEnabled: false });
+
+      expect(byCategory('daily-quote').every((c) => c.content.body === undefined)).toBe(true);
+    });
+
+    // The brand rule bans dashes in user-facing copy, so the body is the bare
+    // author name rather than "— Author".
+    it('uses the bare author name as the body when showAuthor is true', async () => {
+      const { rescheduleAll } = freshScheduler();
+      await rescheduleAll({ ...BASE_OPTS, showAuthor: true, qodEnabled: false, streakEnabled: false });
+
+      const quotes = byCategory('daily-quote');
+      expect(quotes.length).toBeGreaterThan(0);
+      for (const c of quotes) {
+        expect(c.content.body).toBe(c.content.data.quoteAuthor);
+        expect(c.content.body).not.toMatch(/[-–—]/);
+      }
+    });
+
+    it('truncates a long quote title at 120 characters with an ellipsis', async () => {
+      mockResolveQuotes.mockResolvedValueOnce([
+        { content: 'A'.repeat(150), author: 'Author', id: 'long-1' },
+      ]);
+      const { rescheduleAll } = freshScheduler();
+      await rescheduleAll({ ...BASE_OPTS, quoteCount: 1, qodEnabled: false, streakEnabled: false });
+
+      const title = byCategory('daily-quote')[0].content.title as string;
+      expect(title).toHaveLength(120); // 119 chars + '…'
+      expect(title.endsWith('…')).toBe(true);
+    });
+
+    it('leaves a short quote title untouched', async () => {
+      const { rescheduleAll } = freshScheduler();
+      await rescheduleAll({ ...BASE_OPTS, quoteCount: 1, qodEnabled: false, streakEnabled: false });
+
+      expect(byCategory('daily-quote')[0].content.title).toBe('Quote 0');
+    });
+
+    it('carries the quote through data so a tap can open it', async () => {
+      const { rescheduleAll } = freshScheduler();
+      await rescheduleAll({ ...BASE_OPTS, quoteCount: 1, qodEnabled: false, streakEnabled: false });
+
+      expect(byCategory('daily-quote')[0].content.data).toMatchObject({
+        category: 'daily-quote',
+        quoteId: 'q0',
+        quoteText: 'Quote 0',
+        quoteAuthor: 'Author 0',
+      });
+    });
+
+    it('gives QoD a real quote from its own source', async () => {
+      const { rescheduleAll } = freshScheduler();
+      await rescheduleAll({
+        ...BASE_OPTS,
+        quotesEnabled: false,
+        streakEnabled: false,
+        qodSource: '_favorites',
+      });
+
+      const qod = byCategory('qod')[0];
+      expect(qod.content.title).toBe('Quote 0');
+      expect(qod.content.data.quoteId).toBe('q0');
+      expect(mockResolveQuotes).toHaveBeenCalledWith('_favorites', 1);
+    });
+
+    it('lets the two reminders draw from different sources', async () => {
+      const { rescheduleAll } = freshScheduler();
+      await rescheduleAll({
+        ...BASE_OPTS,
+        streakEnabled: false,
+        quoteSource: 'wisdom',
+        qodSource: 'collection:abc',
+      });
+
+      const sources = mockResolveQuotes.mock.calls.map((c) => c[0]);
+      expect(sources).toContain('wisdom');
+      expect(sources).toContain('collection:abc');
+    });
+
+    it('titles the streak reminder without an emoji', async () => {
+      const { rescheduleAll } = freshScheduler();
+      await rescheduleAll({ ...BASE_OPTS, quotesEnabled: false, qodEnabled: false });
+
+      expect(byCategory('streak')[0].content.title).toBe('Keep your streak alive');
+    });
+  });
+
+  // ── Android channel ───────────────────────────────────────────────────────
+
+  describe('android channel', () => {
+    it('creates the channel and tags every notification with it', async () => {
+      mockPlatform.OS = 'android';
+      const { rescheduleAll } = freshScheduler();
+      await rescheduleAll({ ...BASE_OPTS, quoteCount: 2 });
+
+      expect(mockSetChannel).toHaveBeenCalledWith('daily-quotes', expect.anything());
+      expect(calls().every((c) => c.content.channelId === 'daily-quotes')).toBe(true);
+    });
+
+    it('sets no channelId on iOS', async () => {
+      const { rescheduleAll } = freshScheduler();
+      await rescheduleAll({ ...BASE_OPTS, quoteCount: 2 });
+
+      expect(mockSetChannel).not.toHaveBeenCalled();
+      expect(calls().every((c) => c.content.channelId === undefined)).toBe(true);
+    });
+  });
+
+  // ── Race guard ────────────────────────────────────────────────────────────
+
+  describe('race guard', () => {
+    it('lets only the most recent call schedule anything', async () => {
+      const { rescheduleAll } = freshScheduler();
+
+      const stale = rescheduleAll({
+        ...BASE_OPTS,
+        quotesEnabled: false,
+        streakEnabled: false,
+        qodTime: '07:30',
+      });
+      const latest = rescheduleAll({
+        ...BASE_OPTS,
+        quotesEnabled: false,
+        streakEnabled: false,
+        qodTime: '09:45',
+      });
+      await Promise.all([stale, latest]);
+
+      const qod = byCategory('qod');
+      expect(qod).toHaveLength(1);
+      expect(qod[0].trigger).toMatchObject({ hour: 9, minute: 45 });
+    });
+
+    it('always clears the existing schedule before rebuilding', async () => {
+      const { rescheduleAll } = freshScheduler();
+      await rescheduleAll(BASE_OPTS);
+
+      expect(mockCancel).toHaveBeenCalledTimes(1);
+      expect(mockCancel.mock.invocationCallOrder[0])
+        .toBeLessThan(mockSchedule.mock.invocationCallOrder[0]);
+    });
+  });
+
+  // ── Legacy compatibility ──────────────────────────────────────────────────
+
+  describe('scheduleQuoteNotifications (legacy)', () => {
+    it('delegates with only daily quotes enabled', async () => {
+      const { scheduleQuoteNotifications } = freshScheduler();
+      await scheduleQuoteNotifications({ count: 3, startHHMM: '09:00', endHHMM: '21:00' });
+
+      expect(byCategory('qod')).toHaveLength(0);
+      expect(byCategory('streak')).toHaveLength(0);
+      expect(byCategory('daily-quote').length).toBeGreaterThan(0);
+      expect(byCategory('daily-quote').every((c) => c.trigger.type === 'date')).toBe(true);
+    });
+
+    it('honours the window it is given', async () => {
+      const { scheduleQuoteNotifications } = freshScheduler();
+      await scheduleQuoteNotifications({ count: 2, startHHMM: '10:00', endHHMM: '18:00' });
+
+      const today = byCategory('daily-quote')
+        .map((c) => c.trigger.date as Date)
+        .filter((d) => d.toDateString() === NOW.toDateString())
+        .map((d) => ({ h: d.getHours(), m: d.getMinutes() }));
+
+      expect(today).toEqual([{ h: 10, m: 0 }, { h: 18, m: 0 }]);
+    });
   });
 });
 
-// ── rescheduleAll — notification counts ───────────────────────────────────────
+// ── ensureNotificationChannel ─────────────────────────────────────────────────
 
-describe('rescheduleAll — notification counts', () => {
-  beforeEach(() => {
-    jest.resetModules();
-    mockSchedule.mockClear();
-    mockCancel.mockClear();
+describe('ensureNotificationChannel', () => {
+  beforeEach(resetAll);
+
+  it('is a no-op on iOS', async () => {
+    const { ensureNotificationChannel } = freshScheduler();
+    await ensureNotificationChannel();
+    expect(mockSetChannel).not.toHaveBeenCalled();
   });
 
-  it('schedules exactly count+2 notifications on DAILY (all days, all types)', async () => {
-    const { rescheduleAll } = require('../../lib/notifications');
-    const count = 5;
-    await rescheduleAll({ ...ALL_TYPES_OPTS, quoteCount: count, days: [] });
+  it('creates the daily-quotes channel on Android', async () => {
+    mockPlatform.OS = 'android';
+    const { ensureNotificationChannel } = freshScheduler();
+    await ensureNotificationChannel();
 
-    // count quote slots + 1 QOD + 1 streak
-    expect(mockSchedule).toHaveBeenCalledTimes(count + 2);
-  });
-
-  it('schedules count×days + 2×days notifications with WEEKLY triggers', async () => {
-    const { rescheduleAll } = require('../../lib/notifications');
-    const count = 3;
-    const days = [1, 3, 5]; // 3 specific weekdays
-    await rescheduleAll({ ...ALL_TYPES_OPTS, quoteCount: count, days });
-
-    // (count + 2 types) × number of days
-    expect(mockSchedule).toHaveBeenCalledTimes((count + 2) * days.length);
-  });
-
-  /**
-   * B1 — iOS overflow regression test.
-   *
-   * With count=12 and 5 specific weekdays + all 3 reminder types:
-   *   quotes: 12×5 = 60
-   *   QOD:     1×5 =  5
-   *   streak:  1×5 =  5
-   *   total         = 70 → would exceed iOS limit of 64
-   *
-   * The fix caps scheduling at 64 so the last slots are silently skipped
-   * rather than causing the system to silently drop the oldest notification.
-   */
-  it('[B1] caps scheduled notifications at 64 on iOS (overflow fixed)', async () => {
-    const { rescheduleAll } = require('../../lib/notifications');
-    await rescheduleAll({
-      ...ALL_TYPES_OPTS,
-      quoteCount: 12,
-      days: [1, 2, 3, 4, 5], // Mon–Fri (5 days) → would be 70 without cap
-    });
-
-    const totalScheduled = mockSchedule.mock.calls.length;
-    expect(totalScheduled).toBe(IOS_NOTIF_LIMIT);
-    expect(totalScheduled).toBeLessThanOrEqual(IOS_NOTIF_LIMIT);
-  });
-
-  it('stays within iOS limit with all-day DAILY triggers (max settings)', async () => {
-    const { rescheduleAll } = require('../../lib/notifications');
-    // With DAILY triggers (empty days): count + 2 = 12 → well within 64
-    await rescheduleAll({ ...ALL_TYPES_OPTS, quoteCount: 10, days: [] });
-
-    expect(mockSchedule.mock.calls.length).toBeLessThanOrEqual(IOS_NOTIF_LIMIT);
-  });
-});
-
-// ── rescheduleAll — time scheduling ───────────────────────────────────────────
-
-describe('rescheduleAll — time scheduling', () => {
-  beforeEach(() => {
-    jest.resetModules();
-    mockSchedule.mockClear();
-    mockCancel.mockClear();
-  });
-
-  it('QOD trigger fires at the configured hour and minute', async () => {
-    const { rescheduleAll } = require('../../lib/notifications');
-    await rescheduleAll({
-      ...ALL_TYPES_OPTS,
-      quotesEnabled: false,
-      qodEnabled: true,
-      qodTime: '07:30',
-      streakEnabled: false,
-    });
-
-    const trigger = mockSchedule.mock.calls[0][0].trigger;
-    expect(trigger.hour).toBe(7);
-    expect(trigger.minute).toBe(30);
-  });
-
-  it('streak trigger fires at the configured hour and minute', async () => {
-    const { rescheduleAll } = require('../../lib/notifications');
-    await rescheduleAll({
-      ...ALL_TYPES_OPTS,
-      quotesEnabled: false,
-      qodEnabled: false,
-      streakEnabled: true,
-      streakTime: '21:00',
-    });
-
-    const trigger = mockSchedule.mock.calls[0][0].trigger;
-    expect(trigger.hour).toBe(21);
-    expect(trigger.minute).toBe(0);
-  });
-
-  it('[B2] gracefully handles endTime ≤ startTime by using startTime+60 as window', async () => {
-    const { rescheduleAll } = require('../../lib/notifications');
-    // startTime = endTime — zero-width window; should not throw and should schedule 1 quote
-    await rescheduleAll({
-      ...ALL_TYPES_OPTS,
-      quoteCount: 1,
-      startHHMM: '10:00',
-      endHHMM: '10:00',
-      qodEnabled: false,
-      streakEnabled: false,
-    });
-
-    expect(mockSchedule).toHaveBeenCalledTimes(1);
-    const trigger = mockSchedule.mock.calls[0][0].trigger;
-    // Midpoint of 10:00..11:00 is 10:30
-    expect(trigger.hour).toBe(10);
-    expect(trigger.minute).toBe(30);
-  });
-
-  it('distributes quote slots evenly across the window', async () => {
-    const { rescheduleAll } = require('../../lib/notifications');
-    // 09:00..13:00 (240 min) with 3 quotes → at 09:00, 11:00, 13:00
-    await rescheduleAll({
-      ...ALL_TYPES_OPTS,
-      quoteCount: 3,
-      startHHMM: '09:00',
-      endHHMM: '13:00',
-      qodEnabled: false,
-      streakEnabled: false,
-    });
-
-    const times = mockSchedule.mock.calls.map((c) => ({
-      h: c[0].trigger.hour,
-      m: c[0].trigger.minute,
-    }));
-
-    expect(times[0]).toEqual({ h: 9, m: 0 });
-    expect(times[1]).toEqual({ h: 11, m: 0 });
-    expect(times[2]).toEqual({ h: 13, m: 0 });
-  });
-});
-
-// ── rescheduleAll — content ────────────────────────────────────────────────────
-
-describe('rescheduleAll — notification content', () => {
-  beforeEach(() => {
-    jest.resetModules();
-    mockSchedule.mockClear();
-    mockCancel.mockClear();
-  });
-
-  it('omits author body when showAuthor=false', async () => {
-    const { rescheduleAll } = require('../../lib/notifications');
-    await rescheduleAll({
-      ...ALL_TYPES_OPTS,
-      showAuthor: false,
-      qodEnabled: false,
-      streakEnabled: false,
-    });
-
-    mockSchedule.mock.calls.forEach(([call]) => {
-      expect(call.content.body).toBeUndefined();
-    });
-  });
-
-  it('includes "— Author" body when showAuthor=true', async () => {
-    const { rescheduleAll } = require('../../lib/notifications');
-    await rescheduleAll({
-      ...ALL_TYPES_OPTS,
-      showAuthor: true,
-      qodEnabled: false,
-      streakEnabled: false,
-    });
-
-    mockSchedule.mock.calls.forEach(([call]) => {
-      expect(call.content.body).toMatch(/^— /);
-    });
-  });
-
-  it('truncates quote title at 120 characters with ellipsis', async () => {
-    const longContent = 'A'.repeat(150);
-    const { fetchQuotesForNotifications } = require('../../lib/quotesApi');
-    fetchQuotesForNotifications.mockResolvedValueOnce([
-      { content: longContent, author: 'Author', _id: 'long-1' },
-    ]);
-
-    const { rescheduleAll } = require('../../lib/notifications');
-    await rescheduleAll({
-      ...ALL_TYPES_OPTS,
-      quoteCount: 1,
-      qodEnabled: false,
-      streakEnabled: false,
-    });
-
-    const title = mockSchedule.mock.calls[0][0].content.title as string;
-    expect(title.length).toBeLessThanOrEqual(121); // 120 chars + '…'
-    expect(title.endsWith('…')).toBe(true);
-  });
-
-  it('QOD notification carries a real quote from its chosen category', async () => {
-    const { rescheduleAll } = require('../../lib/notifications');
-    await rescheduleAll({
-      ...ALL_TYPES_OPTS,
-      quotesEnabled: false,
-      qodEnabled: true,
-      streakEnabled: false,
-    });
-
-    const content = mockSchedule.mock.calls[0][0].content;
-    expect(content.title).toBe('Quote one');
-    expect(content.data.category).toBe('qod');
-    expect(content.data.quoteId).toBe('q1');
-  });
-
-  it('streak notification has the correct title', async () => {
-    const { rescheduleAll } = require('../../lib/notifications');
-    await rescheduleAll({
-      ...ALL_TYPES_OPTS,
-      quotesEnabled: false,
-      qodEnabled: false,
-      streakEnabled: true,
-    });
-
-    expect(mockSchedule.mock.calls[0][0].content.title).toBe('🔥 Keep your streak alive');
-  });
-});
-
-// ── scheduleQuoteNotifications (legacy compat) ────────────────────────────────
-
-describe('scheduleQuoteNotifications (legacy)', () => {
-  beforeEach(() => {
-    jest.resetModules();
-    mockSchedule.mockClear();
-    mockCancel.mockClear();
-  });
-
-  it('[B4] delegates to rescheduleAll with only quotes enabled', async () => {
-    const { scheduleQuoteNotifications } = require('../../lib/notifications');
-    await scheduleQuoteNotifications({ count: 3, startHHMM: '09:00', endHHMM: '21:00' });
-
-    // Only quote notifications should be scheduled (no QOD, streak)
-    // count=3, DAILY triggers → 3 scheduleNotificationAsync calls
-    expect(mockSchedule).toHaveBeenCalledTimes(3);
-
-    // All titles should be quote text (not fixed strings)
-    const titles = mockSchedule.mock.calls.map((c) => c[0].content.title);
-    expect(titles.every((t) => !['✨ Quote of the Day', '🔥 Keep your streak alive'].includes(t))).toBe(true);
+    expect(mockSetChannel).toHaveBeenCalledWith(
+      'daily-quotes',
+      expect.objectContaining({ name: 'Daily Quotes' }),
+    );
   });
 });
 
 // ── cancelAllNotifications ────────────────────────────────────────────────────
 
 describe('cancelAllNotifications', () => {
-  beforeEach(() => {
-    jest.resetModules();
-    mockCancel.mockClear();
-  });
+  beforeEach(resetAll);
 
   it('calls cancelAllScheduledNotificationsAsync exactly once', async () => {
-    const { cancelAllNotifications } = require('../../lib/notifications');
+    const { cancelAllNotifications } = freshScheduler();
     await cancelAllNotifications();
     expect(mockCancel).toHaveBeenCalledTimes(1);
   });

@@ -14,10 +14,10 @@ export interface RescheduleOptions {
   days: number[];          // JS weekdays 0=Sun..6=Sat; empty = all 7
   // Daily random quotes
   quotesEnabled: boolean;
-  quoteCount: number;      // per day (1–10)
+  quoteCount: number;      // per day, clamped to 1–20 by rescheduleAll
   startHHMM: string;
   endHHMM: string;
-  showAuthor: boolean;     // include "— Author" in notification body
+  showAuthor: boolean;     // put the author in the notification body
   /**
    * Which quotes the daily reminders draw from: `following`, a topic id,
    * `_favorites`, `_myquotes`, or `collection:<id>`.
@@ -217,8 +217,14 @@ export async function rescheduleAll(opts: RescheduleOptions): Promise<void> {
   const quoteDateSlots = Math.max(0, IOS_NOTIF_LIMIT - repeatingSlots);
 
   // ── 1. Daily Quotes (one-shot DATE triggers, unique quote per slot) ────
-  if (opts.quotesEnabled && opts.quoteCount > 0) {
-    const times = buildTimes(opts.quoteCount, opts.startHHMM, opts.endHHMM);
+  if (opts.quotesEnabled) {
+    // `quotesEnabled` is the off switch, so a count below 1 is a stale value
+    // rather than an intent to schedule nothing. Older builds let onboarding
+    // step the count down to 0, which left the reminder reading as on with
+    // nothing behind it.
+    const raw = Number.isFinite(opts.quoteCount) ? Math.floor(opts.quoteCount) : 5;
+    const count = Math.max(1, Math.min(20, raw));
+    const times = buildTimes(count, opts.startHHMM, opts.endHHMM);
     const activeDaySet = specificDays ? new Set(specificDays) : null;
 
     // Figure out how many future days we can schedule

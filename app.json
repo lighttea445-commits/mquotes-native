@@ -98,7 +98,7 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/icon.png",
+          "icon": "./assets/notification-icon.png",
           "color": "#B8975A",
           "sounds": []
         }
