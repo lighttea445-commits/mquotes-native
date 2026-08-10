@@ -16,7 +16,8 @@ import { Icon } from '../ui/Icon';
 import { SheetHeader } from '../ui/SheetHeader';
 import { IconButton } from '../ui/IconButton';
 import { ConfirmSheet } from '../ui/ConfirmSheet';
-import { GUTTER, SPACE, RADIUS, ON_GOLD } from '../ui/tokens';
+import { liquidGlassAvailable } from '../ui/GlassSurface';
+import { GUTTER, SPACE, RADIUS, ON_GOLD, ICON_BTN } from '../ui/tokens';
 import { useTheme } from '../../hooks/useTheme';
 import { useCollectionsStore } from '../../store/useCollectionsStore';
 import { useFavoritesStore } from '../../store/useFavoritesStore';
@@ -48,6 +49,8 @@ export default function CollectionsScreen({ onClose, onBack }: { onClose?: () =>
   const toggleFavorite = useFavoritesStore((s) => s.toggleFavorite);
   const isFavorite = useFavoritesStore((s) => s.isFavorite);
   const setShareQuote = useShareStore((s) => s.setQuote);
+
+  const glass = liquidGlassAvailable();
 
   const [view, setView] = useState<View_>('list');
   const [name, setName] = useState('');
@@ -222,8 +225,11 @@ export default function CollectionsScreen({ onClose, onBack }: { onClose?: () =>
             <IconButton
               icon="plus"
               onPress={() => setView('new')}
-              filled={false}
-              iconSize={24}
+              // Mirrors the leading control: liquid glass on iOS 26, a bare
+              // glyph everywhere else.
+              filled={glass}
+              size={glass ? ICON_BTN.md : ICON_BTN.sm}
+              iconSize={glass ? 22 : 26}
               color={theme.gold}
               accessibilityLabel="New collection"
             />
