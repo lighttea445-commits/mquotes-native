@@ -304,8 +304,15 @@ struct QuoteWidgetView: View {
   /// drawn. See `homeScreenBody`.
   private var isFullColor: Bool { renderingMode == .fullColor }
 
+  /// Starting size for the quote, before shrink-to-fit. Large no longer shares
+  /// medium's value: it has roughly four times the area, so one size across both
+  /// left the text stranded in the middle of the large card.
   private var quoteFontSize: CGFloat {
-    family == .systemSmall ? 12 : 16
+    switch family {
+    case .systemSmall: return 15
+    case .systemLarge: return 24
+    default: return 20
+    }
   }
 
   /// How far the quote may shrink before it would rather clip.
@@ -314,8 +321,17 @@ struct QuoteWidgetView: View {
   /// text scales down to fit instead. `quoteFontSize` is therefore a starting
   /// point, not a fixed size. A floor this low is only reached by unusually
   /// long quotes on the small family; it exists so nothing is ever truncated.
+  ///
+  /// The factor is chosen to hold that floor at a fixed absolute size (3.6pt on
+  /// small, 6.4pt elsewhere) rather than to be round in itself, so raising
+  /// `quoteFontSize` never takes away the room a long quote needs. Change one
+  /// and recompute the other.
   private var minQuoteScale: CGFloat {
-    family == .systemSmall ? 0.30 : 0.40
+    switch family {
+    case .systemSmall: return 0.24
+    case .systemLarge: return 0.27
+    default: return 0.32
+    }
   }
 
   var body: some View {
