@@ -17,7 +17,7 @@ export interface RescheduleOptions {
   quoteCount: number;      // per day, clamped to 1–20 by rescheduleAll
   startHHMM: string;
   endHHMM: string;
-  showAuthor: boolean;     // put the author in the notification body
+  showAuthor: boolean;     // put "- Author" in the notification body
   /**
    * Which quotes the daily reminders draw from: `following`, a topic id,
    * `_favorites`, `_myquotes`, or `collection:<id>`.
@@ -67,6 +67,17 @@ export async function getPermissionStatus(): Promise<'granted' | 'denied' | 'und
 }
 
 // ── Formatting ────────────────────────────────────────────────────────────────
+
+/**
+ * Attribution line under a quote notification: "- Marcus Aurelius".
+ *
+ * A plain ASCII hyphen, never an em or en dash. This is the one deliberate
+ * exception to the no-dashes-in-user-facing-copy rule, because quote
+ * attribution reads wrong without it.
+ */
+export function attribution(author: string): string {
+  return `- ${author}`;
+}
 
 /** "09:00" → "9:00 AM", "22:00" → "10:00 PM" */
 export function formatHHMMto12h(hhmm: string): string {
@@ -281,7 +292,7 @@ export async function rescheduleAll(opts: RescheduleOptions): Promise<void> {
         await Notifications.scheduleNotificationAsync({
           content: {
             title,
-            ...(opts.showAuthor && { body: quote.author }),
+            ...(opts.showAuthor && { body: attribution(quote.author) }),
             sound: true,
             data: { category: 'daily-quote' as NotifCategory, quoteId: quote.id, quoteText: quote.content, quoteAuthor: quote.author },
             ...(Platform.OS === 'android' && { channelId: 'daily-quotes' }),
@@ -317,7 +328,7 @@ export async function rescheduleAll(opts: RescheduleOptions): Promise<void> {
     await schedRepeating(
       {
         title: qodTitle ?? 'Quote of the Day',
-        body: qod ? (opts.showAuthor ? qod.author : 'Quote of the Day') : 'Tap to read today\'s quote',
+        body: qod ? (opts.showAuthor ? attribution(qod.author) : 'Quote of the Day') : 'Tap to read today\'s quote',
         sound: true,
         data: qod
           ? { category: 'qod' as NotifCategory, quoteId: qod.id, quoteText: qod.content, quoteAuthor: qod.author }

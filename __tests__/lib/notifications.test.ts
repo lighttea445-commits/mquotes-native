@@ -140,6 +140,24 @@ describe('formatHHMMto12h', () => {
   });
 });
 
+// ── attribution ───────────────────────────────────────────────────────────────
+
+describe('attribution', () => {
+  let attribution: (author: string) => string;
+
+  beforeEach(() => {
+    ({ attribution } = freshScheduler());
+  });
+
+  it('prefixes the author with a hyphen and a space', () => {
+    expect(attribution('Marcus Aurelius')).toBe('- Marcus Aurelius');
+  });
+
+  it('uses an ASCII hyphen, not an em or en dash', () => {
+    expect(attribution('Seneca').charCodeAt(0)).toBe(45);
+  });
+});
+
 // ── Permissions ───────────────────────────────────────────────────────────────
 
 describe('requestPermissions', () => {
@@ -578,18 +596,43 @@ describe('rescheduleAll', () => {
       expect(byCategory('daily-quote').every((c) => c.content.body === undefined)).toBe(true);
     });
 
-    // The brand rule bans dashes in user-facing copy, so the body is the bare
-    // author name rather than "— Author".
-    it('uses the bare author name as the body when showAuthor is true', async () => {
+    // Attribution uses a plain ASCII hyphen. An em or en dash here is the
+    // regression this guards: it looks near-identical in a diff and only shows
+    // up on the device.
+    it('attributes the author with a hyphen when showAuthor is true', async () => {
       const { rescheduleAll } = freshScheduler();
       await rescheduleAll({ ...BASE_OPTS, showAuthor: true, qodEnabled: false, streakEnabled: false });
 
       const quotes = byCategory('daily-quote');
       expect(quotes.length).toBeGreaterThan(0);
       for (const c of quotes) {
-        expect(c.content.body).toBe(c.content.data.quoteAuthor);
-        expect(c.content.body).not.toMatch(/[-–—]/);
+        expect(c.content.body).toBe(`- ${c.content.data.quoteAuthor}`);
+        expect(c.content.body).not.toMatch(/[–—]/);
       }
+    });
+
+    it('attributes the QoD author the same way', async () => {
+      const { rescheduleAll } = freshScheduler();
+      await rescheduleAll({
+        ...BASE_OPTS,
+        showAuthor: true,
+        quotesEnabled: false,
+        streakEnabled: false,
+      });
+
+      expect(byCategory('qod')[0].content.body).toBe('- Author 0');
+    });
+
+    it('labels the QoD body instead of attributing when showAuthor is false', async () => {
+      const { rescheduleAll } = freshScheduler();
+      await rescheduleAll({
+        ...BASE_OPTS,
+        showAuthor: false,
+        quotesEnabled: false,
+        streakEnabled: false,
+      });
+
+      expect(byCategory('qod')[0].content.body).toBe('Quote of the Day');
     });
 
     it('truncates a long quote title at 120 characters with an ellipsis', async () => {
