@@ -22,7 +22,7 @@ private let kFallbackText = "The journey of a thousand miles begins with a singl
 /// Shown when no configuration can be resolved: the app has never written
 /// mq_configs, so there is no queue to walk and nothing for a tap to resolve.
 /// Naming the state beats showing a quote the widget cannot actually rotate.
-private let kSetupText = "Open Quotable to set up your widget."
+private let kSetupText = "Tap to activate"
 
 /// The Minimal theme's background and text, mirrored from constants/themes.ts
 /// (#0D0D0D and #E8E0D0). The extension cannot reach the app's tokens, so the

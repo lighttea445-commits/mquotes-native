@@ -591,16 +591,14 @@ export default function WidgetsScreen({
             </Text>
           </TouchableOpacity>
 
-          {/* Absent means the lookup hasn't landed yet. Rendering the "in use"
-              copy in that gap claims the opposite of the truth for a config
-              that was just created, which is exactly when it's read. */}
-          {pending[active.id] !== undefined && (
+          {/* Only the pending case gets copy. A config that's already in use
+              needs no instruction, and the absent case means the lookup hasn't
+              landed yet, so claiming either state would be a guess. */}
+          {pending[active.id] === true && (
             <Text style={[styles.statusText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-              {pending[active.id]
-                ? Platform.OS === 'ios'
-                  ? 'Not on your Home Screen yet. Add a widget, then hold it, tap Edit Widget, and choose this name.'
-                  : 'Not on your Home Screen yet. Add a Quotable widget to start using it.'
-                : 'In use on your Home Screen.'}
+              {Platform.OS === 'ios'
+                ? 'Not on your Home Screen yet. Add a widget, then hold it, tap Edit Widget, and choose this name.'
+                : 'Not on your Home Screen yet. Add a Quotable widget to start using it.'}
             </Text>
           )}
 
