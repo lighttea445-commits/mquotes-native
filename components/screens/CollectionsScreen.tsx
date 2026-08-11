@@ -23,6 +23,7 @@ import { useCollectionsStore } from '../../store/useCollectionsStore';
 import { useFavoritesStore } from '../../store/useFavoritesStore';
 import { useShareStore } from '../../store/useShareStore';
 import { useModal } from '../../contexts/ModalContext';
+import { releaseCollectionReferences } from '../../lib/collectionRefs';
 import { FONTS } from '../../constants/fonts';
 
 type View_ = 'list' | 'new' | 'detail';
@@ -202,7 +203,11 @@ export default function CollectionsScreen({ onClose, onBack }: { onClose?: () =>
           cancelLabel="Cancel"
           destructive
           onConfirm={() => {
-            deleteCollection(active.id);
+            const deletedId = active.id;
+            deleteCollection(deletedId);
+            // Any widget or reminder pointing here is re-pointed at General,
+            // rather than left naming a collection that no longer exists.
+            releaseCollectionReferences(deletedId).catch(() => {});
             setConfirmDelete(false);
             setActiveId(null);
             setView('list');

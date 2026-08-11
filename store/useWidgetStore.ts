@@ -6,7 +6,11 @@ import { zustandMMKVStorage } from '../lib/storage';
 
 export type WidgetType = 'basic';
 export type WidgetRefreshFrequency = 'hourly' | 'twice-daily' | 'daily';
-export type WidgetQuoteType =
+
+/** One of the user's own collections, e.g. `collection:abc123`. */
+export type WidgetCollectionType = `${typeof COLLECTION_QUOTE_PREFIX}${string}`;
+
+export type WidgetBuiltInQuoteType =
   | 'general'
   | 'favorites'
   | 'my-quotes'
@@ -28,6 +32,29 @@ export type WidgetQuoteType =
   | 'science'
   | 'freedom';
 
+export type WidgetQuoteType = WidgetBuiltInQuoteType | WidgetCollectionType;
+
+/**
+ * Marks a quote source as one of the user's collections rather than a built-in
+ * topic. Deliberately the same vocabulary the notification sources use
+ * (lib/notificationQuotes.ts), so "collection:<id>" means the same thing on
+ * both surfaces and neither has to translate.
+ */
+export const COLLECTION_QUOTE_PREFIX = 'collection:';
+
+export function isCollectionQuoteType(quoteType: string): quoteType is WidgetCollectionType {
+  return quoteType.startsWith(COLLECTION_QUOTE_PREFIX);
+}
+
+/** The collection id inside a `collection:<id>` source, or null for a built-in topic. */
+export function collectionIdFromQuoteType(quoteType: string): string | null {
+  return isCollectionQuoteType(quoteType) ? quoteType.slice(COLLECTION_QUOTE_PREFIX.length) : null;
+}
+
+export function collectionQuoteType(collectionId: string): WidgetCollectionType {
+  return `${COLLECTION_QUOTE_PREFIX}${collectionId}`;
+}
+
 export const REFRESH_FREQUENCY_LABELS: Record<WidgetRefreshFrequency, string> = {
   'hourly':      'Every hour',
   'twice-daily': 'Twice a day',
@@ -40,7 +67,7 @@ export const REFRESH_FREQUENCY_MINUTES: Record<WidgetRefreshFrequency, number> =
   'daily':       1440,
 };
 
-export const QUOTE_TYPE_LABELS: Record<WidgetQuoteType, string> = {
+export const QUOTE_TYPE_LABELS: Record<WidgetBuiltInQuoteType, string> = {
   // Special
   general:       'General',
   favorites:     'My Favorites',
@@ -63,6 +90,24 @@ export const QUOTE_TYPE_LABELS: Record<WidgetQuoteType, string> = {
   science:       'Science',
   freedom:       'Freedom',
 };
+
+/**
+ * Display name for a config's source.
+ *
+ * A collection can be deleted while a config still points at it. The resolvers
+ * fall back to general quotes in that case, so the label says General too
+ * rather than naming something that no longer exists.
+ */
+export function quoteTypeLabel(
+  quoteType: WidgetQuoteType,
+  collections: { id: string; name: string }[],
+): string {
+  const collectionId = collectionIdFromQuoteType(quoteType);
+  if (collectionId !== null) {
+    return collections.find((c) => c.id === collectionId)?.name ?? QUOTE_TYPE_LABELS.general;
+  }
+  return QUOTE_TYPE_LABELS[quoteType as WidgetBuiltInQuoteType] ?? QUOTE_TYPE_LABELS.general;
+}
 
 // ── Config ────────────────────────────────────────────────────────────────────
 

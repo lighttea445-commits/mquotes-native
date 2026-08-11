@@ -381,3 +381,58 @@ describe('constant maps', () => {
     });
   });
 });
+
+// ── collection sources ───────────────────────────────────────────────────────
+//
+// A widget can draw from one of the user's collections. The prefix is shared
+// with the notification sources (lib/notificationQuotes.ts) so "collection:<id>"
+// means the same thing on both surfaces.
+
+describe('collection quote types', () => {
+  it('round-trips an id through the prefix', () => {
+    const { collectionQuoteType, collectionIdFromQuoteType } = require('../../store/useWidgetStore');
+    expect(collectionQuoteType('abc123')).toBe('collection:abc123');
+    expect(collectionIdFromQuoteType('collection:abc123')).toBe('abc123');
+  });
+
+  it('reads a built-in topic as not a collection', () => {
+    const { isCollectionQuoteType, collectionIdFromQuoteType } = require('../../store/useWidgetStore');
+    expect(isCollectionQuoteType('wisdom')).toBe(false);
+    expect(collectionIdFromQuoteType('wisdom')).toBeNull();
+  });
+
+  it('uses the same prefix the notification sources do', () => {
+    const { COLLECTION_QUOTE_PREFIX } = require('../../store/useWidgetStore');
+    const { COLLECTION_PREFIX } = require('../../lib/notificationQuotes');
+    expect(COLLECTION_QUOTE_PREFIX).toBe(COLLECTION_PREFIX);
+  });
+
+  it('survives a round trip through updateConfig', () => {
+    const { useWidgetStore, collectionQuoteType } = require('../../store/useWidgetStore');
+    const { id } = useWidgetStore.getState().addConfig('A');
+
+    useWidgetStore.getState().updateConfig(id, { customize: true, quoteType: collectionQuoteType('c1') });
+
+    expect(useWidgetStore.getState().getConfig(id).quoteType).toBe('collection:c1');
+  });
+});
+
+describe('quoteTypeLabel', () => {
+  const collections = [{ id: 'c1', name: 'Evening' }];
+
+  it('names the collection a config points at', () => {
+    const { quoteTypeLabel } = require('../../store/useWidgetStore');
+    expect(quoteTypeLabel('collection:c1', collections)).toBe('Evening');
+  });
+
+  it('falls back to General for a deleted collection, matching what the resolver serves', () => {
+    const { quoteTypeLabel } = require('../../store/useWidgetStore');
+    expect(quoteTypeLabel('collection:gone', collections)).toBe('General');
+  });
+
+  it('uses the static label for a built-in topic', () => {
+    const { quoteTypeLabel } = require('../../store/useWidgetStore');
+    expect(quoteTypeLabel('wisdom', collections)).toBe('Wisdom');
+    expect(quoteTypeLabel('my-quotes', [])).toBe('My Own Quotes');
+  });
+});

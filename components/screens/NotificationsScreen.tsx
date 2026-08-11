@@ -71,7 +71,17 @@ interface Settings {
   quoteSource: string; qodSource: string;
 }
 
-interface SourceOption { id: string; label: string; }
+interface SourceOption {
+  id: string;
+  label: string;
+  /** Opens the collection list instead of being a source itself. */
+  drill?: boolean;
+  /** Secondary line, e.g. how many quotes a collection holds. */
+  meta?: string;
+}
+
+/** Sentinel for the row that drills into collections. Never stored as a source. */
+const COLLECTIONS_DRILL = '__collections__';
 
 const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
 const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
@@ -109,23 +119,37 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
   const [qodSource, setQodSource] = useState(pref.notifQodSource ?? SOURCE_FOLLOWING);
   const collections = useCollectionsStore((s) => s.collections);
 
-  /** Everything a reminder can draw from, in the order the picker shows them. */
+  /** The user's own collections, shown one level down from the main list. */
+  const collectionOptions: SourceOption[] = collections.map(c => ({
+    id: COLLECTION_PREFIX + c.id,
+    label: c.name,
+    meta: `${c.quotes.length} ${c.quotes.length === 1 ? 'quote' : 'quotes'}`,
+  }));
+
+  /**
+   * Everything a reminder can draw from, in the order the picker shows them.
+   * Collections sit behind one row rather than inline: the list is the user's
+   * own and unbounded, so folding it in would bury the topics under it.
+   */
   const sourceOptions: SourceOption[] = [
     { id: SOURCE_FOLLOWING, label: 'Topics you follow' },
     { id: TOPIC_GENERAL, label: 'General' },
     { id: TOPIC_FAVORITES, label: 'Favorites' },
     { id: TOPIC_MYQUOTES, label: 'My quotes' },
-    ...collections.map(c => ({ id: COLLECTION_PREFIX + c.id, label: c.name })),
+    { id: COLLECTIONS_DRILL, label: 'Collections', drill: true },
     ...CATEGORIES.map(c => ({ id: c.id, label: c.name })),
   ];
 
   const labelForSource = (id: string) =>
-    sourceOptions.find(o => o.id === id)?.label ?? 'Topics you follow';
+    (id.startsWith(COLLECTION_PREFIX) ? collectionOptions : sourceOptions)
+      .find(o => o.id === id)?.label ?? 'Topics you follow';
   const [permissionGranted, setPermissionGranted] = useState<boolean | null>(null);
   const [pickerTarget, setPickerTarget] = useState<PickerTarget | null>(null);
   const [pickerTempDate, setPickerTempDate] = useState<Date>(new Date());
   const [activeCard, setActiveCard] = useState<ActiveCard>(null);
   const [categoryTarget, setCategoryTarget] = useState<CategoryTarget>(null);
+  /** True while the collection list is showing on top of the category list. */
+  const [pickingCollection, setPickingCollection] = useState(false);
 
   const savedOpacity = useRef(new Animated.Value(0)).current;
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -436,32 +460,50 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
     );
   }
 
-  function CategoryPicker({ value, onSelect }: { value: string; onSelect: (id: string) => void }) {
+  function SourceList({ options, value, onSelect }: {
+    options: SourceOption[];
+    value: string;
+    onSelect: (opt: SourceOption) => void;
+  }) {
     return (
       <View style={[ss.editCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-        {sourceOptions.map((opt, i) => (
-          <TouchableOpacity
-            key={opt.id}
-            style={[
-              ss.sourceRow,
-              i < sourceOptions.length - 1 && { borderBottomWidth: 1, borderBottomColor: theme.border },
-            ]}
-            onPress={() => onSelect(opt.id)}
-            accessibilityRole="button"
-            accessibilityState={{ selected: value === opt.id }}
-          >
-            <Text
+        {options.map((opt, i) => {
+          // A collection is selected when the stored source is that collection,
+          // and the Collections row itself is never "selected".
+          const selected = !opt.drill && value === opt.id;
+          return (
+            <TouchableOpacity
+              key={opt.id}
               style={[
-                ss.sourceLabel,
-                { color: value === opt.id ? theme.text : theme.textMuted, fontFamily: theme.uiFontFamily },
+                ss.sourceRow,
+                i < options.length - 1 && { borderBottomWidth: 1, borderBottomColor: theme.border },
               ]}
-              numberOfLines={1}
+              onPress={() => onSelect(opt)}
+              accessibilityRole="button"
+              accessibilityState={opt.drill ? undefined : { selected }}
             >
-              {opt.label}
-            </Text>
-            {value === opt.id && <Icon name="check" size={20} color={theme.gold} />}
-          </TouchableOpacity>
-        ))}
+              <View style={ss.sourceText}>
+                <Text
+                  style={[
+                    ss.sourceLabel,
+                    { color: selected ? theme.text : theme.textMuted, fontFamily: theme.uiFontFamily },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {opt.label}
+                </Text>
+                {opt.meta !== undefined && (
+                  <Text style={[ss.sourceMeta, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+                    {opt.meta}
+                  </Text>
+                )}
+              </View>
+              {opt.drill
+                ? <Icon name="chevron-right" size={20} color={theme.textMuted} />
+                : selected && <Icon name="check" size={20} color={theme.gold} />}
+            </TouchableOpacity>
+          );
+        })}
       </View>
     );
   }
@@ -469,7 +511,7 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
   function QuotesEdit() {
     return (
       <View style={[ss.editCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-        <CategoryRow value={quoteSource} onPress={() => setCategoryTarget('quotes')} />
+        <CategoryRow value={quoteSource} onPress={() => { setPickingCollection(false); setCategoryTarget('quotes'); }} />
         <EditRow label="How many">
           <Stepper
             display={`${count}×`}
@@ -565,13 +607,30 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
 
   // ── Render ─────────────────────────────────────────────────────────────
   const topBarBack =
-    categoryTarget !== null ? () => setCategoryTarget(null)
+    pickingCollection ? () => setPickingCollection(false)
+    : categoryTarget !== null ? () => setCategoryTarget(null)
     : activeCard !== null ? () => setActiveCard(null)
     : back;
   const topBarTitle =
-    categoryTarget !== null ? 'Quote category'
+    pickingCollection ? 'Collections'
+    : categoryTarget !== null ? 'Quote category'
     : activeCard !== null ? EDIT_META[activeCard].title
     : 'Reminders';
+
+  /** Writes the chosen source back to whichever reminder opened the picker. */
+  const commitSource = (id: string) => {
+    if (categoryTarget === 'quotes') {
+      setQuoteSource(id);
+      debouncedApply(buildSettings({ quoteSource: id }));
+    } else {
+      setQodSource(id);
+      debouncedApply(buildSettings({ qodSource: id }));
+    }
+    setPickingCollection(false);
+    setCategoryTarget(null);
+  };
+
+  const activeSource = categoryTarget === 'quotes' ? quoteSource : qodSource;
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -605,19 +664,28 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
         {/* ── Edit view ──────────────────────────────────────────────────── */}
         {categoryTarget !== null ? (
           <ScrollView style={{ flex: 1 }} contentContainerStyle={ss.scroll} showsVerticalScrollIndicator={false}>
-            <CategoryPicker
-              value={categoryTarget === 'quotes' ? quoteSource : qodSource}
-              onSelect={id => {
-                if (categoryTarget === 'quotes') {
-                  setQuoteSource(id);
-                  debouncedApply(buildSettings({ quoteSource: id }));
-                } else {
-                  setQodSource(id);
-                  debouncedApply(buildSettings({ qodSource: id }));
-                }
-                setCategoryTarget(null);
-              }}
-            />
+            {pickingCollection ? (
+              collectionOptions.length === 0 ? (
+                <Text style={[ss.emptyCollections, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+                  No collections yet. Save a few quotes into one, then point this reminder at it.
+                </Text>
+              ) : (
+                <SourceList
+                  options={collectionOptions}
+                  value={activeSource}
+                  onSelect={opt => commitSource(opt.id)}
+                />
+              )
+            ) : (
+              <SourceList
+                options={sourceOptions}
+                value={activeSource}
+                onSelect={opt => {
+                  if (opt.drill) { setPickingCollection(true); return; }
+                  commitSource(opt.id);
+                }}
+              />
+            )}
           </ScrollView>
 
         ) : activeCard !== null ? (
@@ -628,7 +696,7 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
                 timeValue={qodTime}
                 setTimeValue={setQodTime}
                 pickerTgt="qodTime"
-                categoryRow={<CategoryRow value={qodSource} onPress={() => setCategoryTarget('qod')} />}
+                categoryRow={<CategoryRow value={qodSource} onPress={() => { setPickingCollection(false); setCategoryTarget('qod'); }} />}
               />
             )}
             {activeCard === 'streak'  && (
@@ -802,7 +870,10 @@ const ss = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 20, paddingVertical: 15, gap: 12,
   },
-  sourceLabel: { flex: 1, fontSize: 15 },
+  sourceText: { flex: 1, gap: 2 },
+  sourceLabel: { fontSize: 15 },
+  sourceMeta: { fontSize: 13 },
+  emptyCollections: { fontSize: 15, lineHeight: 23, textAlign: 'center', paddingHorizontal: 24, paddingVertical: 32 },
   editRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 20, paddingVertical: 14,

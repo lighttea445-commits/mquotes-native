@@ -18,7 +18,7 @@ try {
 }
 
 import { Platform } from 'react-native';
-import { fetchMultipleRandomQuotes, fetchQuotesByCategory } from '../lib/quotesApi';
+import { resolveWidgetQuote } from '../lib/widgetQuotes';
 import {
   useWidgetStore,
   WidgetRefreshFrequency,
@@ -27,6 +27,7 @@ import {
 } from '../store/useWidgetStore';
 import { useFavoritesStore } from '../store/useFavoritesStore';
 import { useUserQuotesStore } from '../store/useUserQuotesStore';
+import { useCollectionsStore } from '../store/useCollectionsStore';
 import { WidgetBridge } from '../modules/widget-bridge';
 
 export const WIDGET_TASK_NAME = 'com.eriksen.quotable.widget-refresh';
@@ -62,11 +63,10 @@ if (TaskManager) {
         waitForHydration(useWidgetStore),
         waitForHydration(useFavoritesStore),
         waitForHydration(useUserQuotesStore),
+        waitForHydration(useCollectionsStore),
       ]);
 
-      const widgetStore  = useWidgetStore.getState();
-      const favorites    = useFavoritesStore.getState().favorites;
-      const userQuotes   = useUserQuotesStore.getState().userQuotes;
+      const widgetStore = useWidgetStore.getState();
 
       let hadNewData = false;
 
@@ -81,30 +81,11 @@ if (TaskManager) {
         if (!isRefreshDue(config.lastRefreshed, config.updateInterval)) continue;
 
         // "Mirror the app" (customize off) behaves like the free General feed.
+        // Resolution goes through the shared helper so this path handles every
+        // source (favorites, my quotes, a collection, a category) exactly the
+        // way the headless WIDGET_UPDATE path does.
         const quoteType = config.customize ? config.quoteType : 'general';
-
-        let quote: { id?: string; text: string; author: string } | null = null;
-
-        if (quoteType === 'favorites') {
-          if (favorites.length > 0) {
-            const f = favorites[Math.floor(Math.random() * favorites.length)];
-            quote = { id: f.id, text: f.text, author: f.author };
-          }
-        } else if (quoteType === 'my-quotes') {
-          if (userQuotes.length > 0) {
-            const q = userQuotes[Math.floor(Math.random() * userQuotes.length)];
-            quote = { id: q.id, text: q.text, author: q.author };
-          }
-        } else if (quoteType === 'general') {
-          const quotes = await fetchMultipleRandomQuotes(1);
-          if (quotes[0]) quote = { id: quotes[0]._id, text: quotes[0].content, author: quotes[0].author };
-        } else {
-          const quotes = await fetchQuotesByCategory(quoteType);
-          if (quotes.length) {
-            const q = quotes[Math.floor(Math.random() * quotes.length)];
-            quote = { id: q._id, text: q.content, author: q.author };
-          }
-        }
+        const quote = await resolveWidgetQuote(quoteType);
 
         if (!quote) continue;
 

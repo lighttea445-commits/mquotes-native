@@ -30,9 +30,14 @@ import {
   type WidgetConfig,
   type WidgetRefreshFrequency,
   type WidgetQuoteType,
+  type WidgetBuiltInQuoteType,
   REFRESH_FREQUENCY_LABELS,
   QUOTE_TYPE_LABELS,
+  collectionIdFromQuoteType,
+  collectionQuoteType,
+  quoteTypeLabel,
 } from '../../store/useWidgetStore';
+import { useCollectionsStore } from '../../store/useCollectionsStore';
 import { WidgetBridge } from '../../modules/widget-bridge';
 import { syncWidgets } from '../../lib/widgetSync';
 import { isIOSConfigPending } from '../../lib/iosWidget';
@@ -44,6 +49,19 @@ const PREVIEW_QUOTE = 'Discipline always beats motivation.';
 
 // ── Picker modal ──────────────────────────────────────────────────────────────
 
+interface PickerOption<T extends string> {
+  value: T;
+  label: string;
+  /**
+   * A row that opens another list instead of choosing a value. Used by the
+   * Collections row, which drills into the user's own collections rather than
+   * being a source in itself. Selecting it leaves the sheet open.
+   */
+  drill?: boolean;
+  /** Shown under the label, e.g. how many quotes a collection holds. */
+  meta?: string;
+}
+
 function PickerModal<T extends string>({
   visible,
   title,
@@ -51,45 +69,80 @@ function PickerModal<T extends string>({
   selected,
   onSelect,
   onClose,
+  onBack,
+  emptyLabel,
   theme,
 }: {
   visible: boolean;
   title: string;
-  options: { value: T; label: string }[];
+  options: PickerOption<T>[];
   selected: T;
   onSelect: (value: T) => void;
   onClose: () => void;
+  /** Present on a drilled-in list, so the sheet can step back rather than only close. */
+  onBack?: () => void;
+  /** Shown in place of the list when there is nothing to choose from. */
+  emptyLabel?: string;
   theme: ReturnType<typeof useTheme>;
 }) {
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onBack ?? onClose}>
       <TouchableOpacity style={pickerStyles.backdrop} activeOpacity={1} onPress={onClose} />
       <View style={[pickerStyles.sheet, { backgroundColor: theme.navBackground }]}>
         <View style={[pickerStyles.handle, { backgroundColor: theme.border }]} />
-        <Text style={[pickerStyles.title, { color: theme.text, fontFamily: FONTS.display.bold }]}>
-          {title}
-        </Text>
-        <FlatList
-          data={options}
-          keyExtractor={(o) => o.value}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={[
-                pickerStyles.row,
-                {
-                  backgroundColor: item.value === selected ? theme.surface : 'transparent',
-                  borderColor: theme.border,
-                },
-              ]}
-              onPress={() => { onSelect(item.value); onClose(); }}
-            >
-              <Text style={[pickerStyles.rowLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
-                {item.label}
-              </Text>
-              {item.value === selected && <Icon name="check" size={18} color={theme.gold} />}
+        <View style={pickerStyles.header}>
+          {onBack && (
+            <TouchableOpacity onPress={onBack} hitSlop={12} accessibilityRole="button" accessibilityLabel="Back">
+              <Icon name="chevron-left" size={24} color={theme.text} />
             </TouchableOpacity>
           )}
-        />
+          <Text style={[pickerStyles.title, { color: theme.text, fontFamily: FONTS.display.bold }]}>
+            {title}
+          </Text>
+        </View>
+        {options.length === 0 && emptyLabel ? (
+          <Text style={[pickerStyles.empty, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+            {emptyLabel}
+          </Text>
+        ) : (
+          <FlatList
+            data={options}
+            keyExtractor={(o) => o.value}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={[
+                  pickerStyles.row,
+                  {
+                    backgroundColor: !item.drill && item.value === selected ? theme.surface : 'transparent',
+                    borderColor: theme.border,
+                  },
+                ]}
+                onPress={() => { onSelect(item.value); if (!item.drill) onClose(); }}
+                accessibilityRole="button"
+                accessibilityState={item.drill ? undefined : { selected: item.value === selected }}
+              >
+                <View style={pickerStyles.rowText}>
+                  <Text
+                    style={[pickerStyles.rowLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}
+                    numberOfLines={1}
+                  >
+                    {item.label}
+                  </Text>
+                  {item.meta !== undefined && (
+                    <Text style={[pickerStyles.rowMeta, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+                      {item.meta}
+                    </Text>
+                  )}
+                </View>
+                {item.drill ? (
+                  <Icon name="chevron-right" size={20} color={theme.textMuted} />
+                ) : (
+                  item.value === selected && <Icon name="check" size={18} color={theme.gold} />
+                )}
+              </TouchableOpacity>
+            )}
+          />
+        )}
       </View>
     </Modal>
   );
@@ -99,7 +152,11 @@ const pickerStyles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
   sheet: { maxHeight: '60%', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingBottom: 40 },
   handle: { width: 36, height: 4, borderRadius: 2, alignSelf: 'center', marginTop: 10, marginBottom: 4 },
-  title: { fontSize: 18, paddingHorizontal: 20, paddingVertical: 14 },
+  header: { flexDirection: 'row', alignItems: 'center', paddingLeft: 20, gap: 8 },
+  title: { fontSize: 18, paddingVertical: 14 },
+  empty: { fontSize: 15, lineHeight: 23, textAlign: 'center', paddingHorizontal: 32, paddingVertical: 28 },
+  rowText: { flex: 1, gap: 2 },
+  rowMeta: { fontSize: 13 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -241,10 +298,13 @@ const previewStyles = StyleSheet.create({
 
 function ConfigCard({
   config,
+  sourceLabel,
   onChange,
   onOpenPicker,
 }: {
   config: WidgetConfig;
+  /** Resolved here rather than from the label map — a collection has no static label. */
+  sourceLabel: string;
   onChange: (updates: Partial<WidgetConfig>) => void;
   onOpenPicker: (picker: 'quoteType' | 'interval') => void;
 }) {
@@ -266,7 +326,7 @@ function ConfigCard({
           <ListRow
             label="Topics"
             onPress={() => onOpenPicker('quoteType')}
-            trailing={{ kind: 'valueChevron', value: QUOTE_TYPE_LABELS[config.quoteType] }}
+            trailing={{ kind: 'valueChevron', value: sourceLabel }}
           />
           <ListRow
             label="Widget border"
@@ -290,7 +350,14 @@ function ConfigCard({
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
-type ActivePicker = 'quoteType' | 'interval' | null;
+type ActivePicker = 'quoteType' | 'collection' | 'interval' | null;
+
+/**
+ * Sentinel for the Topics row that drills into the user's collections rather
+ * than being a source itself. Never stored on a config.
+ */
+const COLLECTIONS_DRILL = '__collections__';
+type QuoteTypeOptionValue = WidgetQuoteType | typeof COLLECTIONS_DRILL;
 
 export default function WidgetsScreen({
   onClose,
@@ -313,6 +380,7 @@ export default function WidgetsScreen({
   const addConfig = useWidgetStore((s) => s.addConfig);
   const updateConfig = useWidgetStore((s) => s.updateConfig);
   const removeConfig = useWidgetStore((s) => s.removeConfig);
+  const collections = useCollectionsStore((s) => s.collections);
 
   const [index, setIndex] = useState(0);
   const [activePicker, setActivePicker] = useState<ActivePicker>(null);
@@ -394,6 +462,12 @@ export default function WidgetsScreen({
 
   const active: WidgetConfig | undefined = configs[Math.min(index, configs.length - 1)];
 
+  /** The collection this config draws from, if it draws from one that still exists. */
+  const selectedCollection = useMemo(() => {
+    const collectionId = active ? collectionIdFromQuoteType(active.quoteType) : null;
+    return collectionId === null ? null : collections.find((c) => c.id === collectionId) ?? null;
+  }, [active, collections]);
+
   const openPaywall = () => (modal ? modal.openSheet('trial') : router.push('/subscriptions'));
 
   /** Every change is Pro-gated and pushes straight through to the widget. */
@@ -424,10 +498,38 @@ export default function WidgetsScreen({
     syncWidgets(created.id).catch(() => {});
   };
 
-  const quoteTypeOptions = useMemo(
-    () => (Object.entries(QUOTE_TYPE_LABELS) as [WidgetQuoteType, string][])
-      .map(([value, label]) => ({ value, label })),
-    [],
+  // Collections sit behind one row rather than inline: the list is the user's
+  // own and unbounded, so folding it into the topic list would bury the topics.
+  const quoteTypeOptions = useMemo<PickerOption<QuoteTypeOptionValue>[]>(
+    () => {
+      const builtIn = (Object.entries(QUOTE_TYPE_LABELS) as [WidgetBuiltInQuoteType, string][])
+        .map(([value, label]) => ({ value: value as QuoteTypeOptionValue, label }));
+      // Straight after the other personal sources (Favorites, My Own Quotes)
+      // and ahead of the topic list.
+      const [general, favorites, myQuotes, ...topics] = builtIn;
+      return [
+        general,
+        favorites,
+        myQuotes,
+        {
+          value: COLLECTIONS_DRILL,
+          label: 'Collections',
+          drill: true,
+          meta: selectedCollection?.name,
+        },
+        ...topics,
+      ];
+    },
+    [selectedCollection],
+  );
+
+  const collectionOptions = useMemo<PickerOption<QuoteTypeOptionValue>[]>(
+    () => collections.map((c) => ({
+      value: collectionQuoteType(c.id),
+      label: c.name,
+      meta: `${c.quotes.length} ${c.quotes.length === 1 ? 'quote' : 'quotes'}`,
+    })),
+    [collections],
   );
 
   const intervalOptions = useMemo(
@@ -504,6 +606,7 @@ export default function WidgetsScreen({
 
           <ConfigCard
             config={active}
+            sourceLabel={quoteTypeLabel(active.quoteType, collections)}
             onChange={change}
             onOpenPicker={(p) => (isPro ? setActivePicker(p) : openPaywall())}
           />
@@ -560,13 +663,22 @@ export default function WidgetsScreen({
         }}
       />
 
+      {/* Topics and Collections share one Modal rather than being two that
+          swap. Dismissing one and presenting the other in the same frame drops
+          the transition on iOS; switching the contents of a mounted sheet
+          reads as a drill-in and can't. */}
       <PickerModal
-        visible={activePicker === 'quoteType'}
-        title="Topics"
-        options={quoteTypeOptions}
+        visible={activePicker === 'quoteType' || activePicker === 'collection'}
+        title={activePicker === 'collection' ? 'Collections' : 'Topics'}
+        options={activePicker === 'collection' ? collectionOptions : quoteTypeOptions}
         selected={active.quoteType}
-        onSelect={(v) => change({ quoteType: v })}
+        onSelect={(v) => {
+          if (v === COLLECTIONS_DRILL) { setActivePicker('collection'); return; }
+          change({ quoteType: v as WidgetQuoteType });
+        }}
         onClose={() => setActivePicker(null)}
+        onBack={activePicker === 'collection' ? () => setActivePicker('quoteType') : undefined}
+        emptyLabel="No collections yet. Save a few quotes into one, then point this widget at it."
         theme={theme}
       />
       <PickerModal

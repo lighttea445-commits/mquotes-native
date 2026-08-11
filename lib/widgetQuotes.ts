@@ -3,14 +3,15 @@
  *
  * One place that turns a WidgetQuoteType into actual quotes, used by:
  *   • widget/widgetTaskHandler.ts   (Android headless refresh, one quote)
- *   • components/screens/WidgetsScreen.tsx (manual update, one quote)
- *   • modules/widget-bridge         (iOS queue, many quotes)
+ *   • tasks/widgetRefreshTask.ts    (Android background refresh, one quote)
+ *   • lib/widgetSync.ts             (manual update from the Widgets screen)
+ *   • lib/iosWidget.ts              (iOS queue, many quotes)
  *
  * Must stay free of React and component imports — the Android headless task
  * loads this before any UI exists.
  */
 
-import type { WidgetQuoteType } from '../store/useWidgetStore';
+import { collectionIdFromQuoteType, type WidgetQuoteType } from '../store/useWidgetStore';
 import {
   fetchMultipleRandomQuotes,
   fetchQuotesByCategory,
@@ -18,6 +19,7 @@ import {
 } from './quotesApi';
 import { useFavoritesStore } from '../store/useFavoritesStore';
 import { useUserQuotesStore } from '../store/useUserQuotesStore';
+import { useCollectionsStore } from '../store/useCollectionsStore';
 
 export interface WidgetQuote {
   id?: string;
@@ -81,6 +83,21 @@ export async function resolveWidgetQuotes(
   const wanted = Math.max(1, count);
 
   try {
+    const collectionId = collectionIdFromQuoteType(quoteType);
+    if (collectionId !== null) {
+      await waitForHydration(useCollectionsStore);
+      const collection = useCollectionsStore
+        .getState()
+        .collections.find((c) => c.id === collectionId);
+      const saved = collection?.quotes ?? [];
+      if (saved.length > 0) {
+        return sample(saved, wanted).map((q) => ({ id: q.id, text: q.text, author: q.author }));
+      }
+      // Empty, or deleted while a config still pointed at it — fall back to
+      // general rather than leave the widget blank.
+      return fetchGeneral(wanted);
+    }
+
     if (quoteType === 'favorites') {
       await waitForHydration(useFavoritesStore);
       const favs = useFavoritesStore.getState().favorites;
