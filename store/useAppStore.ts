@@ -17,6 +17,16 @@ export interface UserPreferences {
   // Sub-type toggles (each independently enabled under the master toggle)
   quotesEnabled: boolean;      // daily random quotes
   notificationShowAuthor: boolean; // show author under quote notification, default false
+  /**
+   * Second General group. Same shape as the first one and scheduled alongside
+   * it, so the user can run one window in the morning and another at night.
+   * Off until they turn it on.
+   */
+  quotes2Enabled: boolean;
+  notificationCount2: number;      // 1–20, default 5
+  notificationStartTime2: string;  // HH:mm, default "09:00"
+  notificationEndTime2: string;    // HH:mm, default "22:00"
+  notificationShowAuthor2: boolean;
   qodEnabled: boolean;         // quote of the day
   qodTime: string;             // HH:mm, default "08:00"
   /**
@@ -25,6 +35,7 @@ export interface UserPreferences {
    * the daily drip and Quote of the Day can sit on different categories.
    */
   notifQuoteSource: string;
+  notifQuoteSource2: string;
   notifQodSource: string;
   streakEnabled: boolean;      // streak reminder
   streakTime: string;          // HH:mm, default "21:00"
@@ -98,6 +109,13 @@ interface AppState {
   /** Epoch ms of the last time the app came to the foreground. 0 = never recorded. */
   lastForegroundAt: number;
   returnNudgeType: ReturnNudgeType;
+  /**
+   * DEV ONLY — temporary screenshot mode. Strips every navigation element from
+   * the quote screen so store listings can be captured cleanly. Entered from
+   * the hidden control on the onboarding splash, exited with a long press on
+   * the top-left corner of the quote screen. Delete with the splash control.
+   */
+  screenshotMode: boolean;
 
   // Actions
   setPreferences: (prefs: Partial<UserPreferences>) => void;
@@ -118,6 +136,8 @@ interface AppState {
   /** Records a foreground open and returns the gap since the previous one, in ms (0 on the very first open). */
   noteForegroundOpen: () => number;
   setReturnNudgeType: (type: ReturnNudgeType) => void;
+  /** DEV ONLY — see `screenshotMode`. */
+  setScreenshotMode: (on: boolean) => void;
   resetApp: () => void;
 }
 
@@ -134,9 +154,15 @@ const defaultPreferences: UserPreferences = {
   notificationDays: [],  // empty = all 7 days
   quotesEnabled: true,
   notificationShowAuthor: false,
+  quotes2Enabled: false,
+  notificationCount2: 5,
+  notificationStartTime2: '09:00',
+  notificationEndTime2: '22:00',
+  notificationShowAuthor2: false,
   qodEnabled: true,
   qodTime: '08:00',
   notifQuoteSource: 'following',
+  notifQuoteSource2: 'following',
   notifQodSource: 'following',
   streakEnabled: true,
   streakTime: '21:00',
@@ -201,6 +227,7 @@ export const useAppStore = create<AppState>()(
       reviewPrompt: defaultReviewPrompt,
       lastForegroundAt: 0,
       returnNudgeType: null,
+      screenshotMode: false,
 
       setPreferences: (prefs) =>
         set((state) => ({
@@ -333,6 +360,8 @@ export const useAppStore = create<AppState>()(
 
       setReturnNudgeType: (type) => set({ returnNudgeType: type }),
 
+      setScreenshotMode: (on) => set({ screenshotMode: on }),
+
       resetApp: () =>
         set({
           preferences: defaultPreferences,
@@ -343,6 +372,7 @@ export const useAppStore = create<AppState>()(
           reviewPrompt: defaultReviewPrompt,
           lastForegroundAt: 0,
           returnNudgeType: null,
+          screenshotMode: false,
         }),
     }),
     {
