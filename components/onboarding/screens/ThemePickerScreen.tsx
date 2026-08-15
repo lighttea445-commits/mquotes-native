@@ -14,7 +14,7 @@ interface Props {
 }
 
 /**
- * The six free onboarding themes. Selection applies immediately, so every
+ * The five free onboarding themes. Selection applies immediately, so every
  * screen after this one renders in the user's choice.
  */
 export function ThemePickerScreen({ selectedId, onSelect, next, back, progress }: Props) {

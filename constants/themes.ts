@@ -413,18 +413,21 @@ export const THEMES: Theme[] = [
 export const DEFAULT_THEME_ID = 'minimal';
 
 /**
- * The six themes offered during onboarding, before the paywall.
+ * The five themes offered during onboarding, before the paywall.
  *
  * Picking one here is free. Switching themes later inside the app stays
  * Pro-gated by `ThemesScreen`.
+ *
+ * `minimal` is deliberately absent even though it is the default: the screen
+ * is a choice between looks the user hasn't seen yet, and it stays applied if
+ * they continue without picking.
  */
 export const ONBOARDING_THEME_IDS = [
-  'minimal',
-  'seashore',
-  'blush',
-  'crescent',
-  'botanical',
+  'obsidian',
   'lunar',
+  'blush',
+  'seashore',
+  'orbit',
 ] as const;
 
 export function getTheme(id: string): Theme {
