@@ -418,16 +418,16 @@ export const DEFAULT_THEME_ID = 'minimal';
  * Picking one here is free. Switching themes later inside the app stays
  * Pro-gated by `ThemesScreen`.
  *
- * `minimal` sits last and is the default, so the grid arrives with a card
+ * `minimal` leads and is the default, so the grid arrives with its first card
  * already checked and continuing without picking changes nothing.
  */
 export const ONBOARDING_THEME_IDS = [
+  'minimal',
   'obsidian',
   'lunar',
   'blush',
   'seashore',
   'orbit',
-  'minimal',
 ] as const;
 
 export function getTheme(id: string): Theme {
