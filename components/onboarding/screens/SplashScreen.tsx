@@ -59,7 +59,7 @@ export function SplashScreen({ next, onScreenshotMode }: Props) {
             style={[sp.devBtn, { backgroundColor: theme.surface }]}
             accessibilityLabel="Screenshot mode"
           >
-            <Icon name="tune-variant" size={18} color={theme.textMuted} />
+            <Icon name="tune-variant" size={18} color={theme.gold} />
           </TouchableOpacity>
         ) : null}
 
@@ -131,7 +131,6 @@ const sp = StyleSheet.create({
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    opacity: 0.5,
     zIndex: 10,
   },
 });
