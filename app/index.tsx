@@ -42,10 +42,7 @@ function HomeScreenInner() {
   // over the stripped-down post-onboarding screen before the user has
   // scrolled through the staged quotes.
   const quoteViews = useAppStore((s) => s.postOnboardingQuoteViews);
-  // DEV ONLY — screenshot mode. Delete with the onboarding splash control.
-  const screenshotMode = useAppStore((s) => s.screenshotMode);
-  const chromeHidden =
-    screenshotMode || (quoteViews !== undefined && quoteViews <= QUOTES_BEFORE_REVEAL);
+  const chromeHidden = quoteViews !== undefined && quoteViews <= QUOTES_BEFORE_REVEAL;
 
   // ── Old-format widget tap fallback (Expo Router v6 / index route params) ──
   //
@@ -132,15 +129,12 @@ function HomeScreenInner() {
         onDismiss={dismissStreakBanner}
       />
 
-      {/* Both are suppressed in screenshot mode (DEV ONLY). */}
-      {!screenshotMode && <FavoritesGoalToast />}
+      <FavoritesGoalToast />
 
-      {!screenshotMode && (
-        <ReturnNudge
-          onOpenNotifications={() => openSheet('notifications')}
-          onOpenWidgets={() => openSheet('widgets')}
-        />
-      )}
+      <ReturnNudge
+        onOpenNotifications={() => openSheet('notifications')}
+        onOpenWidgets={() => openSheet('widgets')}
+      />
 
       {/* Categories sheet */}
       <BottomSheet visible={activeSheet === 'categories'} onClose={closeSheet} backgroundColor={theme.background}

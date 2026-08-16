@@ -97,12 +97,14 @@ class WidgetBridgeClass {
     if (Platform.OS !== 'android') return [];
     try {
       const infos: WidgetInfo[] = await getWidgetInfo(WIDGET_NAME);
-      console.log(
-        `[WidgetBridge] getWidgetInfo("${WIDGET_NAME}") →`,
-        infos.length,
-        'widget(s):',
-        infos.map((i) => `id=${i.widgetId} ${i.width}×${i.height}dp`).join(', ') || '(none)',
-      );
+      if (__DEV__) {
+        console.log(
+          `[WidgetBridge] getWidgetInfo("${WIDGET_NAME}") →`,
+          infos.length,
+          'widget(s):',
+          infos.map((i) => `id=${i.widgetId} ${i.width}×${i.height}dp`).join(', ') || '(none)',
+        );
+      }
       return infos.map((i) => ({ widgetId: i.widgetId, type: 'basic' as const }));
     } catch (err) {
       console.error('[WidgetBridge] getActiveWidgets error:', err);

@@ -109,13 +109,6 @@ interface AppState {
   /** Epoch ms of the last time the app came to the foreground. 0 = never recorded. */
   lastForegroundAt: number;
   returnNudgeType: ReturnNudgeType;
-  /**
-   * DEV ONLY — temporary screenshot mode. Strips every navigation element from
-   * the quote screen so store listings can be captured cleanly. Entered from
-   * the hidden control on the onboarding splash, exited with a long press on
-   * the top-left corner of the quote screen. Delete with the splash control.
-   */
-  screenshotMode: boolean;
 
   // Actions
   setPreferences: (prefs: Partial<UserPreferences>) => void;
@@ -136,8 +129,6 @@ interface AppState {
   /** Records a foreground open and returns the gap since the previous one, in ms (0 on the very first open). */
   noteForegroundOpen: () => number;
   setReturnNudgeType: (type: ReturnNudgeType) => void;
-  /** DEV ONLY — see `screenshotMode`. */
-  setScreenshotMode: (on: boolean) => void;
   resetApp: () => void;
 }
 
@@ -227,7 +218,6 @@ export const useAppStore = create<AppState>()(
       reviewPrompt: defaultReviewPrompt,
       lastForegroundAt: 0,
       returnNudgeType: null,
-      screenshotMode: false,
 
       setPreferences: (prefs) =>
         set((state) => ({
@@ -360,8 +350,6 @@ export const useAppStore = create<AppState>()(
 
       setReturnNudgeType: (type) => set({ returnNudgeType: type }),
 
-      setScreenshotMode: (on) => set({ screenshotMode: on }),
-
       resetApp: () =>
         set({
           preferences: defaultPreferences,
@@ -372,7 +360,6 @@ export const useAppStore = create<AppState>()(
           reviewPrompt: defaultReviewPrompt,
           lastForegroundAt: 0,
           returnNudgeType: null,
-          screenshotMode: false,
         }),
     }),
     {

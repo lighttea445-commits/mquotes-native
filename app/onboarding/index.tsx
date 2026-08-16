@@ -56,7 +56,6 @@ export default function OnboardingScreen() {
   const setPreferences = useAppStore((s) => s.setPreferences);
   const setTheme = useAppStore((s) => s.setTheme);
   const completeOnboarding = useAppStore((s) => s.completeOnboarding);
-  const setScreenshotMode = useAppStore((s) => s.setScreenshotMode);
   const { isInitialized, offerings } = useRevenueCat();
 
   const [step, setStep] = useState(0);
@@ -73,14 +72,6 @@ export default function OnboardingScreen() {
    * that closure and land on the very screen the grant should skip.
    */
   const notifGranted = useRef(false);
-
-  /**
-   * DEV ONLY — screenshot mode. Set by the hidden control on the splash. While
-   * true the flow is only the theme picker, and Continue there drops straight
-   * into the app with every navigation element stripped. Delete this with the
-   * splash control once the store shots are captured.
-   */
-  const [screenshotFlow, setScreenshotFlow] = useState(false);
 
   const screenOpacity = useSharedValue(1);
   const screenStyle = useAnimatedStyle(() => ({ opacity: screenOpacity.value }));
@@ -178,31 +169,10 @@ export default function OnboardingScreen() {
   /** Last question screen — commit everything before the offer sequence. */
   const persistedAt = STEP_INDEX['improve'];
 
-  /**
-   * DEV ONLY — jumps the flow to the theme picker. Nothing is persisted on the
-   * way, so the screenshot build starts from stock preferences.
-   */
-  const enterScreenshotMode = useCallback(() => {
-    setScreenshotFlow(true);
-    transition(() => setStep(STEP_INDEX['theme']));
-  }, [transition]);
-
-  /** DEV ONLY — applies the picked theme and lands in the stripped-down app. */
-  const finishScreenshotMode = useCallback(() => {
-    setTheme(themeId);
-    setScreenshotMode(true);
-    completeOnboarding();
-    router.replace('/');
-  }, [router, setTheme, setScreenshotMode, completeOnboarding, themeId]);
-
   const advance = useCallback(() => {
-    if (screenshotFlow) {
-      finishScreenshotMode();
-      return;
-    }
     if (step === persistedAt) void persist();
     next();
-  }, [screenshotFlow, finishScreenshotMode, step, persistedAt, persist, next]);
+  }, [step, persistedAt, persist, next]);
 
   /**
    * Schedules from whatever is currently in the store, so the reminders the
@@ -407,8 +377,7 @@ export default function OnboardingScreen() {
   const bespoke = () => {
     switch (current.id) {
       case 'splash':
-        // onScreenshotMode is DEV ONLY — remove it with the rest of the mode.
-        return <SplashScreen next={advance} onScreenshotMode={enterScreenshotMode} />;
+        return <SplashScreen next={advance} />;
 
       case 'name':
         return (
@@ -453,9 +422,8 @@ export default function OnboardingScreen() {
             selectedId={themeId}
             onSelect={handleThemeSelect}
             next={advance}
-            // No back or progress in screenshot mode: the flow is this screen only.
-            back={screenshotFlow ? undefined : back}
-            progress={screenshotFlow ? undefined : progress}
+            back={back}
+            progress={progress}
           />
         );
 

@@ -101,12 +101,7 @@ export function QuoteCard() {
   // fades in once QUOTES_BEFORE_REVEAL quotes have been seen.
   const quoteViews = useAppStore((s) => s.postOnboardingQuoteViews);
   const noteQuoteViewed = useAppStore((s) => s.noteQuoteViewed);
-  // DEV ONLY — screenshot mode keeps the chrome down permanently. Delete with
-  // the onboarding splash control.
-  const screenshotMode = useAppStore((s) => s.screenshotMode);
-  const setScreenshotMode = useAppStore((s) => s.setScreenshotMode);
-  const chromeHidden =
-    screenshotMode || (quoteViews !== undefined && quoteViews <= QUOTES_BEFORE_REVEAL);
+  const chromeHidden = quoteViews !== undefined && quoteViews <= QUOTES_BEFORE_REVEAL;
   const chromeOpacity = useSharedValue(chromeHidden ? 0 : 1);
 
   useEffect(() => {
@@ -121,7 +116,7 @@ export function QuoteCard() {
   // Swipe-up hint — a bouncing arrow, no text, shown only until the user's
   // first swipe during the stripped-down post-onboarding window.
   const [hasSwiped, setHasSwiped] = useState(false);
-  const showSwipeHint = chromeHidden && !hasSwiped && !screenshotMode;
+  const showSwipeHint = chromeHidden && !hasSwiped;
   const swipeHintOpacity = useSharedValue(0);
   const swipeHintTranslateY = useSharedValue(0);
 
@@ -182,7 +177,9 @@ export function QuoteCard() {
   // in the widget store. This effect must run BEFORE the loadQuotes effect.
   useEffect(() => {
     if (!pendingQuote) return;
-    console.log('[QuoteCard] Deep-link effect fired, pendingQuote:', pendingQuote.id, pendingQuote.text?.slice(0, 40));
+    if (__DEV__) {
+      console.log('[QuoteCard] Deep-link effect fired, pendingQuote:', pendingQuote.id, pendingQuote.text?.slice(0, 40));
+    }
     deepLinkHandledRef.current = true;
     // Bump the generation so any in-flight loadQuotes discards its result and
     // doesn't overwrite the buffer we're about to set.
@@ -640,18 +637,6 @@ export function QuoteCard() {
           </Animated.View>
         )}
 
-        {/* DEV ONLY — the way out of screenshot mode: long press the top-left
-            corner. Invisible, and a long press so a stray tap can't trip it
-            mid-shoot. Delete with the onboarding splash control. */}
-        {screenshotMode && (
-          <TouchableOpacity
-            onLongPress={() => setScreenshotMode(false)}
-            delayLongPress={800}
-            activeOpacity={1}
-            style={styles.screenshotExit}
-          />
-        )}
-
         {/* ── BOTTOM BAR: hidden until the first-run reveal ── */}
         <Animated.View
           style={[StyleSheet.absoluteFill, chromeStyle]}
@@ -863,15 +848,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     alignItems: 'center',
-  },
-
-  // DEV ONLY — invisible screenshot-mode exit target.
-  screenshotExit: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: 56,
-    height: 56,
   },
 
   // Floating corner buttons (bottom/left/right applied inline — dynamic safe-area offsets)

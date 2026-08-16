@@ -29,9 +29,9 @@ import { ConfirmSheet } from '../ui/ConfirmSheet';
 import { useRevenueCat, setForcePro } from '../../hooks/useRevenueCat';
 import { ON_GOLD } from '../ui/tokens';
 
-// TEMP: forced on so the developer section survives an EAS build.
-// Set back to __DEV__ before publishing.
-const SHOW_DEV_SETTINGS = true;
+// Debug tooling. False in release builds, so the whole section is stripped
+// from production and its Pro override can never be reached there.
+const SHOW_DEV_SETTINGS = __DEV__;
 
 export default function SettingsScreen({ onClose, onBack }: { onClose?: () => void; onBack?: () => void }) {
   const theme = useTheme();
@@ -255,35 +255,6 @@ export default function SettingsScreen({ onClose, onBack }: { onClose?: () => vo
                 <Icon name="refresh" size={20} color={theme.gold} />
                 <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
                   Reset Return Nudge State
-                </Text>
-              </TouchableOpacity>
-              {/* DEV ONLY — screenshot mode. Strips every navigation element
-                  from the quote screen. Long press its top-left corner to come
-                  back. Delete with the onboarding splash control. */}
-              <TouchableOpacity
-                style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border, marginTop: 8 }]}
-                onPress={() => {
-                  useAppStore.setState({ screenshotMode: true });
-                  close();
-                }}
-              >
-                <Icon name="tune-variant" size={20} color={theme.gold} />
-                <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
-                  Screenshot Mode
-                </Text>
-              </TouchableOpacity>
-              {/* DEV ONLY — replays onboarding without wiping any data, unlike
-                  Delete account below. */}
-              <TouchableOpacity
-                style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border, marginTop: 8 }]}
-                onPress={() => {
-                  useAppStore.setState({ onboardingComplete: false });
-                  router.replace('/onboarding');
-                }}
-              >
-                <Icon name="restart" size={20} color={theme.gold} />
-                <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
-                  Replay Onboarding
                 </Text>
               </TouchableOpacity>
             </View>
