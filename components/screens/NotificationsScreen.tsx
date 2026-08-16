@@ -57,18 +57,120 @@ function describeDays(days: number[]): string {
   return days.map(d => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]).join(', ');
 }
 
+// ── Reminder card (main list) ──────────────────────────────────────────────
+
+/**
+ * One reminder in the main list.
+ *
+ * Declared at module scope, NOT inside NotificationsScreen. An inner function
+ * component gets a fresh identity on every render, so React reads it as a
+ * different element type and remounts the whole card rather than updating it.
+ * That tears down and rebuilds the native iOS UISwitch, and the debounced save
+ * lands 400ms after the tap — right in the middle of the switch's own
+ * animation, which is what reads as the toggle flickering or firing twice.
+ *
+ * Everything it needs comes in as a prop for the same reason: closing over the
+ * screen's state is what forced it to live inside the body.
+ */
+function ReminderCard({
+  anim,
+  theme,
+  title,
+  timeLabel,
+  countLabel,
+  daysLabel,
+  isEnabled,
+  onToggle,
+  onPress,
+  locked,
+  lockedPress,
+}: {
+  anim: Animated.Value;
+  theme: ReturnType<typeof useTheme>;
+  title: string;
+  timeLabel: string;
+  countLabel: string;
+  /** Resolved by the parent, so this stays free of the screen's state. */
+  daysLabel: string;
+  isEnabled: boolean;
+  onToggle: (v: boolean) => void;
+  onPress: () => void;
+  locked?: boolean;
+  /** What a locked card does when tapped. Undefined leaves it inert. */
+  lockedPress?: () => void;
+}) {
+  const handlePress = locked ? lockedPress : onPress;
+  return (
+    <Animated.View style={{
+      opacity: anim,
+      transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }],
+    }}>
+      <TouchableOpacity
+        onPress={handlePress}
+        activeOpacity={handlePress ? 0.8 : 1}
+        style={[ss.reminderCard, {
+          backgroundColor: theme.surface,
+          borderColor: locked ? theme.border : isEnabled ? 'rgba(184,151,90,0.25)' : theme.border,
+          opacity: locked ? 0.6 : 1,
+        }]}
+      >
+        {/* Top row: title + time. Locked cards read the same as the rest,
+            with the lock glyph below carrying the state on its own. */}
+        <View style={ss.reminderCardTop}>
+          <Text style={[ss.reminderCardTitle, {
+            color: locked ? theme.textMuted : isEnabled ? theme.text : theme.textMuted,
+            fontFamily: theme.quoteFontFamily,
+          }]}>{title}</Text>
+          <Text style={[ss.reminderCardTime, {
+            color: !locked && isEnabled ? theme.gold : theme.textMuted,
+            fontFamily: theme.uiFontFamily,
+          }]}>
+            {timeLabel}
+          </Text>
+        </View>
+
+        {/* Bottom row: count+days + toggle/lock */}
+        <View style={ss.reminderCardBottom}>
+          <View style={ss.reminderCardMeta}>
+            <Text style={[ss.reminderCardCount, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+              {countLabel}
+            </Text>
+            <Text style={[ss.reminderCardDays, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+              {'  '}{daysLabel}
+            </Text>
+          </View>
+          {locked ? (
+            <Icon name="lock-outline" size={20} color={theme.textMuted} />
+          ) : (
+            <Switch
+              value={isEnabled}
+              onValueChange={onToggle}
+              trackColor={{ false: theme.border, true: theme.gold }}
+              thumbColor={theme.background}
+            />
+          )}
+        </View>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}
+
 // ── Types ──────────────────────────────────────────────────────────────────
-type PickerTarget = 'startTime' | 'endTime' | 'qodTime' | 'streakTime';
-type ActiveCard = null | 'quotes' | 'qod' | 'streak';
+type PickerTarget = 'startTime' | 'endTime' | 'startTime2' | 'endTime2' | 'qodTime' | 'streakTime';
+type ActiveCard = null | 'quotes' | 'quotes2' | 'qod' | 'streak';
 /** Which reminder's category list is open on top of its edit view. */
-type CategoryTarget = null | 'quotes' | 'qod';
+type CategoryTarget = null | 'quotes' | 'quotes2' | 'qod';
+/** The two General cards are the same reminder twice, so they share a key. */
+type QuoteGroup = 'quotes' | 'quotes2';
 interface Settings {
   enabled: boolean; days: number[];
   quotesEnabled: boolean; showAuthor: boolean;
   count: number; startTime: string; endTime: string;
+  quotes2Enabled: boolean; showAuthor2: boolean;
+  count2: number; startTime2: string; endTime2: string;
   qodEnabled: boolean; qodTime: string;
   streakEnabled: boolean; streakTime: string;
-  quoteSource: string; qodSource: string;
+  quoteSource: string; quoteSource2: string; qodSource: string;
 }
 
 interface SourceOption {
@@ -109,6 +211,13 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
   const [count, setCount] = useState(pref.notificationCount ?? 5);
   const [startTime, setStartTime] = useState(pref.notificationStartTime ?? '09:00');
   const [endTime, setEndTime] = useState(pref.notificationEndTime ?? '22:00');
+  // Second General group. Off until the user turns it on, so nothing changes
+  // for anyone who only wants one window.
+  const [quotes2Enabled, setQuotes2Enabled] = useState(pref.quotes2Enabled ?? false);
+  const [showAuthor2, setShowAuthor2] = useState(pref.notificationShowAuthor2 ?? false);
+  const [count2, setCount2] = useState(pref.notificationCount2 ?? 5);
+  const [startTime2, setStartTime2] = useState(pref.notificationStartTime2 ?? '09:00');
+  const [endTime2, setEndTime2] = useState(pref.notificationEndTime2 ?? '22:00');
   const [qodEnabled, setQodEnabled] = useState(pref.qodEnabled ?? true);
   const [qodTime, setQodTime] = useState(pref.qodTime ?? '08:00');
   const [streakEnabled, setStreakEnabled] = useState(pref.streakEnabled ?? true);
@@ -116,6 +225,7 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
   // Each reminder picks its own category, so Quote of the Day can sit on
   // Favorites while the daily drip stays on everything you follow.
   const [quoteSource, setQuoteSource] = useState(pref.notifQuoteSource ?? SOURCE_FOLLOWING);
+  const [quoteSource2, setQuoteSource2] = useState(pref.notifQuoteSource2 ?? SOURCE_FOLLOWING);
   const [qodSource, setQodSource] = useState(pref.notifQodSource ?? SOURCE_FOLLOWING);
   const collections = useCollectionsStore((s) => s.collections);
 
@@ -156,7 +266,7 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
   const prevPermissionRef = useRef<boolean | null>(null);
 
   // Card stagger anims
-  const cardAnims = useRef([0, 1, 2].map(() => new Animated.Value(0))).current;
+  const cardAnims = useRef([0, 1, 2, 3].map(() => new Animated.Value(0))).current;
 
   // As a sheet this screen mounts on its first open and then stays mounted
   // (BottomSheet keep-alive), so a mount-only ask would raise the OS dialog
@@ -200,14 +310,19 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
   useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current); }, []);
 
   function buildSettings(o: Partial<Settings> = {}): Settings {
-    const anyEnabled = quotesEnabled || qodEnabled || streakEnabled;
-    return {
-      enabled: anyEnabled,
+    const base = {
       days, quotesEnabled, showAuthor, count, startTime, endTime,
+      quotes2Enabled, showAuthor2, count2, startTime2, endTime2,
       qodEnabled, qodTime,
       streakEnabled, streakTime,
-      quoteSource, qodSource,
+      quoteSource, quoteSource2, qodSource,
       ...o,
+    };
+    // Read the master switch off the merged values, so toggling the last
+    // reminder off in `o` still turns scheduling off.
+    return {
+      ...base,
+      enabled: base.quotesEnabled || base.quotes2Enabled || base.qodEnabled || base.streakEnabled,
     };
   }
 
@@ -225,6 +340,9 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
       notificationStartTime: s.startTime, notificationEndTime: s.endTime,
       notificationDays: s.days, quotesEnabled: s.quotesEnabled,
       notificationShowAuthor: s.showAuthor, qodEnabled: s.qodEnabled, qodTime: s.qodTime,
+      quotes2Enabled: s.quotes2Enabled, notificationCount2: s.count2,
+      notificationStartTime2: s.startTime2, notificationEndTime2: s.endTime2,
+      notificationShowAuthor2: s.showAuthor2, notifQuoteSource2: s.quoteSource2,
       notifQuoteSource: s.quoteSource, notifQodSource: s.qodSource,
       streakEnabled: s.streakEnabled, streakTime: s.streakTime,
     });
@@ -236,6 +354,8 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
           enabled: s.enabled, days: s.days, quotesEnabled: s.quotesEnabled,
           showAuthor: s.showAuthor, quoteCount: s.count,
           startHHMM: s.startTime, endHHMM: s.endTime, quoteSource: s.quoteSource,
+          quotes2Enabled: s.quotes2Enabled, showAuthor2: s.showAuthor2, quoteCount2: s.count2,
+          startHHMM2: s.startTime2, endHHMM2: s.endTime2, quoteSource2: s.quoteSource2,
           qodEnabled: s.qodEnabled, qodTime: s.qodTime, qodSource: s.qodSource,
           streakEnabled: s.streakEnabled, streakTime: s.streakTime,
         }).then(() => setPreferences({ lastNotifScheduledAt: new Date().toISOString() }));
@@ -273,6 +393,13 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
     ensurePermission().then(granted => { if (granted) apply(); }).catch(console.warn);
   }, [ensurePermission]);
 
+  // Resolved here rather than inside ReminderCard, which is at module scope so
+  // that a re-render updates the native switch instead of remounting it.
+  const daysLabel = describeDays(days);
+  // Onboarding leaves a locked card inert: the paywall is a step of its own
+  // there, and opening it mid-flow would strand the user off the path.
+  const lockedPress = onContinue ? undefined : openPaywall;
+
   function handleToggleDay(day: number) {
     const next = days.includes(day) ? (days.length > 1 ? days.filter(d => d !== day) : days) : [...days, day];
     setDays(next); debouncedApply(buildSettings({ days: next }));
@@ -288,6 +415,8 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
     let next = buildSettings();
     if (pickerTarget === 'startTime') { setStartTime(hhmm); next = buildSettings({ startTime: hhmm }); }
     else if (pickerTarget === 'endTime') { setEndTime(hhmm); next = buildSettings({ endTime: hhmm }); }
+    else if (pickerTarget === 'startTime2') { setStartTime2(hhmm); next = buildSettings({ startTime2: hhmm }); }
+    else if (pickerTarget === 'endTime2') { setEndTime2(hhmm); next = buildSettings({ endTime2: hhmm }); }
     else if (pickerTarget === 'qodTime') { setQodTime(hhmm); next = buildSettings({ qodTime: hhmm }); }
     else if (pickerTarget === 'streakTime') { setStreakTime(hhmm); next = buildSettings({ streakTime: hhmm }); }
     debouncedApply(next);
@@ -361,74 +490,6 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
           );
         })}
       </View>
-    );
-  }
-
-  // ── Reminder card (main list) ──────────────────────────────────────────
-  function ReminderCard({ anim, icon, title, timeLabel, countLabel, isEnabled, onToggle, onPress, locked }: {
-    anim: Animated.Value;
-    icon: string;
-    title: string;
-    timeLabel: string;
-    countLabel: string;
-    isEnabled: boolean;
-    onToggle: (v: boolean) => void;
-    onPress: () => void;
-    locked?: boolean;
-  }) {
-    const handlePress = locked ? (onContinue ? undefined : openPaywall) : onPress;
-    return (
-      <Animated.View style={{
-        opacity: anim,
-        transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }],
-      }}>
-        <TouchableOpacity
-          onPress={handlePress}
-          activeOpacity={locked ? (onContinue ? 1 : 0.8) : 0.8}
-          style={[ss.reminderCard, {
-            backgroundColor: theme.surface,
-            borderColor: locked ? theme.border : isEnabled ? 'rgba(184,151,90,0.25)' : theme.border,
-            opacity: locked ? 0.6 : 1,
-          }]}
-        >
-          {/* Top row: title + time. Locked cards read the same as the rest,
-              with the lock glyph below carrying the state on its own. */}
-          <View style={ss.reminderCardTop}>
-            <Text style={[ss.reminderCardTitle, {
-              color: locked ? theme.textMuted : isEnabled ? theme.text : theme.textMuted,
-              fontFamily: theme.quoteFontFamily,
-            }]}>{title}</Text>
-            <Text style={[ss.reminderCardTime, {
-              color: !locked && isEnabled ? theme.gold : theme.textMuted,
-              fontFamily: theme.uiFontFamily,
-            }]}>
-              {timeLabel}
-            </Text>
-          </View>
-
-          {/* Bottom row: count+days + toggle/lock */}
-          <View style={ss.reminderCardBottom}>
-            <View style={ss.reminderCardMeta}>
-              <Text style={[ss.reminderCardCount, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-                {countLabel}
-              </Text>
-              <Text style={[ss.reminderCardDays, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-                {'  '}{describeDays(days)}
-              </Text>
-            </View>
-            {locked ? (
-              <Icon name="lock-outline" size={20} color={theme.textMuted} />
-            ) : (
-              <Switch
-                value={isEnabled}
-                onValueChange={onToggle}
-                trackColor={{ false: theme.border, true: theme.gold }}
-                thumbColor={theme.background}
-              />
-            )}
-          </View>
-        </TouchableOpacity>
-      </Animated.View>
     );
   }
 
@@ -508,22 +569,33 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
     );
   }
 
-  function QuotesEdit() {
+  /** Both General cards render this: same controls, its own group's values. */
+  function QuotesEdit({ group }: { group: QuoteGroup }) {
+    const second = group === 'quotes2';
+    const source = second ? quoteSource2 : quoteSource;
+    const countValue = second ? count2 : count;
+    const setCountValue = second ? setCount2 : setCount;
+    const authorValue = second ? showAuthor2 : showAuthor;
+    const setAuthorValue = second ? setShowAuthor2 : setShowAuthor;
+    const applyCount = (v: number) => {
+      setCountValue(v);
+      debouncedApply(buildSettings(second ? { count2: v } : { count: v }));
+    };
     return (
       <View style={[ss.editCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-        <CategoryRow value={quoteSource} onPress={() => { setPickingCollection(false); setCategoryTarget('quotes'); }} />
+        <CategoryRow value={source} onPress={() => { setPickingCollection(false); setCategoryTarget(group); }} />
         <EditRow label="How many">
           <Stepper
-            display={`${count}×`}
-            onDecrement={() => { const v = Math.max(1, count - 1); setCount(v); debouncedApply(buildSettings({ count: v })); }}
-            onIncrement={() => { const v = Math.min(20, count + 1); setCount(v); debouncedApply(buildSettings({ count: v })); }}
+            display={`${countValue}×`}
+            onDecrement={() => applyCount(Math.max(1, countValue - 1))}
+            onIncrement={() => applyCount(Math.min(20, countValue + 1))}
           />
         </EditRow>
         <EditRow label="Start at">
-          <TimeButton hhmm={startTime} target="startTime" />
+          <TimeButton hhmm={second ? startTime2 : startTime} target={second ? 'startTime2' : 'startTime'} />
         </EditRow>
         <EditRow label="End at">
-          <TimeButton hhmm={endTime} target="endTime" />
+          <TimeButton hhmm={second ? endTime2 : endTime} target={second ? 'endTime2' : 'endTime'} />
         </EditRow>
         <View style={[ss.editRepeatSection, { borderTopColor: theme.border }]}>
           <Text style={[ss.editRepeatLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}>Repeat</Text>
@@ -532,8 +604,11 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
         <View style={[ss.editRow, { borderBottomColor: 'transparent' }]}>
           <Text style={[ss.editRowLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}>Show author</Text>
           <Switch
-            value={showAuthor}
-            onValueChange={v => { setShowAuthor(v); debouncedApply(buildSettings({ showAuthor: v })); }}
+            value={authorValue}
+            onValueChange={v => {
+              setAuthorValue(v);
+              debouncedApply(buildSettings(second ? { showAuthor2: v } : { showAuthor: v }));
+            }}
             trackColor={{ false: theme.border, true: theme.gold }}
             thumbColor={theme.background}
           />
@@ -566,14 +641,15 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
   // ── Edit screen header metadata ────────────────────────────────────────
   const EDIT_META: Record<NonNullable<ActiveCard>, { icon: string; title: string }> = {
     quotes:  { icon: 'format-quote-close',  title: 'Edit reminder'       },
+    quotes2: { icon: 'format-quote-close',  title: 'Edit reminder'       },
     qod:     { icon: 'white-balance-sunny', title: 'Edit reminder'       },
     streak:  { icon: 'fire',                title: 'Edit reminder'       },
   };
 
   // ── iOS picker sheet ───────────────────────────────────────────────────
   function pickerLabel() {
-    if (pickerTarget === 'startTime') return 'Start at';
-    if (pickerTarget === 'endTime') return 'End at';
+    if (pickerTarget === 'startTime' || pickerTarget === 'startTime2') return 'Start at';
+    if (pickerTarget === 'endTime' || pickerTarget === 'endTime2') return 'End at';
     if (pickerTarget === 'qodTime') return 'Quote of the Day';
     if (pickerTarget === 'streakTime') return 'Streak Reminder';
     return 'Select time';
@@ -622,6 +698,9 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
     if (categoryTarget === 'quotes') {
       setQuoteSource(id);
       debouncedApply(buildSettings({ quoteSource: id }));
+    } else if (categoryTarget === 'quotes2') {
+      setQuoteSource2(id);
+      debouncedApply(buildSettings({ quoteSource2: id }));
     } else {
       setQodSource(id);
       debouncedApply(buildSettings({ qodSource: id }));
@@ -630,7 +709,10 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
     setCategoryTarget(null);
   };
 
-  const activeSource = categoryTarget === 'quotes' ? quoteSource : qodSource;
+  const activeSource =
+    categoryTarget === 'quotes' ? quoteSource
+    : categoryTarget === 'quotes2' ? quoteSource2
+    : qodSource;
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -690,7 +772,8 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
 
         ) : activeCard !== null ? (
           <ScrollView style={{ flex: 1 }} contentContainerStyle={ss.scroll} showsVerticalScrollIndicator={false}>
-            {activeCard === 'quotes'  && <QuotesEdit />}
+            {activeCard === 'quotes'  && <QuotesEdit group="quotes" />}
+            {activeCard === 'quotes2' && <QuotesEdit group="quotes2" />}
             {activeCard === 'qod'     && (
               <SingleTimeEdit
                 timeValue={qodTime}
@@ -733,8 +816,10 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
             {/* ── Reminder cards ─────────────────────────────────────────── */}
             <ReminderCard
               anim={cardAnims[0]}
-              icon="format-quote-close"
-              title="Daily Quotes"
+              theme={theme}
+              daysLabel={daysLabel}
+              lockedPress={lockedPress}
+              title="General"
               timeLabel={`${formatHHMMto12h(startTime)} - ${formatHHMMto12h(endTime)}`}
               countLabel={`${count}×`}
               isEnabled={permissionGranted !== false && quotesEnabled}
@@ -748,9 +833,37 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
               onPress={() => setActiveCard('quotes')}
             />
 
+            {/* The same reminder a second time, so two windows can run at once.
+                One window is the free tier, so the second is Premium — matching
+                the other two gated cards below. rescheduleAll gates it again,
+                which is what actually stops a lapsed entitlement from keeping
+                the second window alive. */}
             <ReminderCard
               anim={cardAnims[1]}
-              icon="white-balance-sunny"
+              theme={theme}
+              daysLabel={daysLabel}
+              lockedPress={lockedPress}
+              title="General"
+              timeLabel={`${formatHHMMto12h(startTime2)} - ${formatHHMMto12h(endTime2)}`}
+              countLabel={`${count2}×`}
+              isEnabled={isPro && permissionGranted !== false && quotes2Enabled}
+              onToggle={v => {
+                if (!isPro) { if (!onContinue) openPaywall(); return; }
+                if (!v) { setQuotes2Enabled(false); debouncedApply(buildSettings({ quotes2Enabled: false })); return; }
+                enableWithPermission(() => {
+                  setQuotes2Enabled(true);
+                  debouncedApply(buildSettings({ quotes2Enabled: true }));
+                });
+              }}
+              onPress={() => { if (!isPro) { if (!onContinue) openPaywall(); return; } setActiveCard('quotes2'); }}
+              locked={!isPro}
+            />
+
+            <ReminderCard
+              anim={cardAnims[2]}
+              theme={theme}
+              daysLabel={daysLabel}
+              lockedPress={lockedPress}
               title="Quote of the Day"
               timeLabel={formatHHMMto12h(qodTime)}
               countLabel="1×"
@@ -768,8 +881,10 @@ export default function NotificationsScreen({ onClose, onBack, onContinue, progr
             />
 
             <ReminderCard
-              anim={cardAnims[2]}
-              icon="fire"
+              anim={cardAnims[3]}
+              theme={theme}
+              daysLabel={daysLabel}
+              lockedPress={lockedPress}
               title="Streak Reminder"
               timeLabel={formatHHMMto12h(streakTime)}
               countLabel="1×"

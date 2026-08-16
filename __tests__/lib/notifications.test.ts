@@ -349,6 +349,45 @@ describe('rescheduleAll', () => {
       expect(byCategory('daily-quote').length).toBeGreaterThan(0);
     });
 
+    // One General window is the free tier; a second one is Premium. Gated in
+    // the scheduler and not only on the card, so a preference stored while the
+    // entitlement was live cannot keep the second window running after it
+    // lapses. The two windows share a category, so they are told apart by the
+    // only thing that differs: the hour they fire in.
+    const hoursOn = (dateStr: string) =>
+      byCategory('daily-quote')
+        .map((c) => c.trigger.date as Date)
+        .filter((d) => d.toDateString() === dateStr)
+        .map((d) => d.getHours());
+
+    const TWO_WINDOWS = {
+      ...BASE_OPTS,
+      qodEnabled: false,
+      streakEnabled: false,
+      quoteCount: 1,
+      startHHMM: '09:00',
+      endHHMM: '09:00',
+      quotes2Enabled: true,
+      quoteCount2: 1,
+      startHHMM2: '20:00',
+      endHHMM2: '20:00',
+    };
+
+    it('schedules the second General window for a Pro user', async () => {
+      const { rescheduleAll } = freshScheduler();
+      await rescheduleAll(TWO_WINDOWS);
+
+      expect(hoursOn(NOW.toDateString())).toEqual([9, 20]);
+    });
+
+    it('drops the second General window for a free user, keeping the first', async () => {
+      mockIsPro = false;
+      const { rescheduleAll } = freshScheduler();
+      await rescheduleAll(TWO_WINDOWS);
+
+      expect(hoursOn(NOW.toDateString())).toEqual([9]);
+    });
+
     // The cap is spent in whole days, so the two slots QoD and streak reserve
     // only buy back a day when they tip the division: 16 a day fits 3 days
     // inside 62 slots but 4 inside all 64.

@@ -23,6 +23,15 @@ export interface RescheduleOptions {
    * `_favorites`, `_myquotes`, or `collection:<id>`.
    */
   quoteSource?: string;
+  // Second General group — same shape as the first, scheduled alongside it so
+  // the user can hold two separate windows. Optional: callers written before it
+  // existed simply schedule one group.
+  quotes2Enabled?: boolean;
+  quoteCount2?: number;
+  startHHMM2?: string;
+  endHHMM2?: string;
+  showAuthor2?: boolean;
+  quoteSource2?: string;
   // Quote of the Day
   qodEnabled: boolean;
   qodTime: string;         // HH:mm
@@ -211,12 +220,14 @@ export async function rescheduleAll(opts: RescheduleOptions): Promise<void> {
   const { resolveNotificationQuotes, SOURCE_FOLLOWING } = require('./notificationQuotes') as typeof import('./notificationQuotes');
   const { getIsPro } = require('../hooks/useRevenueCat') as typeof import('../hooks/useRevenueCat');
 
-  // Quote of the Day and the streak reminder are Premium features. Gated here
-  // rather than only in the UI, so a stored preference from before an
-  // entitlement lapsed cannot keep scheduling them.
+  // Quote of the Day, the streak reminder and the second General window are
+  // Premium features. Gated here rather than only in the UI, so a stored
+  // preference from before an entitlement lapsed cannot keep scheduling them.
+  // The first General window is the free tier and is deliberately not gated.
   const isPro = getIsPro();
   const qodEnabled = opts.qodEnabled && isPro;
   const streakEnabled = opts.streakEnabled && isPro;
+  const quotes2Enabled = opts.quotes2Enabled && isPro;
 
   const repeatingSlots = (() => {
     let n = 0;
@@ -227,21 +238,47 @@ export async function rescheduleAll(opts: RescheduleOptions): Promise<void> {
   })();
   const quoteDateSlots = Math.max(0, IOS_NOTIF_LIMIT - repeatingSlots);
 
-  // ── 1. Daily Quotes (one-shot DATE triggers, unique quote per slot) ────
-  if (opts.quotesEnabled) {
-    // `quotesEnabled` is the off switch, so a count below 1 is a stale value
+  // ── 1. General groups (one-shot DATE triggers, unique quote per slot) ──
+  // Two independent windows, each with its own count, times, source and author
+  // line. Both draw from the same DATE-trigger budget, split evenly so turning
+  // the second one on cannot starve the first.
+  const quoteGroups = [
+    opts.quotesEnabled && {
+      count: opts.quoteCount,
+      startHHMM: opts.startHHMM,
+      endHHMM: opts.endHHMM,
+      showAuthor: opts.showAuthor,
+      source: opts.quoteSource,
+    },
+    quotes2Enabled && {
+      count: opts.quoteCount2 ?? 5,
+      startHHMM: opts.startHHMM2 ?? '09:00',
+      endHHMM: opts.endHHMM2 ?? '22:00',
+      showAuthor: opts.showAuthor2 ?? false,
+      source: opts.quoteSource2,
+    },
+  ].filter(Boolean) as Array<{
+    count: number; startHHMM: string; endHHMM: string; showAuthor: boolean; source?: string;
+  }>;
+
+  const groupDateSlots = quoteGroups.length > 0
+    ? Math.floor(quoteDateSlots / quoteGroups.length)
+    : 0;
+
+  for (const group of quoteGroups) {
+    // The group toggle is the off switch, so a count below 1 is a stale value
     // rather than an intent to schedule nothing. Older builds let onboarding
     // step the count down to 0, which left the reminder reading as on with
     // nothing behind it.
-    const raw = Number.isFinite(opts.quoteCount) ? Math.floor(opts.quoteCount) : 5;
+    const raw = Number.isFinite(group.count) ? Math.floor(group.count) : 5;
     const count = Math.max(1, Math.min(20, raw));
-    const times = buildTimes(count, opts.startHHMM, opts.endHHMM);
+    const times = buildTimes(count, group.startHHMM, group.endHHMM);
     const activeDaySet = specificDays ? new Set(specificDays) : null;
 
     // Figure out how many future days we can schedule
     const slotsPerDay = times.length;
     const maxDays = slotsPerDay > 0
-      ? Math.min(Math.floor(quoteDateSlots / slotsPerDay), 14) // cap at 14 days
+      ? Math.min(Math.floor(groupDateSlots / slotsPerDay), 14) // cap at 14 days
       : 0;
 
     // Build the list of future dates that match the allowed weekdays
@@ -264,7 +301,7 @@ export async function rescheduleAll(opts: RescheduleOptions): Promise<void> {
     const totalQuotesNeeded = futureDates.length * slotsPerDay;
 
     const quotes = await resolveNotificationQuotes(
-      opts.quoteSource ?? SOURCE_FOLLOWING,
+      group.source ?? SOURCE_FOLLOWING,
       Math.min(totalQuotesNeeded + 10, 100),
     );
     if (gen !== _scheduleGen) return;
@@ -292,7 +329,7 @@ export async function rescheduleAll(opts: RescheduleOptions): Promise<void> {
         await Notifications.scheduleNotificationAsync({
           content: {
             title,
-            ...(opts.showAuthor && { body: attribution(quote.author) }),
+            ...(group.showAuthor && { body: attribution(quote.author) }),
             sound: true,
             data: { category: 'daily-quote' as NotifCategory, quoteId: quote.id, quoteText: quote.content, quoteAuthor: quote.author },
             ...(Platform.OS === 'android' && { channelId: 'daily-quotes' }),

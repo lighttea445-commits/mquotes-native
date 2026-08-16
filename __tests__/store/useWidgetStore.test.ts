@@ -40,6 +40,50 @@ describe('createConfig', () => {
     const b = createConfig('B');
     expect(a.id).not.toBe(b.id);
   });
+
+  it('is confirmed unless asked for a provisional one', () => {
+    const { createConfig } = require('../../store/useWidgetStore');
+    expect(createConfig('A').provisional).toBe(false);
+    expect(createConfig('A', true).provisional).toBe(true);
+  });
+});
+
+// ── provisional configs / the empty state ───────────────────────────────────
+//
+// A provisional config is live on the platform (iOS renders nothing until
+// mq_configs holds an entry, and an extension that renders nothing never
+// stamps mq_seen_, so a placement could never be detected) but hidden from the
+// Widgets screen until a placed widget is actually observed.
+
+describe('visibleConfigs', () => {
+  it('hides provisional configs, which is what shows the empty state', () => {
+    const { visibleConfigs, createConfig } = require('../../store/useWidgetStore');
+    const seed = createConfig('seed', true);
+    const real = createConfig('real');
+
+    expect(visibleConfigs([seed])).toEqual([]);
+    expect(visibleConfigs([seed, real])).toEqual([real]);
+  });
+});
+
+describe('confirmConfig', () => {
+  it('promotes a provisional config exactly once', () => {
+    const { useWidgetStore } = require('../../store/useWidgetStore');
+    const created = useWidgetStore.getState().addConfig(undefined, { provisional: true });
+
+    expect(useWidgetStore.getState().confirmConfig(created.id)).toBe(true);
+    expect(useWidgetStore.getState().getConfig(created.id).provisional).toBe(false);
+    // Idempotent: the reconcile pass runs on every foreground.
+    expect(useWidgetStore.getState().confirmConfig(created.id)).toBe(false);
+  });
+
+  it('reports nothing promoted for an unknown or already-confirmed config', () => {
+    const { useWidgetStore } = require('../../store/useWidgetStore');
+    const created = useWidgetStore.getState().addConfig();
+
+    expect(useWidgetStore.getState().confirmConfig(created.id)).toBe(false);
+    expect(useWidgetStore.getState().confirmConfig('nope')).toBe(false);
+  });
 });
 
 describe('nextConfigName', () => {
@@ -235,6 +279,42 @@ describe('claimConfigFor', () => {
     expect(useWidgetStore.getState().configs).toHaveLength(1);
     expect(useWidgetStore.getState().bindings['1']).toBe(claimed?.id);
   });
+
+  // This is the "a widget was added" detection on Android, and it makes no
+  // distinction between the pin dialog and a widget dragged from the launcher.
+  it('confirms the provisional config it claims, so its card appears', () => {
+    const { useWidgetStore, visibleConfigs } = require('../../store/useWidgetStore');
+    const seed = useWidgetStore.getState().addConfig(undefined, { provisional: true });
+
+    expect(visibleConfigs(useWidgetStore.getState().configs)).toEqual([]);
+
+    const claimed = useWidgetStore.getState().claimConfigFor('1');
+
+    expect(claimed.id).toBe(seed.id);
+    expect(claimed.provisional).toBe(false);
+    expect(visibleConfigs(useWidgetStore.getState().configs)).toHaveLength(1);
+  });
+
+  // The headless task binds without going through claimConfigFor, so a config
+  // can already be bound and still provisional by the time the screen runs.
+  it('confirms an already-bound config it did not promote itself', () => {
+    const { useWidgetStore } = require('../../store/useWidgetStore');
+    const seed = useWidgetStore.getState().addConfig(undefined, { provisional: true });
+    useWidgetStore.getState().bindWidget('1', seed.id);
+
+    const claimed = useWidgetStore.getState().claimConfigFor('1');
+
+    expect(claimed.id).toBe(seed.id);
+    expect(claimed.provisional).toBe(false);
+  });
+
+  it('creates confirmed configs, not provisional ones', () => {
+    const { useWidgetStore } = require('../../store/useWidgetStore');
+    const a = useWidgetStore.getState().addConfig('A');
+    useWidgetStore.getState().bindWidget('1', a.id);
+
+    expect(useWidgetStore.getState().claimConfigFor('2').provisional).toBe(false);
+  });
 });
 
 // ── isRefreshDue ────────────────────────────────────────────────────────────
@@ -349,10 +429,25 @@ describe('migrateWidgetStore', () => {
     ]);
   });
 
-  it('is a no-op when already at the current version', () => {
+  it('treats everything already persisted as confirmed, not provisional', () => {
     const { migrateWidgetStore } = require('../../store/useWidgetStore');
-    const current = { configs: [{ id: 'x' }], bindings: { a: 'x' } };
-    expect(migrateWidgetStore(current, 2)).toBe(current);
+
+    // A user whose widget works today must not be shown the empty state.
+    const result = migrateWidgetStore({ configs: [{ id: 'x' }], bindings: { a: 'x' } }, 2);
+
+    expect(result.configs[0].provisional).toBe(false);
+    expect(result.bindings).toEqual({ a: 'x' });
+  });
+
+  it('leaves an explicitly provisional config provisional', () => {
+    const { migrateWidgetStore } = require('../../store/useWidgetStore');
+
+    const result = migrateWidgetStore(
+      { configs: [{ id: 'x', provisional: true }], bindings: {} },
+      2,
+    );
+
+    expect(result.configs[0].provisional).toBe(true);
   });
 
   it('handles a missing/empty persisted state without throwing', () => {

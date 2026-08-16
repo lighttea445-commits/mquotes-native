@@ -33,9 +33,10 @@ function resetWidgetConfigs(collectionId: string): string[] {
 function resetNotificationSources(collectionId: string): boolean {
   const source = COLLECTION_PREFIX + collectionId;
   const prefs = useAppStore.getState().preferences;
-  const updates: { notifQuoteSource?: string; notifQodSource?: string } = {};
+  const updates: { notifQuoteSource?: string; notifQuoteSource2?: string; notifQodSource?: string } = {};
 
   if (prefs.notifQuoteSource === source) updates.notifQuoteSource = SOURCE_FOLLOWING;
+  if (prefs.notifQuoteSource2 === source) updates.notifQuoteSource2 = SOURCE_FOLLOWING;
   if (prefs.notifQodSource === source) updates.notifQodSource = SOURCE_FOLLOWING;
   if (Object.keys(updates).length === 0) return false;
 
@@ -76,6 +77,12 @@ export async function releaseCollectionReferences(collectionId: string): Promise
       endHHMM: p.notificationEndTime,
       showAuthor: p.notificationShowAuthor,
       quoteSource: p.notifQuoteSource,
+      quotes2Enabled: p.quotes2Enabled,
+      quoteCount2: p.notificationCount2,
+      startHHMM2: p.notificationStartTime2,
+      endHHMM2: p.notificationEndTime2,
+      showAuthor2: p.notificationShowAuthor2,
+      quoteSource2: p.notifQuoteSource2,
       qodEnabled: p.qodEnabled,
       qodTime: p.qodTime,
       qodSource: p.notifQodSource,

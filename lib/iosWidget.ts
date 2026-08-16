@@ -242,3 +242,31 @@ export async function isIOSConfigPending(configId: string): Promise<boolean> {
     return true;
   }
 }
+
+/**
+ * Promotes every provisional config the extension has actually rendered.
+ *
+ * This is the iOS half of "a widget was added" detection. The app is never told
+ * that a widget was placed or which config it picked, so the mq_seen_<id> stamp
+ * is the only evidence there is: a config that got rendered is a config some
+ * placed widget is pointing at, whether it was added through the prompt or
+ * straight from the Home Screen.
+ *
+ * Returns true when anything was promoted, so a caller can refresh.
+ */
+export async function confirmSeenIOSConfigs(): Promise<boolean> {
+  if (Platform.OS !== 'ios') return false;
+
+  const store = useWidgetStore.getState();
+  const provisional = store.configs.filter((c) => c.provisional);
+  if (provisional.length === 0) return false;
+
+  const pending = await Promise.all(provisional.map((c) => isIOSConfigPending(c.id)));
+
+  let promoted = false;
+  provisional.forEach((config, n) => {
+    if (!pending[n] && useWidgetStore.getState().confirmConfig(config.id)) promoted = true;
+  });
+
+  return promoted;
+}

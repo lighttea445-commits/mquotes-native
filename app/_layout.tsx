@@ -52,13 +52,18 @@ import { View, ActivityIndicator, Text, Pressable, Platform, AppState } from 're
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAppStore } from '../store/useAppStore';
 import { useTheme } from '../hooks/useTheme';
+import { THEMES } from '../constants/themes';
 import { useReviewPrompt } from '../hooks/useReviewPrompt';
 import { registerWidgetRefreshTask } from '../tasks/widgetRefreshTask';
 import { WidgetBridge, IOS_WIDGET_QUEUE_KEY_PREFIX } from '../modules/widget-bridge';
-import { refreshAllIOSWidgets } from '../lib/iosWidget';
+import { refreshAllIOSWidgets, confirmSeenIOSConfigs } from '../lib/iosWidget';
 import { useDeepLinkStore } from '../store/useDeepLinkStore';
 import { useWidgetStore, type WidgetConfig } from '../store/useWidgetStore';
 import type { WidgetQuote } from '../lib/widgetQuotes';
+
+// The pre-font boot screen renders before the theme provider is up, so it reads
+// the default Minimal theme directly rather than hardcoding hexes.
+const MINIMAL = THEMES[0];
 
 // Required for scheduled notifications to appear in the foreground and for the
 // OS to know what to do when a notification fires (alert + sound, no badge).
@@ -205,6 +210,12 @@ function RootLayoutInner() {
           quoteCount: prefs.notificationCount ?? 5,
           startHHMM: prefs.notificationStartTime ?? '09:00',
           endHHMM: prefs.notificationEndTime ?? '22:00',
+          quotes2Enabled: prefs.quotes2Enabled ?? false,
+          showAuthor2: prefs.notificationShowAuthor2 ?? false,
+          quoteCount2: prefs.notificationCount2 ?? 5,
+          startHHMM2: prefs.notificationStartTime2 ?? '09:00',
+          endHHMM2: prefs.notificationEndTime2 ?? '22:00',
+          quoteSource2: prefs.notifQuoteSource2,
           qodEnabled: prefs.qodEnabled ?? true,
           qodTime: prefs.qodTime ?? '08:00',
           quoteSource: prefs.notifQuoteSource,
@@ -244,13 +255,20 @@ function RootLayoutInner() {
   // never opened that screen had no config to resolve: it rendered the setup
   // state and its tap carried nothing. Seeding inside topUp keeps it after
   // hydration on both branches below.
+  //
+  // The seed is provisional: live in the App Group so the extension can render
+  // and stamp mq_seen_, but hidden by the Widgets screen, which shows its empty
+  // state until a placed widget is actually observed. confirmSeenIOSConfigs()
+  // is that observation, and runs on every foreground because the app is never
+  // told a widget was added.
   useEffect(() => {
     if (Platform.OS !== 'ios') return;
 
     const topUp = () => {
       if (useWidgetStore.getState().configs.length === 0) {
-        useWidgetStore.getState().addConfig();
+        useWidgetStore.getState().addConfig(undefined, { provisional: true });
       }
+      confirmSeenIOSConfigs().catch(() => {});
       refreshAllIOSWidgets().catch(() => {});
     };
 
@@ -447,8 +465,8 @@ export default function RootLayout() {
 
   if (!fontsLoaded && !fontError && !fontWaitElapsed) {
     return (
-      <View style={{ flex: 1, backgroundColor: '#0D0D0D', justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator color="#B8975A" />
+      <View style={{ flex: 1, backgroundColor: MINIMAL.background, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator color={MINIMAL.text} />
       </View>
     );
   }

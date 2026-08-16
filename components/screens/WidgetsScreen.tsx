@@ -36,11 +36,13 @@ import {
   collectionIdFromQuoteType,
   collectionQuoteType,
   quoteTypeLabel,
+  visibleConfigs,
 } from '../../store/useWidgetStore';
 import { useCollectionsStore } from '../../store/useCollectionsStore';
+import { WidgetPhone } from '../art/WidgetPhone';
 import { WidgetBridge } from '../../modules/widget-bridge';
 import { syncWidgets } from '../../lib/widgetSync';
-import { isIOSConfigPending } from '../../lib/iosWidget';
+import { isIOSConfigPending, confirmSeenIOSConfigs } from '../../lib/iosWidget';
 import { useRevenueCat } from '../../hooks/useRevenueCat';
 import { useModal } from '../../contexts/ModalContext';
 import { GUTTER, SPACE, RADIUS, ON_GOLD } from '../ui/tokens';
@@ -376,26 +378,34 @@ export default function WidgetsScreen({
   const modal = useModal();
   const { isPro } = useRevenueCat();
 
-  const configs = useWidgetStore((s) => s.configs);
+  const allConfigs = useWidgetStore((s) => s.configs);
   const addConfig = useWidgetStore((s) => s.addConfig);
   const updateConfig = useWidgetStore((s) => s.updateConfig);
   const removeConfig = useWidgetStore((s) => s.removeConfig);
   const collections = useCollectionsStore((s) => s.collections);
 
+  // A provisional config exists only so the platform has something to resolve
+  // (see WidgetConfig.provisional). Until a placed widget is actually observed
+  // the screen has nothing to show, which is the empty state below.
+  const configs = useMemo(() => visibleConfigs(allConfigs), [allConfigs]);
+
   const [index, setIndex] = useState(0);
   const [activePicker, setActivePicker] = useState<ActivePicker>(null);
   const [renaming, setRenaming] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [showInstructions, setShowInstructions] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
   // A new page doesn't exist yet on the render that adds it, so the scroll
   // target is parked here and fired from onContentSizeChange instead.
   const pendingIndex = useRef<number | null>(null);
 
-  // The screen is never empty: a first configuration is created on open so
-  // there is always something to show and bind to. It syncs immediately, the
-  // same as handleCreate — without that the new config reaches nothing until
-  // the next foreground, and on iOS a placed widget has no config to resolve
-  // until it does.
+  // A first configuration is seeded on open so there is always something to
+  // bind to, but provisionally — the screen shows its empty state until a
+  // placed widget claims it. It syncs immediately: without that the config
+  // reaches nothing until the next foreground, and on iOS a widget placed from
+  // the Home Screen would have no config to resolve, render the setup state,
+  // and never stamp mq_seen_ — so the placement could never be detected.
   //
   // Gated on hydration, or a cold start straight into this screen sees an
   // empty list, seeds a config, syncs it, and then has it thrown away when the
@@ -407,10 +417,10 @@ export default function WidgetsScreen({
   }, [hydrated]);
 
   useEffect(() => {
-    if (!hydrated || configs.length > 0) return;
-    const created = addConfig();
+    if (!hydrated || allConfigs.length > 0) return;
+    const created = addConfig(undefined, { provisional: true });
     syncWidgets(created.id).catch(() => {});
-  }, [hydrated, configs.length, addConfig]);
+  }, [hydrated, allConfigs.length, addConfig]);
 
   // Which configs no placed widget is using. Android reads its own bindings;
   // iOS has to infer it from the extension's mq_seen_ stamps, which is a
@@ -429,21 +439,35 @@ export default function WidgetsScreen({
     setPending(Object.fromEntries(current.map((c, n) => [c.id, flags[n]])));
   }, []);
 
-  // Android can enumerate placed widgets, so bindings are refreshed whenever
-  // the screen is shown or the app returns to the foreground.
+  // Detects that a widget was placed, from either platform's only available
+  // signal, and promotes the config it landed on. This is what turns the empty
+  // state into a card — and it makes no distinction between a widget added
+  // through the prompt below and one added straight from the Home Screen,
+  // because neither platform reports which one happened.
   const reconcile = useCallback(async () => {
     if (Platform.OS === 'android') {
       const placed = await WidgetBridge.getActiveWidgets();
-      const store = useWidgetStore.getState();
       const placedIds = new Set(placed.map((w) => w.widgetId.toString()));
 
-      for (const widgetId of Object.keys(store.bindings)) {
-        if (!placedIds.has(widgetId)) store.unbindWidget(widgetId);
+      for (const widgetId of Object.keys(useWidgetStore.getState().bindings)) {
+        if (!placedIds.has(widgetId)) useWidgetStore.getState().unbindWidget(widgetId);
       }
-      for (const id of placedIds) {
-        store.claimConfigFor(id);
+      for (const widgetId of placedIds) {
+        // Read fresh each pass: claimConfigFor writes bindings, so a snapshot
+        // taken before the loop goes stale after the first placement.
+        const store = useWidgetStore.getState();
+        const bound = store.configs.find((c) => c.id === store.bindings[widgetId]);
+        const claimed = store.claimConfigFor(widgetId);
+        // Newly bound, so the widget is showing nothing yet. Push a quote now
+        // rather than leaving it blank until the background task next runs.
+        if (claimed && !bound) syncWidgets(claimed.id).catch(() => {});
       }
     }
+
+    if (Platform.OS === 'ios') {
+      await confirmSeenIOSConfigs();
+    }
+
     await refreshPending();
   }, [refreshPending]);
 
@@ -451,7 +475,7 @@ export default function WidgetsScreen({
 
   // A config added on this screen starts unused by definition, and nothing
   // above re-runs on that.
-  useEffect(() => { refreshPending(); }, [configs.length, refreshPending]);
+  useEffect(() => { refreshPending(); }, [allConfigs.length, refreshPending]);
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (next) => {
@@ -492,11 +516,48 @@ export default function WidgetsScreen({
   /** Adding a widget is free — it always starts uncustomized ("mirror the app"). */
   const handleCreate = () => {
     const created = addConfig();
-    const newIndex = useWidgetStore.getState().configs.length - 1;
+    const newIndex = visibleConfigs(useWidgetStore.getState().configs).length - 1;
     setIndex(newIndex);
     pendingIndex.current = newIndex;
     syncWidgets(created.id).catch(() => {});
   };
+
+  // Most launchers front themselves for the pin dialog, so the AppState
+  // listener above reconciles on return. Some render it without backgrounding
+  // us, and then nothing would ever fire — hence a short bounded sweep. Both
+  // paths are idempotent; whichever observes the placement first wins.
+  const addSweeps = useRef<ReturnType<typeof setTimeout>[]>([]);
+  useEffect(() => () => { addSweeps.current.forEach(clearTimeout); }, []);
+
+  /**
+   * Raises the platform's own add-a-widget dialog. No card is created here:
+   * the user may dismiss it, and neither platform reports the outcome, so the
+   * card appears only once reconcile() observes a placed widget.
+   *
+   * iOS has no equivalent API — WidgetKit exposes no way to ask for a widget —
+   * so there the instructions dialog is the whole flow.
+   */
+  const promptAddWidget = useCallback(async () => {
+    setAdding(true);
+    let raised = false;
+    try {
+      raised = await WidgetBridge.requestPinWidget();
+    } catch {
+      // Treated as "not raised" below.
+    } finally {
+      setAdding(false);
+    }
+
+    if (!raised) {
+      setShowInstructions(true);
+      return;
+    }
+
+    addSweeps.current.forEach(clearTimeout);
+    addSweeps.current = [1500, 4000, 8000].map((ms) =>
+      setTimeout(() => { reconcile().catch(() => {}); }, ms),
+    );
+  }, [reconcile]);
 
   // Collections sit behind one row rather than inline: the list is the user's
   // own and unbounded, so folding it into the topic list would bury the topics.
@@ -538,7 +599,73 @@ export default function WidgetsScreen({
     [],
   );
 
-  if (!active) return <View style={{ flex: 1, backgroundColor: theme.background }} />;
+  // The dialog raised when the platform can't do it for us. Shared by both
+  // branches below so the copy lives in one place.
+  const instructionsDialog = (
+    <ConfirmSheet
+      visible={showInstructions}
+      onClose={() => setShowInstructions(false)}
+      title="Add a widget"
+      message={
+        Platform.OS === 'ios'
+          ? 'Touch and hold an empty area of your Home Screen, tap the plus button at the top, then search for Quotable.'
+          : 'Touch and hold an empty area of your Home Screen, tap Widgets, then find Quotable in the list.'
+      }
+      confirmLabel="Got it"
+      onConfirm={() => { reconcile().catch(() => {}); }}
+    />
+  );
+
+  // ── Empty state ────────────────────────────────────────────────────────────
+  //
+  // No placed widget has been observed yet. A provisional config may well exist
+  // behind this (the platform needs one), but there is nothing here the user
+  // put on their Home Screen, so there is nothing to configure.
+
+  if (!active) {
+    return (
+      <View style={{ flex: 1, backgroundColor: theme.background }}>
+        <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+          <SheetHeader
+            title="Widgets"
+            leading="back"
+            onLeadingPress={back}
+            right={
+              <IconButton icon="plus" onPress={promptAddWidget} accessibilityLabel="Add widget" />
+            }
+          />
+
+          <View style={styles.empty}>
+            <WidgetPhone size={172} color={theme.textMuted} />
+
+            <Text style={[styles.emptyTitle, { color: theme.text, fontFamily: FONTS.display.medium }]}>
+              No widgets yet
+            </Text>
+            <Text style={[styles.emptyBody, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+              Put a quote on your Home Screen. Once it's there you can pick its topic, look and how
+              often it changes.
+            </Text>
+          </View>
+
+          <View style={styles.emptyCtaWrap}>
+            <TouchableOpacity
+              style={[styles.cta, { backgroundColor: theme.goldButton, opacity: adding ? 0.6 : 1 }]}
+              onPress={promptAddWidget}
+              disabled={adding}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+            >
+              <Text style={[styles.ctaText, { color: ON_GOLD, fontFamily: FONTS.ui.bold }]}>
+                {adding ? 'Opening…' : 'Add widget'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+
+        {instructionsDialog}
+      </View>
+    );
+  }
 
   // ── Carousel mode ──────────────────────────────────────────────────────────
 
@@ -597,8 +724,8 @@ export default function WidgetsScreen({
           {pending[active.id] === true && (
             <Text style={[styles.statusText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
               {Platform.OS === 'ios'
-                ? 'Not on your Home Screen yet. Add a widget, then hold it, tap Edit Widget, and choose this name.'
-                : 'Not on your Home Screen yet. Add a Quotable widget to start using it.'}
+                ? 'Not added yet. Add a widget, then long press it and select this name.'
+                : 'Not added yet. Add a Quotable widget to use it.'}
             </Text>
           )}
 
@@ -636,6 +763,8 @@ export default function WidgetsScreen({
           </View>
         )}
       </SafeAreaView>
+
+      {instructionsDialog}
 
       <EditNameDialog
         visible={renaming}
@@ -704,6 +833,15 @@ const styles = StyleSheet.create({
   nameText: { fontSize: 22, flex: 1 },
   statusText: { fontSize: 13, lineHeight: 19, marginBottom: SPACE.md },
   card: { borderRadius: RADIUS.row, overflow: 'hidden' },
+  empty: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: GUTTER + SPACE.md,
+  },
+  emptyTitle: { fontSize: 24, lineHeight: 32, textAlign: 'center', marginTop: SPACE.xl },
+  emptyBody: { fontSize: 15, lineHeight: 23, textAlign: 'center', marginTop: SPACE.md },
+  emptyCtaWrap: { paddingHorizontal: GUTTER, paddingBottom: SPACE.xxl },
   deleteBtn: { alignItems: 'center', paddingVertical: SPACE.xl },
   deleteText: { fontSize: 18 },
   ctaWrap: {

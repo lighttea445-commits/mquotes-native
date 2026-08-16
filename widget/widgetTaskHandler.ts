@@ -72,6 +72,14 @@ async function resolveConfig(widgetId: number): Promise<{ store: RawStore; confi
   if (!target) {
     target = createConfig(nextConfigName(store.configs));
     store.configs = [...store.configs, target];
+  } else if (target.provisional) {
+    // A placed widget is using it, so it stops being provisional and the
+    // Widgets screen shows its card. This is usually the path that runs first:
+    // the headless WIDGET_ADDED lands well before the user is back in the app,
+    // and claimConfigFor would then find it already bound.
+    const confirmed = { ...target, provisional: false };
+    store.configs = store.configs.map((c) => (c.id === confirmed.id ? confirmed : c));
+    target = confirmed;
   }
   store.bindings = { ...store.bindings, [idStr]: target.id };
   await saveStore(store);

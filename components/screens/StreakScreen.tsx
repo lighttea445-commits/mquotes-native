@@ -52,7 +52,7 @@ export default function StreakScreen({ onClose, onBack }: Props) {
   const commitReminders = (next: boolean) => {
     setPreferences({ streakEnabled: next });
     const p = { ...preferences, streakEnabled: next };
-    const anyEnabled = (p.quotesEnabled ?? true) || (p.qodEnabled ?? true) || next;
+    const anyEnabled = (p.quotesEnabled ?? true) || (p.quotes2Enabled ?? false) || (p.qodEnabled ?? true) || next;
     if (!anyEnabled) return;
 
     getPermissionStatus()
@@ -66,6 +66,12 @@ export default function StreakScreen({ onClose, onBack }: Props) {
           quoteCount: p.notificationCount ?? 5,
           startHHMM: p.notificationStartTime ?? '09:00',
           endHHMM: p.notificationEndTime ?? '22:00',
+          quotes2Enabled: p.quotes2Enabled ?? false,
+          showAuthor2: p.notificationShowAuthor2 ?? false,
+          quoteCount2: p.notificationCount2 ?? 5,
+          startHHMM2: p.notificationStartTime2 ?? '09:00',
+          endHHMM2: p.notificationEndTime2 ?? '22:00',
+          quoteSource2: p.notifQuoteSource2,
           qodEnabled: p.qodEnabled ?? true,
           qodTime: p.qodTime ?? '08:00',
           quoteSource: p.notifQuoteSource,

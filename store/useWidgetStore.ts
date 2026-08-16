@@ -139,6 +139,19 @@ export interface WidgetConfig {
    * Null on a config persisted before this field existed, and on Android.
    */
   queueLength: number | null;
+  /**
+   * A config that exists only so the platform has something to resolve, and
+   * which the Widgets screen hides. iOS renders nothing at all until mq_configs
+   * holds an entry, and an extension that renders nothing never stamps
+   * mq_seen_<id> — so "no configs" would mean a placed widget could never be
+   * detected. Seeding a provisional one keeps the App Group populated while the
+   * screen still reads as empty.
+   *
+   * Cleared by confirmConfig() once a placed widget is actually observed, and
+   * never set again: a widget removed later leaves the config behind, the same
+   * way a config already outlives its bindings.
+   */
+  provisional: boolean;
 }
 
 /** Ids only need to be unique within one device's store, not globally. */
@@ -159,7 +172,7 @@ export function nextConfigName(configs: WidgetConfig[]): string {
   return `Widget configuration #${highest + 1}`;
 }
 
-export function createConfig(name: string): WidgetConfig {
+export function createConfig(name: string, provisional = false): WidgetConfig {
   return {
     id: makeConfigId(),
     name,
@@ -170,7 +183,13 @@ export function createConfig(name: string): WidgetConfig {
     cachedQuote: null,
     lastRefreshed: null,
     queueLength: null,
+    provisional,
   };
+}
+
+/** The configs the Widgets screen shows. Empty means the empty state. */
+export function visibleConfigs(configs: WidgetConfig[]): WidgetConfig[] {
+  return configs.filter((c) => !c.provisional);
 }
 
 /**
@@ -204,9 +223,18 @@ interface WidgetStore {
   /** Placed widget id (Android) to config id. iOS binds through its AppIntent. */
   bindings: Record<string, string>;
 
-  addConfig: (name?: string) => WidgetConfig;
+  addConfig: (name?: string, options?: { provisional?: boolean }) => WidgetConfig;
   updateConfig: (configId: string, updates: Partial<WidgetConfig>) => void;
   removeConfig: (configId: string) => void;
+  /**
+   * Promotes a provisional config to a real one, which is what makes its card
+   * appear. Called when a placed widget is actually observed: Android through
+   * claimConfigFor, iOS through the extension's mq_seen_<id> stamp.
+   *
+   * Returns true only when this call was the one that promoted it, so callers
+   * can sync or navigate exactly once rather than on every reconcile pass.
+   */
+  confirmConfig: (configId: string) => boolean;
   /** Drops every config and binding, e.g. on account deletion. */
   clearAll: () => void;
 
@@ -232,8 +260,8 @@ export const useWidgetStore = create<WidgetStore>()(
       configs: [],
       bindings: {},
 
-      addConfig: (name) => {
-        const fresh = createConfig(name ?? nextConfigName(get().configs));
+      addConfig: (name, options) => {
+        const fresh = createConfig(name ?? nextConfigName(get().configs), options?.provisional ?? false);
         set((s) => ({ configs: [...s.configs, fresh] }));
         return fresh;
       },
@@ -254,6 +282,15 @@ export const useWidgetStore = create<WidgetStore>()(
           return { configs: s.configs.filter((c) => c.id !== configId), bindings };
         }),
 
+      confirmConfig: (configId) => {
+        const config = get().configs.find((c) => c.id === configId);
+        if (!config || !config.provisional) return false;
+        set((s) => ({
+          configs: s.configs.map((c) => (c.id === configId ? { ...c, provisional: false } : c)),
+        }));
+        return true;
+      },
+
       clearAll: () => set({ configs: [], bindings: {} }),
 
       bindWidget: (widgetId, configId) =>
@@ -271,7 +308,14 @@ export const useWidgetStore = create<WidgetStore>()(
         const existing = bindings[widgetId];
         if (existing) {
           const found = configs.find((c) => c.id === existing);
-          if (found) return found;
+          // Confirm on this path too: the headless task binds a widget without
+          // going through here (widgetTaskHandler's resolveConfig), so by the
+          // time the screen reconciles the binding can already exist on a
+          // config that was never promoted.
+          if (found) {
+            get().confirmConfig(found.id);
+            return get().configs.find((c) => c.id === found.id) ?? found;
+          }
         }
 
         const used = new Set(Object.values(bindings));
@@ -287,7 +331,10 @@ export const useWidgetStore = create<WidgetStore>()(
         if (!free) set((s) => ({ configs: [...s.configs, target] }));
 
         set((s) => ({ bindings: { ...s.bindings, [widgetId]: target.id } }));
-        return target;
+        // A placed widget is using it, so it is no longer provisional — this is
+        // the "widget added outside the prompt" path on Android.
+        get().confirmConfig(target.id);
+        return get().configs.find((c) => c.id === target.id) ?? target;
       },
 
       getConfig: (configId) => get().configs.find((c) => c.id === configId),
@@ -307,7 +354,7 @@ export const useWidgetStore = create<WidgetStore>()(
       // widgets rather than migrating them.
       name: 'widget-store-v2',
       storage: createJSONStorage(() => zustandMMKVStorage),
-      version: 2,
+      version: 3,
       migrate: (persisted, fromVersion) => migrateWidgetStore(persisted, fromVersion),
     },
   ),
@@ -319,6 +366,10 @@ export const useWidgetStore = create<WidgetStore>()(
  * becomes an unbound config, since iOS now binds through its own AppIntent
  * picker rather than a single shared slot.
  *
+ * v3 adds `provisional`. Everything already persisted predates the empty state
+ * and is treated as confirmed — a user whose widget works today must not open
+ * the screen and be told they have none.
+ *
  * Exported (rather than inlined in the persist config above) so the migration
  * itself — not just the empty-state fallback — is directly testable.
  */
@@ -327,7 +378,12 @@ export function migrateWidgetStore(persisted: unknown, fromVersion: number): Wid
     widgetConfigs?: Record<string, Record<string, unknown>>;
   };
 
-  if (fromVersion >= 2) return state as WidgetStore;
+  if (fromVersion >= 2) {
+    return {
+      ...state,
+      configs: (state.configs ?? []).map((c) => ({ ...c, provisional: c.provisional ?? false })),
+    } as WidgetStore;
+  }
 
   const configs: WidgetConfig[] = [];
   const bindings: Record<string, string> = {};
