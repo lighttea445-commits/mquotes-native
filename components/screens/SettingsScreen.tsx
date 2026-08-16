@@ -26,12 +26,7 @@ import { useUserQuotesStore } from '../../store/useUserQuotesStore';
 import { useWidgetStore } from '../../store/useWidgetStore';
 import { useModal } from '../../contexts/ModalContext';
 import { ConfirmSheet } from '../ui/ConfirmSheet';
-import { useRevenueCat, setForcePro } from '../../hooks/useRevenueCat';
 import { ON_GOLD } from '../ui/tokens';
-
-// Debug tooling. False in release builds, so the whole section is stripped
-// from production and its Pro override can never be reached there.
-const SHOW_DEV_SETTINGS = __DEV__;
 
 export default function SettingsScreen({ onClose, onBack }: { onClose?: () => void; onBack?: () => void }) {
   const theme = useTheme();
@@ -43,7 +38,6 @@ export default function SettingsScreen({ onClose, onBack }: { onClose?: () => vo
   const resetApp = useAppStore((s) => s.resetApp);
   const [nameValue, setNameValue] = useState(preferences.name || '');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const { isPro } = useRevenueCat();
   const clearFavorites = useFavoritesStore((s) => s.clearFavorites);
   const clearHistory = useHistoryStore((s) => s.clearHistory);
   const resetTopics = useTopicsStore((s) => s.resetTopics);
@@ -183,82 +177,6 @@ export default function SettingsScreen({ onClose, onBack }: { onClose?: () => vo
               <Icon name="chevron-right" size={18} color={theme.textMuted} />
             </TouchableOpacity>
           </View>
-
-          {/* Developer */}
-          {SHOW_DEV_SETTINGS && (
-            <View style={styles.section}>
-              <Text style={[styles.sectionLabel, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-                DEVELOPER
-              </Text>
-              <View style={[styles.toggleItem, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                <Icon name="crown-outline" size={20} color={theme.gold} />
-                <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
-                  Free Pro
-                </Text>
-                <Switch
-                  style={styles.switch}
-                  value={isPro}
-                  onValueChange={(v) => setForcePro(v ? true : null)}
-                  trackColor={{ false: theme.border, true: theme.gold }}
-                  thumbColor={isPro ? ON_GOLD : theme.text}
-                />
-              </View>
-              <TouchableOpacity
-                style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border, marginTop: 8 }]}
-                onPress={async () => {
-                  useAppStore.setState((s) => ({
-                    reviewPrompt: { ...s.reviewPrompt, activeMs: 30 * 60 * 1000, promptShown: true },
-                  }));
-                  if (await StoreReview.hasAction()) {
-                    await StoreReview.requestReview();
-                  }
-                }}
-              >
-                <Icon name="star-outline" size={20} color={theme.gold} />
-                <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
-                  Trigger Review Prompt (30min reached)
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border, marginTop: 8 }]}
-                onPress={() => {
-                  useAppStore.setState({ reviewPrompt: { activeMs: 0, promptShown: false } });
-                }}
-              >
-                <Icon name="refresh" size={20} color={theme.gold} />
-                <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
-                  Reset Review Prompt State
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border, marginTop: 8 }]}
-                onPress={() => useAppStore.setState({ returnNudgeType: 'notifications' })}
-              >
-                <Icon name="bell-outline" size={20} color={theme.gold} />
-                <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
-                  Trigger Notifications Nudge
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border, marginTop: 8 }]}
-                onPress={() => useAppStore.setState({ returnNudgeType: 'widget' })}
-              >
-                <Icon name="apps" size={20} color={theme.gold} />
-                <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
-                  Trigger Widget Nudge
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border, marginTop: 8 }]}
-                onPress={() => useAppStore.setState({ returnNudgeType: null, lastForegroundAt: 0 })}
-              >
-                <Icon name="refresh" size={20} color={theme.gold} />
-                <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
-                  Reset Return Nudge State
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
 
           {/* Danger zone */}
           <View style={styles.section}>

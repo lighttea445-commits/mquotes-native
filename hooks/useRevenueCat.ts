@@ -13,25 +13,12 @@ export interface RevenueCatState {
   userID: string | null;
 }
 
-// ── Dev override ────────────────────────────────────────────────────────────
-// Set via setForcePro() in dev builds to bypass RevenueCat during testing.
-let _forcePro: boolean | null = null;
-
-export function setForcePro(val: boolean | null) {
-  _forcePro = val;
-  notify();
-}
-
-export function getForcePro(): boolean | null {
-  return _forcePro;
-}
-
 /**
  * Non-hook read of the same value useRevenueCat() returns, for code that runs
  * outside React (e.g. writing the Pro flag into the iOS widget's App Group).
  */
 export function getIsPro(): boolean {
-  return _forcePro !== null ? _forcePro : _state.isPro;
+  return _state.isPro;
 }
 
 // ── Module-level singleton ──────────────────────────────────────────────────
@@ -166,6 +153,5 @@ export function useRevenueCat(): RevenueCatHookResult {
     return () => { _listeners.delete(forceUpdate); };
   }, []);
 
-  const isPro = _forcePro !== null ? _forcePro : _state.isPro;
-  return { ..._state, isPro, refresh };
+  return { ..._state, refresh };
 }
