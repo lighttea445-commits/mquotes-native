@@ -1,4 +1,4 @@
-import Purchases from 'react-native-purchases';
+import Purchases, { LOG_LEVEL } from 'react-native-purchases';
 import { Platform } from 'react-native';
 
 // iOS key: RevenueCat dashboard → (your iOS app) → API Keys → Public SDK Key (starts with appl_)
@@ -13,6 +13,10 @@ export const ENTITLEMENT_PRO = 'Quotable Premium';
 /** Initialize RevenueCat SDK */
 export async function initializeRevenueCat(): Promise<void> {
   try {
+    // Must be set before configure() to capture the store handshake, which is
+    // where a missing product or unsigned agreement actually reports itself.
+    if (__DEV__) Purchases.setLogLevel(LOG_LEVEL.VERBOSE);
+
     // Configure SDK with API key
     Purchases.configure({ apiKey: REVENUECAT_API_KEY });
 

@@ -97,12 +97,25 @@ function buildSteps(): Step[] {
 }
 
 /**
+ * Every package on offer. An offering that exists but is not marked Current in
+ * the RevenueCat dashboard leaves `current` null, which read alone makes the
+ * app believe there is nothing to sell and silently skips the store sheet.
+ */
+function packagesFrom(
+  offerings: ReturnType<typeof useRevenueCat>['offerings'],
+): PurchasesPackage[] {
+  const current = offerings?.current?.availablePackages;
+  if (current?.length) return current;
+  return Object.values(offerings?.all ?? {}).flatMap(o => o.availablePackages);
+}
+
+/**
  * The price line under the CTA. Prefers the store's own price strings so the
  * user sees their real currency; falls back to the advertised pair so the line
  * is never missing while offerings are still in flight.
  */
 function priceLineFor(offerings: ReturnType<typeof useRevenueCat>['offerings']): string {
-  const packages = offerings?.current?.availablePackages;
+  const packages = packagesFrom(offerings);
 
   const monthly = packages?.find(p => p.packageType === 'MONTHLY')?.product?.priceString;
   const annual = packages?.find(p => p.packageType === 'ANNUAL')?.product?.priceString;
@@ -126,8 +139,8 @@ function priceLineFor(offerings: ReturnType<typeof useRevenueCat>['offerings']):
 function trialPackageFor(
   offerings: ReturnType<typeof useRevenueCat>['offerings'],
 ): PurchasesPackage | null {
-  const packages = offerings?.current?.availablePackages;
-  if (!packages || packages.length === 0) return null;
+  const packages = packagesFrom(offerings);
+  if (packages.length === 0) return null;
   return packages.find(p => p.packageType === 'ANNUAL') ?? packages[0];
 }
 
@@ -151,6 +164,7 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
   const [reminderEnabled, setReminderEnabled] = useState(false);
   const [reminderBusy, setReminderBusy] = useState(false);
   const [purchasing, setPurchasing] = useState(false);
+  const [purchaseError, setPurchaseError] = useState<string | null>(null);
   const notifIdRef = useRef<string | null>(null);
   const steps = buildSteps();
   const timelineHeight = STEP_HEIGHT * steps.length;
@@ -259,10 +273,15 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
    * Buys straight through the store's own billing sheet — there is no second
    * paywall in between. A cancelled purchase leaves the user on this screen
    * rather than dismissing it, so the CTA is still there to retry.
+   *
+   * Every failure surfaces on screen. This used to dismiss silently when no
+   * package resolved, which is indistinguishable from a dead button: the store
+   * sheet never appears and nothing says why.
    */
   const handleContinue = async () => {
     if (purchasing) return;
     setPurchasing(true);
+    setPurchaseError(null);
 
     try {
       // Offerings can still be in flight when the sheet opens. Fetch on demand
@@ -272,14 +291,16 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
       if (!pkg) {
         try {
           pkg = trialPackageFor(await Purchases.getOfferings());
-        } catch {
+        } catch (e) {
+          errorReporting.captureError(e as Error, { context: 'TrialScreen:getOfferings' });
           pkg = null;
         }
       }
 
-      // Offerings never arrived, so there is nothing to buy. Don't strand the
-      // user on a dead button — especially mid-onboarding.
-      if (!pkg) { done(); return; }
+      if (!pkg) {
+        setPurchaseError('Plans could not be loaded. Check your connection and try again.');
+        return;
+      }
 
       const { customerInfo } = await Purchases.purchasePackage(pkg);
       if (customerInfo.entitlements.active[ENTITLEMENT_PRO]) {
@@ -288,11 +309,14 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
           productId: pkg.product.identifier,
         });
         done();
+      } else {
+        setPurchaseError('Your purchase is still processing. Access unlocks as soon as the store confirms it.');
       }
     } catch (e) {
-      const err = e as { userCancelled?: boolean };
+      const err = e as { userCancelled?: boolean; message?: string };
       if (!err?.userCancelled) {
         errorReporting.captureError(e as Error, { context: 'TrialScreen:purchase' });
+        setPurchaseError(err?.message || 'Purchase could not be completed. Please try again.');
       }
     } finally {
       setPurchasing(false);
@@ -422,6 +446,15 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
             )}
           </Pressable>
 
+          {purchaseError ? (
+            <Text
+              style={[styles.errorLine, { color: theme.text, fontFamily: theme.bodyFontFamily }]}
+              accessibilityLiveRegion="polite"
+            >
+              {purchaseError}
+            </Text>
+          ) : null}
+
           {/* What the trial converts to, disclosed on the same screen as the
               CTA. Reads the store's real price once offerings land. */}
           <Text style={[styles.priceLine, { color: theme.textMuted, fontFamily: theme.bodyFontFamily }]}>
@@ -517,6 +550,12 @@ const styles = StyleSheet.create({
   },
   priceLine: {
     fontSize: 13,
+    textAlign: 'center',
+    marginTop: -SPACE.xs,
+  },
+  errorLine: {
+    fontSize: 13,
+    lineHeight: 18,
     textAlign: 'center',
     marginTop: -SPACE.xs,
   },
