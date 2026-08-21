@@ -2,6 +2,7 @@ import { useEffect, useReducer } from 'react';
 import { AppState, Platform } from 'react-native';
 import Purchases, { CustomerInfo, PurchasesOfferings } from 'react-native-purchases';
 import { initializeRevenueCat, ENTITLEMENT_PRO } from '../lib/revenuecat';
+import { errorReporting } from '../lib/errorReporting';
 
 export interface RevenueCatState {
   isInitialized: boolean;
@@ -90,6 +91,19 @@ async function initialize() {
     const offerings   = ofResult.status === 'fulfilled' ? ofResult.value  : null;
     const userID      = idResult.status === 'fulfilled' ? idResult.value  : null;
     const isPro       = customerInfo?.entitlements.active[ENTITLEMENT_PRO] !== undefined;
+
+    // allSettled swallows rejections. This is the one moment the store says
+    // why it has nothing to sell, so record it rather than dropping it and
+    // leaving `offerings: null` with `error: null` as the only evidence.
+    if (ofResult.status === 'rejected') {
+      errorReporting.captureError(ofResult.reason, { context: 'useRevenueCat:getOfferings' });
+    } else if (!ofResult.value.current && Object.keys(ofResult.value.all).length === 0) {
+      errorReporting.captureMessage(
+        'RevenueCat returned zero offerings. The store has no purchasable products.',
+        'error',
+        { context: 'useRevenueCat:init' },
+      );
+    }
 
     patch({ isInitialized: true, isLoading: false, error: null, customerInfo, offerings, isPro, userID });
 
