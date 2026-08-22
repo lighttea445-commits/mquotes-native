@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -37,10 +37,20 @@ const TERMS_URL = 'https://my-site-drh2pzq2-kovoapps.wix-vibe-site.com/';
 /**
  * Advertised prices, shown only until the store's own strings arrive. The real
  * priceString always wins once offerings load — the store can return a
- * different currency or a regional price.
+ * different currency or a regional price. The numbers are the source of truth
+ * so the saving badge and the per-month line derive from the same pair.
  */
-const FALLBACK_MONTHLY = '$4.99';
-const FALLBACK_ANNUAL = '$44.99';
+const FALLBACK_MONTHLY_PRICE = 4.99;
+const FALLBACK_ANNUAL_PRICE = 44.99;
+const FALLBACK_MONTHLY = `$${FALLBACK_MONTHLY_PRICE.toFixed(2)}`;
+const FALLBACK_ANNUAL = `$${FALLBACK_ANNUAL_PRICE.toFixed(2)}`;
+
+/**
+ * Trial length in days, shared by the timeline and the line under the CTA so
+ * the two can never disagree. This is the advertised length: the real one is
+ * the introductory offer set on the product in App Store Connect and Play.
+ */
+const TRIAL_DAYS = 3;
 
 const STEP_HEIGHT = 80;
 const ICON_SIZE = 30;
@@ -66,8 +76,8 @@ interface Step {
 
 function buildSteps(): Step[] {
   const today = new Date();
-  const reminderDate = formatDate(addDays(today, 2));
-  const memberDate = formatDate(addDays(today, 3));
+  const reminderDate = formatDate(addDays(today, TRIAL_DAYS - 1));
+  const memberDate = formatDate(addDays(today, TRIAL_DAYS));
   return [
     {
       icon: 'check-circle-outline',
@@ -78,7 +88,7 @@ function buildSteps(): Step[] {
     {
       icon: 'lock-open-outline',
       title: 'Today - get full access',
-      subtitle: 'Enjoy full access, totally free for\nyour first 3 days',
+      subtitle: `Enjoy full access, totally free for\nyour first ${TRIAL_DAYS} days`,
       done: false,
     },
     {
@@ -110,38 +120,116 @@ function packagesFrom(
 }
 
 /**
- * The price line under the CTA. Prefers the store's own price strings so the
- * user sees their real currency; falls back to the advertised pair so the line
- * is never missing while offerings are still in flight.
+ * Money in the store's own currency once the product is known, plain dollars
+ * for the advertised pair before that. Intl is guarded because an unavailable
+ * implementation or an unrecognised code should cost a nicer string, not the
+ * whole screen.
  */
-function priceLineFor(offerings: ReturnType<typeof useRevenueCat>['offerings']): string {
-  const packages = packagesFrom(offerings);
-
-  const monthly = packages?.find(p => p.packageType === 'MONTHLY')?.product?.priceString;
-  const annual = packages?.find(p => p.packageType === 'ANNUAL')?.product?.priceString;
-
-  // Offerings loaded but neither plan is the standard monthly/annual pair —
-  // show whatever the first package actually is rather than mislabelling its
-  // period or quoting a price that isn't on sale.
-  if (packages?.length && !monthly && !annual) {
-    const price = packages[0].product?.priceString;
-    if (price) return price;
+function formatMoney(value: number, currencyCode?: string): string {
+  if (currencyCode) {
+    try {
+      return new Intl.NumberFormat(undefined, {
+        style: 'currency',
+        currency: currencyCode,
+      }).format(value);
+    } catch {
+      // Fall through to the plain format below.
+    }
   }
-
-  return `${monthly ?? FALLBACK_MONTHLY}/month or ${annual ?? FALLBACK_ANNUAL}/year`;
+  return `$${value.toFixed(2)}`;
 }
 
 /**
- * The package the CTA buys. Annual is preferred because it is the plan the
- * free trial is attached to; the monthly price is still disclosed in the line
- * beneath the button.
+ * What annual saves against paying monthly for a year. Under 5% is not worth a
+ * badge, and a missing or zero price makes no claim at all: an inflated saving
+ * is exactly the kind of thing this paywall exists not to do.
  */
-function trialPackageFor(
+function savingsPercent(monthlyValue: number, annualValue: number): number | null {
+  if (!(monthlyValue > 0) || !(annualValue > 0)) return null;
+  const pct = Math.round((1 - annualValue / (monthlyValue * 12)) * 100);
+  return pct >= 5 ? pct : null;
+}
+
+interface PlanOption {
+  key: string;
+  label: string;
+  /** The store's own price string, or the advertised one until offerings land. */
+  price: string;
+  /** How it bills, spelled out under the label. */
+  caption: string;
+  /** Reads after the price in the line under the CTA. Empty when unknown. */
+  period: string;
+  badge: string | null;
+  /** Null while offerings are in flight — the CTA refetches on tap. */
+  pkg: PurchasesPackage | null;
+}
+
+/**
+ * The plans the user chooses between. Built from the store once it has
+ * answered and from the advertised pair before that, so the selector is never
+ * empty — the CTA is what reports a store that genuinely has nothing to sell.
+ */
+function planOptionsFrom(
   offerings: ReturnType<typeof useRevenueCat>['offerings'],
-): PurchasesPackage | null {
+): PlanOption[] {
   const packages = packagesFrom(offerings);
-  if (packages.length === 0) return null;
-  return packages.find(p => p.packageType === 'ANNUAL') ?? packages[0];
+  const annualPkg = packages.find(p => p.packageType === 'ANNUAL') ?? null;
+  const monthlyPkg = packages.find(p => p.packageType === 'MONTHLY') ?? null;
+
+  // The store returned packages, but not the standard monthly/annual pair.
+  // Offer exactly what exists rather than mislabelling its billing period.
+  if (packages.length > 0 && !annualPkg && !monthlyPkg) {
+    return packages.slice(0, 2).map(p => ({
+      key: p.identifier,
+      label: p.product.title,
+      price: p.product.priceString,
+      caption: p.product.description,
+      period: '',
+      badge: null,
+      pkg: p,
+    }));
+  }
+
+  const inFlight = packages.length === 0;
+  const annualValue = annualPkg?.product.price ?? FALLBACK_ANNUAL_PRICE;
+  const monthlyValue = monthlyPkg?.product.price ?? FALLBACK_MONTHLY_PRICE;
+  const currency = annualPkg?.product.currencyCode ?? monthlyPkg?.product.currencyCode;
+  const saving = savingsPercent(monthlyValue, annualValue);
+
+  const options: PlanOption[] = [];
+  if (annualPkg || inFlight) {
+    options.push({
+      key: 'annual',
+      label: 'Annual',
+      price: annualPkg?.product.priceString ?? FALLBACK_ANNUAL,
+      caption: `${formatMoney(annualValue / 12, currency)} per month, billed yearly`,
+      period: 'per year',
+      badge: saving ? `Save ${saving}%` : null,
+      pkg: annualPkg,
+    });
+  }
+  if (monthlyPkg || inFlight) {
+    options.push({
+      key: 'monthly',
+      label: 'Monthly',
+      price: monthlyPkg?.product.priceString ?? FALLBACK_MONTHLY,
+      caption: 'Billed every month',
+      period: 'per month',
+      badge: null,
+      pkg: monthlyPkg,
+    });
+  }
+  return options;
+}
+
+/**
+ * Whether the store actually attaches a free trial to this plan. The trial is
+ * an introductory offer on one product, usually the annual one, so promising
+ * "$0.00" on whichever plan the user picked would be a claim the store has not
+ * agreed to honour.
+ */
+function hasFreeTrial(pkg: PurchasesPackage | null): boolean {
+  return pkg?.product?.introPrice?.price === 0;
 }
 
 async function ensureTrialChannel() {
@@ -151,6 +239,71 @@ async function ensureTrialChannel() {
       importance: Notifications.AndroidImportance.HIGH,
     });
   }
+}
+
+/**
+ * One selectable plan. The border stays 2pt in both states and only changes
+ * colour, so selecting a row cannot nudge the layout by a pixel.
+ */
+function PlanRow({
+  option,
+  selected,
+  onPress,
+  theme,
+}: {
+  option: PlanOption;
+  selected: boolean;
+  onPress: () => void;
+  theme: ReturnType<typeof useTheme>;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="radio"
+      accessibilityState={{ selected }}
+      accessibilityLabel={
+        `${option.label}, ${option.price} ${option.period}`.trim() +
+        (option.badge ? `, ${option.badge}` : '')
+      }
+      style={[
+        styles.planRow,
+        {
+          backgroundColor: selected ? theme.surfaceElevated : theme.surface,
+          borderColor: selected ? theme.gold : theme.border,
+        },
+      ]}
+    >
+      <View
+        style={[
+          styles.radio,
+          selected
+            ? { backgroundColor: theme.gold, borderColor: theme.gold }
+            : { borderColor: theme.border },
+        ]}
+      >
+        {selected ? <Icon name="check" size={13} color={ON_GOLD} /> : null}
+      </View>
+
+      <View style={styles.planText}>
+        <View style={styles.planLabelRow}>
+          <Text style={[styles.planLabel, { color: theme.text }]}>{option.label}</Text>
+          {option.badge ? (
+            <View style={[styles.planBadge, { backgroundColor: theme.gold }]}>
+              <Text style={styles.planBadgeText}>{option.badge}</Text>
+            </View>
+          ) : null}
+        </View>
+        <Text
+          style={[styles.planCaption, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}
+          numberOfLines={1}
+        >
+          {option.caption}
+        </Text>
+      </View>
+
+      <Text style={[styles.planPrice, { color: theme.text }]}>{option.price}</Text>
+    </Pressable>
+  );
 }
 
 interface Props {
@@ -168,8 +321,29 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
   const notifIdRef = useRef<string | null>(null);
   const steps = buildSteps();
   const timelineHeight = STEP_HEIGHT * steps.length;
-  const priceLine = priceLineFor(offerings);
-  const trialPackage = trialPackageFor(offerings);
+
+  const planOptions = useMemo(() => planOptionsFrom(offerings), [offerings]);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+
+  // Falling back to the first option means a key that stops existing when real
+  // offerings replace the advertised pair resolves itself, with no effect and
+  // no window where nothing is selected. Annual leads, so it is the default.
+  const selectedPlan = planOptions.find(o => o.key === selectedKey) ?? planOptions[0] ?? null;
+
+  // Before offerings land there is no introPrice to read, so fall back to the
+  // advertised arrangement: the trial rides on annual.
+  const trialOnSelected = selectedPlan?.pkg
+    ? hasFreeTrial(selectedPlan.pkg)
+    : selectedPlan?.key === 'annual';
+
+  // Names the exact plan the button charges, on the same screen as the button.
+  const disclosure = (() => {
+    if (!selectedPlan) return '';
+    const priced = [selectedPlan.price, selectedPlan.period].filter(Boolean).join(' ');
+    return trialOnSelected
+      ? `${TRIAL_DAYS} days free, then ${priced}. Cancel anytime.`
+      : `${priced}. Cancel anytime.`;
+  })();
 
   /**
    * Restores the switch from the persisted ID, but only after confirming the
@@ -287,11 +461,14 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
       // Offerings can still be in flight when the sheet opens. Fetch on demand
       // rather than dropping the tap, so the button always reaches the store's
       // billing sheet.
-      let pkg = trialPackage;
+      let pkg = selectedPlan?.pkg ?? null;
       let reason: string | null = null;
       if (!pkg) {
         try {
-          pkg = trialPackageFor(await Purchases.getOfferings());
+          // Re-resolve against the same key so a tap made before offerings
+          // landed still buys the plan the user actually picked.
+          const fresh = planOptionsFrom(await Purchases.getOfferings());
+          pkg = (fresh.find(o => o.key === selectedPlan?.key) ?? fresh[0])?.pkg ?? null;
           if (!pkg) reason = 'The store returned no plans for this build.';
         } catch (e) {
           errorReporting.captureError(e as Error, { context: 'TrialScreen:getOfferings' });
@@ -421,10 +598,9 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
 
             </View>
           </View>
-        </ScrollView>
 
-        {/* Bottom */}
-        <View style={styles.bottom}>
+          {/* Sits with the timeline it refers to, which keeps the purchase
+              block below to plans, button, fine print. */}
           <View style={[styles.toggleRow, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             <Text style={[styles.toggleLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
               Reminder before trial ends
@@ -436,6 +612,23 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
               accessibilityLabel="Reminder before trial ends"
             />
           </View>
+        </ScrollView>
+
+        {/* Bottom */}
+        <View style={styles.bottom}>
+          {planOptions.length > 0 ? (
+            <View style={styles.planGroup} accessibilityRole="radiogroup">
+              {planOptions.map(option => (
+                <PlanRow
+                  key={option.key}
+                  option={option}
+                  selected={selectedPlan?.key === option.key}
+                  onPress={() => setSelectedKey(option.key)}
+                  theme={theme}
+                />
+              ))}
+            </View>
+          ) : null}
 
           <Pressable
             onPress={handleContinue}
@@ -448,7 +641,7 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
               <ActivityIndicator color={ON_GOLD} />
             ) : (
               <Text style={[styles.ctaText, { color: ON_GOLD }]}>
-                Try for $0.00
+                {trialOnSelected ? 'Try for $0.00' : 'Subscribe'}
               </Text>
             )}
           </Pressable>
@@ -462,11 +655,14 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
             </Text>
           ) : null}
 
-          {/* What the trial converts to, disclosed on the same screen as the
-              CTA. Reads the store's real price once offerings land. */}
-          <Text style={[styles.priceLine, { color: theme.textMuted, fontFamily: theme.bodyFontFamily }]}>
-            {priceLine}
-          </Text>
+          {/* Names the selected plan, its price and its renewal directly under
+              the button that charges it. Reads the store's real price once
+              offerings land. */}
+          {disclosure ? (
+            <Text style={[styles.disclosure, { color: theme.textMuted, fontFamily: theme.bodyFontFamily }]}>
+              {disclosure}
+            </Text>
+          ) : null}
 
           {TERMS_URL ? (
             <Pressable
@@ -555,10 +751,68 @@ const styles = StyleSheet.create({
     paddingBottom: SPACE.md,
     gap: SPACE.md,
   },
-  priceLine: {
+  disclosure: {
     fontSize: 13,
+    lineHeight: 18,
     textAlign: 'center',
     marginTop: -SPACE.xs,
+  },
+  planGroup: {
+    gap: SPACE.sm,
+  },
+  planRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: RADIUS.card,
+    // Constant width in both states so selecting a row cannot shift layout.
+    borderWidth: 2,
+    paddingHorizontal: SPACE.lg,
+    paddingVertical: SPACE.md,
+    gap: SPACE.md,
+  },
+  radio: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  planText: {
+    flex: 1,
+    gap: 2,
+  },
+  planLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACE.sm,
+  },
+  planLabel: {
+    fontSize: 17,
+    fontFamily: FONTS.display.bold,
+    lineHeight: 22,
+    includeFontPadding: false,
+  },
+  planCaption: {
+    fontSize: 12.5,
+    lineHeight: 16,
+  },
+  planBadge: {
+    borderRadius: RADIUS.pill,
+    paddingHorizontal: SPACE.sm,
+    paddingVertical: 2,
+  },
+  planBadgeText: {
+    color: ON_GOLD,
+    fontSize: 11,
+    fontFamily: FONTS.ui.bold,
+    lineHeight: 15,
+  },
+  planPrice: {
+    fontSize: 17,
+    fontFamily: FONTS.display.bold,
+    lineHeight: 22,
+    includeFontPadding: false,
   },
   errorLine: {
     fontSize: 13,
@@ -584,6 +838,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     paddingHorizontal: SPACE.lg,
     paddingVertical: SPACE.sm,
+    // Stands in for the `gap` it lost when it moved inside the ScrollView.
+    marginTop: SPACE.md,
   },
   toggleLabel: {
     fontSize: 15,
