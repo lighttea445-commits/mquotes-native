@@ -909,15 +909,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    borderRadius: RADIUS.pill,
+    // Card radius, not a pill. A stadium shape reads as a thin strip between
+    // the timeline card and the plan rows, which are both card-cornered, and
+    // the height alone did not fix that.
+    borderRadius: RADIUS.card,
     borderWidth: 1,
     paddingHorizontal: SPACE.lg,
     paddingVertical: SPACE.md,
     // Stands in for the `gap` it lost when it moved inside the ScrollView.
     marginTop: SPACE.md,
-    // Reads as a control of the same weight as the plan rows below it, rather
-    // than a thin strip between the card and the purchase block.
-    minHeight: 60,
+    // The same 68 the plan rows stand at, so the three read as one family.
+    minHeight: 68,
   },
   toggleLabel: {
     fontSize: 16,
