@@ -912,12 +912,15 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.pill,
     borderWidth: 1,
     paddingHorizontal: SPACE.lg,
-    paddingVertical: SPACE.sm,
+    paddingVertical: SPACE.md,
     // Stands in for the `gap` it lost when it moved inside the ScrollView.
     marginTop: SPACE.md,
+    // Reads as a control of the same weight as the plan rows below it, rather
+    // than a thin strip between the card and the purchase block.
+    minHeight: 60,
   },
   toggleLabel: {
-    fontSize: 15,
+    fontSize: 16,
   },
   ctaButton: {
     height: 54,
