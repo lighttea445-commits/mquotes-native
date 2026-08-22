@@ -184,6 +184,23 @@ function savingsPercent(monthlyValue: number, annualValue: number): number | nul
   return pct >= 5 ? pct : null;
 }
 
+/**
+ * Which of the two plans a package is.
+ *
+ * The product's own subscription period is the reliable signal. `packageType`
+ * only reports ANNUAL or MONTHLY when the RevenueCat dashboard used one of the
+ * predefined package identifiers: a package created with a custom identifier
+ * reports CUSTOM, and matching on that alone drops both plans on the floor.
+ */
+function periodOf(pkg: PurchasesPackage): 'annual' | 'monthly' | null {
+  const iso = pkg.product.subscriptionPeriod;
+  if (iso === 'P1Y' || iso === 'P12M') return 'annual';
+  if (iso === 'P1M') return 'monthly';
+  if (pkg.packageType === 'ANNUAL') return 'annual';
+  if (pkg.packageType === 'MONTHLY') return 'monthly';
+  return null;
+}
+
 interface PlanOption {
   key: string;
   label: string;
@@ -219,17 +236,17 @@ function planOptionsFrom(
   offerings: ReturnType<typeof useRevenueCat>['offerings'],
 ): PlanOption[] {
   const packages = packagesFrom(offerings);
-  const annualPkg = packages.find(p => p.packageType === 'ANNUAL') ?? null;
-  const monthlyPkg = packages.find(p => p.packageType === 'MONTHLY') ?? null;
+  const annualPkg = packages.find(p => periodOf(p) === 'annual') ?? null;
+  const monthlyPkg = packages.find(p => periodOf(p) === 'monthly') ?? null;
 
-  // The store returned packages, but not the standard monthly/annual pair.
-  // Offer exactly what exists rather than mislabelling its billing period.
+  // Neither plan could be identified at all: not a yearly or monthly product
+  // between them. Offer what exists rather than mislabelling its period.
   if (packages.length > 0 && !annualPkg && !monthlyPkg) {
     return packages.slice(0, 2).map(p => ({
       key: p.identifier,
       label: p.product.title,
       price: p.product.priceString,
-      caption: p.product.description,
+      caption: '',
       billedPrice: p.product.priceString,
       period: '',
       badge: null,
