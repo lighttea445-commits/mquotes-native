@@ -8,8 +8,9 @@ import {
   Platform,
   Linking,
   ActivityIndicator,
+  useWindowDimensions,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Purchases, { PurchasesPackage } from 'react-native-purchases';
 import { Icon } from '../ui/Icon';
@@ -29,8 +30,10 @@ import { GUTTER, SPACE, RADIUS, HIT, ON_GOLD } from '../ui/tokens';
 const TRIAL_REMINDER_KEY = '@trial_reminder_notif_id';
 
 /**
- * Subscription terms. Both stores require this link on a paywall. Blank hides
- * the footer item rather than pointing it at a dead address.
+ * Subscription terms and privacy policy. Both stores require both documents to
+ * be reachable from the paywall, and this one link is labelled as covering
+ * both, so the page it opens has to carry both. Blank hides the footer item
+ * rather than pointing it at a dead address.
  */
 const TERMS_URL = 'https://my-site-drh2pzq2-kovoapps.wix-vibe-site.com/';
 
@@ -52,8 +55,27 @@ const FALLBACK_ANNUAL = `$${FALLBACK_ANNUAL_PRICE.toFixed(2)}`;
  */
 const TRIAL_DAYS = 3;
 
-const STEP_HEIGHT = 80;
-const ICON_SIZE = 30;
+/**
+ * The timeline is the one block on this screen that can give. Everything else
+ * is either fixed chrome or the purchase block, which must stay reachable
+ * without scrolling, so the steps take whatever height is left inside these
+ * bounds. The lower bound is what the tallest step needs: one title line, one
+ * gap and two subtitle lines.
+ */
+const STEP_HEIGHT_MIN = 56;
+const STEP_HEIGHT_MAX = 74;
+
+/**
+ * Everything on the screen that is not the timeline, excluding safe areas:
+ * the sheet header, the heading pair, the card's own padding, the reminder
+ * row, the scroll padding and the whole purchase block. Rough by nature, and
+ * only used to decide how much room the timeline may claim, so being a few
+ * points out costs a slightly tighter or looser card, never a broken layout.
+ * The ScrollView stays as the safety net for small screens and large text.
+ */
+const NON_TIMELINE_HEIGHT = 511;
+
+const ICON_SIZE = 28;
 const BAR_WIDTH = 10;
 const LEFT_COL_WIDTH = 44;
 
@@ -196,15 +218,27 @@ function planOptionsFrom(
   const currency = annualPkg?.product.currencyCode ?? monthlyPkg?.product.currencyCode;
   const saving = savingsPercent(monthlyValue, annualValue);
 
+  const perMonth = formatMoney(annualValue / 12, currency);
+  const savingLabel = saving ? `Save ${saving}%` : null;
+
+  // The free trial is the strongest thing either card has to say, so it takes
+  // the badge whenever the store actually offers it and pushes the saving down
+  // into the caption rather than competing with it.
+  const annualTrial = trialBadgeFor(annualPkg, inFlight);
+  const monthlyTrial = trialBadgeFor(monthlyPkg, false);
+
   const options: PlanOption[] = [];
   if (annualPkg || inFlight) {
     options.push({
       key: 'annual',
       label: 'Annual',
       price: annualPkg?.product.priceString ?? FALLBACK_ANNUAL,
-      caption: `${formatMoney(annualValue / 12, currency)} per month, billed yearly`,
+      caption:
+        annualTrial && savingLabel
+          ? `${savingLabel}, ${perMonth} per month`
+          : `${perMonth} per month, billed yearly`,
       period: 'per year',
-      badge: saving ? `Save ${saving}%` : null,
+      badge: annualTrial ?? savingLabel,
       pkg: annualPkg,
     });
   }
@@ -215,7 +249,7 @@ function planOptionsFrom(
       price: monthlyPkg?.product.priceString ?? FALLBACK_MONTHLY,
       caption: 'Billed every month',
       period: 'per month',
-      badge: null,
+      badge: monthlyTrial,
       pkg: monthlyPkg,
     });
   }
@@ -230,6 +264,16 @@ function planOptionsFrom(
  */
 function hasFreeTrial(pkg: PurchasesPackage | null): boolean {
   return pkg?.product?.introPrice?.price === 0;
+}
+
+/**
+ * The trial badge for a card, or null when this plan has no trial to promote.
+ * `assumeTrial` covers the window before offerings land, where there is no
+ * introPrice to read and the advertised arrangement is the best guess going.
+ */
+function trialBadgeFor(pkg: PurchasesPackage | null, assumeTrial: boolean): string | null {
+  const free = pkg ? hasFreeTrial(pkg) : assumeTrial;
+  return free ? `${TRIAL_DAYS} days free` : null;
 }
 
 async function ensureTrialChannel() {
@@ -320,7 +364,19 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
   const [purchaseError, setPurchaseError] = useState<string | null>(null);
   const notifIdRef = useRef<string | null>(null);
   const steps = buildSteps();
-  const timelineHeight = STEP_HEIGHT * steps.length;
+
+  // Give the timeline what is left once the purchase block has its space, so
+  // the CTA and the plans sit on screen without a scroll on a normal phone.
+  const { height: windowHeight } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const stepHeight = Math.min(
+    STEP_HEIGHT_MAX,
+    Math.max(
+      STEP_HEIGHT_MIN,
+      (windowHeight - insets.top - insets.bottom - NON_TIMELINE_HEIGHT) / steps.length,
+    ),
+  );
+  const timelineHeight = stepHeight * steps.length;
 
   const planOptions = useMemo(() => planOptionsFrom(offerings), [offerings]);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -538,8 +594,8 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
                     position: 'absolute',
                     left: (LEFT_COL_WIDTH - BAR_WIDTH) / 2,
                     width: BAR_WIDTH,
-                    top: STEP_HEIGHT / 2 - 2,
-                    bottom: STEP_HEIGHT / 2 - 2,
+                    top: stepHeight / 2 - 2,
+                    bottom: stepHeight / 2 - 2,
                     borderRadius: BAR_WIDTH / 2,
                   }}
                 />
@@ -548,7 +604,7 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
                     key={i}
                     style={{
                       position: 'absolute',
-                      top: i * STEP_HEIGHT + STEP_HEIGHT / 2 - ICON_SIZE / 2,
+                      top: i * stepHeight + stepHeight / 2 - ICON_SIZE / 2,
                       left: (LEFT_COL_WIDTH - ICON_SIZE) / 2,
                       width: ICON_SIZE,
                       height: ICON_SIZE,
@@ -572,7 +628,7 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
               {/* Right: step text */}
               <View style={styles.stepsContent}>
                 {steps.map((step, i) => (
-                  <View key={i} style={[styles.step, { height: STEP_HEIGHT }]}>
+                  <View key={i} style={[styles.step, { height: stepHeight }]}>
                     {step.done ? (
                       <>
                         <Text style={[styles.stepTitleDone, { color: theme.textMuted }]}>
@@ -641,7 +697,7 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
               <ActivityIndicator color={ON_GOLD} />
             ) : (
               <Text style={[styles.ctaText, { color: ON_GOLD }]}>
-                {trialOnSelected ? 'Try for $0.00' : 'Subscribe'}
+                Continue
               </Text>
             )}
           </Pressable>
@@ -670,10 +726,10 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
               hitSlop={HIT}
               style={styles.footerItem}
               accessibilityRole="link"
-              accessibilityLabel="Terms"
+              accessibilityLabel="Terms and Privacy"
             >
               <Text style={[styles.footerText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-                Terms
+                Terms & Privacy
               </Text>
             </Pressable>
           ) : null}
@@ -695,9 +751,9 @@ const styles = StyleSheet.create({
   // fontWeight is inert on Peachi and on the Inter families — every weight
   // here is a family name (see constants/fonts.ts).
   title: {
-    fontSize: 30,
+    fontSize: 27,
     fontFamily: FONTS.display.bold,
-    lineHeight: 38,
+    lineHeight: 34,
     includeFontPadding: false,
     letterSpacing: -0.4,
     marginBottom: 6,
@@ -705,13 +761,13 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 15,
-    marginBottom: 24,
+    marginBottom: 18,
     textAlign: 'center',
   },
   card: {
     borderRadius: 20,
     borderWidth: 1,
-    padding: 16,
+    padding: 14,
   },
   timelineRow: {
     flexDirection: 'row',
@@ -726,36 +782,35 @@ const styles = StyleSheet.create({
   },
   step: {
     justifyContent: 'center',
-    gap: 3,
+    gap: 2,
   },
   stepTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontFamily: FONTS.display.bold,
-    lineHeight: 24,
+    lineHeight: 22,
     includeFontPadding: false,
   },
   stepTitleDone: {
-    fontSize: 18,
+    fontSize: 17,
     fontFamily: FONTS.display.bold,
-    lineHeight: 24,
+    lineHeight: 22,
     includeFontPadding: false,
     textDecorationLine: 'line-through',
   },
   stepSubtitle: {
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 12.5,
+    lineHeight: 16,
   },
   bottom: {
     paddingHorizontal: GUTTER,
     paddingTop: SPACE.sm,
     paddingBottom: SPACE.md,
-    gap: SPACE.md,
+    gap: SPACE.sm,
   },
   disclosure: {
     fontSize: 13,
     lineHeight: 18,
     textAlign: 'center',
-    marginTop: -SPACE.xs,
   },
   planGroup: {
     gap: SPACE.sm,
@@ -767,7 +822,7 @@ const styles = StyleSheet.create({
     // Constant width in both states so selecting a row cannot shift layout.
     borderWidth: 2,
     paddingHorizontal: SPACE.lg,
-    paddingVertical: SPACE.md,
+    paddingVertical: 10,
     gap: SPACE.md,
   },
   radio: {
@@ -818,11 +873,10 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     textAlign: 'center',
-    marginTop: -SPACE.xs,
   },
   footerItem: {
     alignSelf: 'center',
-    marginTop: -SPACE.sm,
+    marginTop: -SPACE.xs,
   },
   footerText: {
     fontSize: 11,
@@ -839,7 +893,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACE.lg,
     paddingVertical: SPACE.sm,
     // Stands in for the `gap` it lost when it moved inside the ScrollView.
-    marginTop: SPACE.md,
+    marginTop: SPACE.sm,
   },
   toggleLabel: {
     fontSize: 15,
