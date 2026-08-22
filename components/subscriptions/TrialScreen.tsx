@@ -80,6 +80,14 @@ const STEP_COUNT = 3;
 /** Card padding plus its border, the only part of the card that is fixed. */
 const CARD_CHROME = 34;
 
+/**
+ * Marks both headline figures as per month. Annual needs it, because its
+ * headline is a monthly equivalent rather than what the store charges; monthly
+ * carries it too, since one labelled figure beside one bare one reads as an
+ * oversight rather than a distinction.
+ */
+const PER_MONTH_SUFFIX = '/m';
+
 /** Used for one frame, until the card reports the height flexbox gave it. */
 const STEP_HEIGHT_SEED = 60;
 
@@ -257,7 +265,7 @@ function planOptionsFrom(
     options.push({
       key: 'annual',
       label: 'Annual',
-      price: perMonth,
+      price: `${perMonth}${PER_MONTH_SUFFIX}`,
       caption: `${annualBilled} a year`,
       billedPrice: annualBilled,
       period: 'per year',
@@ -270,7 +278,7 @@ function planOptionsFrom(
     options.push({
       key: 'monthly',
       label: 'Monthly',
-      price: monthlyBilled,
+      price: `${monthlyBilled}${PER_MONTH_SUFFIX}`,
       // Nothing to add: the headline already reads as the monthly charge.
       caption: '',
       billedPrice: monthlyBilled,
