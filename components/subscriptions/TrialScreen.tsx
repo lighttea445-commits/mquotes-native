@@ -62,16 +62,20 @@ const TRIAL_DAYS = 3;
  * bounds. The lower bound is what the tallest step needs: one title line, one
  * gap and two subtitle lines.
  */
-const STEP_HEIGHT_MIN = 56;
+const STEP_HEIGHT_MIN = 44;
 const STEP_HEIGHT_MAX = 74;
 
 /**
- * Everything on the screen that is not the timeline, excluding safe areas:
- * the sheet header, the heading pair, the card's own padding, the reminder
- * row, the scroll padding and the whole purchase block. Rough by nature, and
- * only used to decide how much room the timeline may claim, so being a few
- * points out costs a slightly tighter or looser card, never a broken layout.
- * The ScrollView stays as the safety net for small screens and large text.
+ * What the scroll area holds besides the timeline steps: the heading pair, the
+ * card's own padding, the reminder row and the content padding. Small, known
+ * from the styles below, and subtracted from the area's *measured* height.
+ */
+const SCROLL_CHROME_HEIGHT = 186;
+
+/**
+ * Everything that is not the timeline, safe areas excluded, used only for the
+ * first frame before the scroll area has reported its real height. Being a few
+ * points out costs one frame of a slightly wrong card, never a broken layout.
  */
 const NON_TIMELINE_HEIGHT = 511;
 
@@ -110,7 +114,7 @@ function buildSteps(): Step[] {
     {
       icon: 'lock-open-outline',
       title: 'Today - get full access',
-      subtitle: `Enjoy full access, totally free for\nyour first ${TRIAL_DAYS} days`,
+      subtitle: `Full access, free for ${TRIAL_DAYS} days`,
       done: false,
     },
     {
@@ -223,9 +227,10 @@ function planOptionsFrom(
 
   // The free trial is the strongest thing either card has to say, so it takes
   // the badge whenever the store actually offers it and pushes the saving down
-  // into the caption rather than competing with it.
+  // into the caption rather than competing with it. Both plans are advertised
+  // with a trial, so both assume one until the store says otherwise.
   const annualTrial = trialBadgeFor(annualPkg, inFlight);
-  const monthlyTrial = trialBadgeFor(monthlyPkg, false);
+  const monthlyTrial = trialBadgeFor(monthlyPkg, inFlight);
 
   const options: PlanOption[] = [];
   if (annualPkg || inFlight) {
@@ -234,9 +239,7 @@ function planOptionsFrom(
       label: 'Annual',
       price: annualPkg?.product.priceString ?? FALLBACK_ANNUAL,
       caption:
-        annualTrial && savingLabel
-          ? `${savingLabel}, ${perMonth} per month`
-          : `${perMonth} per month, billed yearly`,
+        annualTrial && saving ? `${perMonth} a month, save ${saving}%` : `${perMonth} a month`,
       period: 'per year',
       badge: annualTrial ?? savingLabel,
       pkg: annualPkg,
@@ -247,7 +250,7 @@ function planOptionsFrom(
       key: 'monthly',
       label: 'Monthly',
       price: monthlyPkg?.product.priceString ?? FALLBACK_MONTHLY,
-      caption: 'Billed every month',
+      caption: 'Billed monthly',
       period: 'per month',
       badge: monthlyTrial,
       pkg: monthlyPkg,
@@ -365,17 +368,21 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
   const notifIdRef = useRef<string | null>(null);
   const steps = buildSteps();
 
-  // Give the timeline what is left once the purchase block has its space, so
-  // the CTA and the plans sit on screen without a scroll on a normal phone.
+  // Give the timeline exactly what is left once the purchase block has taken
+  // its space. The scroll area is `flex: 1`, so its laid-out height IS that
+  // remainder: measuring it beats estimating the chrome, which depends on safe
+  // areas, the header and the user's text size. The window figure covers only
+  // the first frame, before that measurement exists.
   const { height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const stepHeight = Math.min(
-    STEP_HEIGHT_MAX,
-    Math.max(
-      STEP_HEIGHT_MIN,
-      (windowHeight - insets.top - insets.bottom - NON_TIMELINE_HEIGHT) / steps.length,
-    ),
-  );
+  const [scrollHeight, setScrollHeight] = useState(0);
+
+  const availableStep =
+    scrollHeight > 0
+      ? (scrollHeight - SCROLL_CHROME_HEIGHT) / steps.length
+      : (windowHeight - insets.top - insets.bottom - NON_TIMELINE_HEIGHT) / steps.length;
+
+  const stepHeight = Math.min(STEP_HEIGHT_MAX, Math.max(STEP_HEIGHT_MIN, availableStep));
   const timelineHeight = stepHeight * steps.length;
 
   const planOptions = useMemo(() => planOptionsFrom(offerings), [offerings]);
@@ -386,11 +393,9 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
   // no window where nothing is selected. Annual leads, so it is the default.
   const selectedPlan = planOptions.find(o => o.key === selectedKey) ?? planOptions[0] ?? null;
 
-  // Before offerings land there is no introPrice to read, so fall back to the
-  // advertised arrangement: the trial rides on annual.
-  const trialOnSelected = selectedPlan?.pkg
-    ? hasFreeTrial(selectedPlan.pkg)
-    : selectedPlan?.key === 'annual';
+  // Before offerings land there is no introPrice to read. Both advertised
+  // plans carry the trial, so assume one and let the real value correct it.
+  const trialOnSelected = selectedPlan?.pkg ? hasFreeTrial(selectedPlan.pkg) : !!selectedPlan;
 
   // Names the exact plan the button charges, on the same screen as the button.
   const disclosure = (() => {
@@ -572,6 +577,7 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
           style={styles.scroll}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
+          onLayout={e => setScrollHeight(e.nativeEvent.layout.height)}
         >
           <Text style={[styles.title, { color: theme.text }]}>
             How your free trial works
