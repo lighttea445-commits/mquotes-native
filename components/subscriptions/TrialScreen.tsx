@@ -222,7 +222,11 @@ function planOptionsFrom(
   const currency = annualPkg?.product.currencyCode ?? monthlyPkg?.product.currencyCode;
   const saving = savingsPercent(monthlyValue, annualValue);
 
+  // Each card states its own plan in the other card's billing period, so the
+  // two are comparable in both directions and the annual saving is visible as
+  // a pair of numbers rather than a claim.
   const perMonth = formatMoney(annualValue / 12, currency);
+  const perYear = formatMoney(monthlyValue * 12, currency);
   const savingLabel = saving ? `Save ${saving}%` : null;
 
   // The free trial is the strongest thing either card has to say, so it takes
@@ -238,8 +242,7 @@ function planOptionsFrom(
       key: 'annual',
       label: 'Annual',
       price: annualPkg?.product.priceString ?? FALLBACK_ANNUAL,
-      caption:
-        annualTrial && saving ? `${perMonth} a month, save ${saving}%` : `${perMonth} a month`,
+      caption: `${perMonth} a month`,
       period: 'per year',
       badge: annualTrial ?? savingLabel,
       pkg: annualPkg,
@@ -250,7 +253,7 @@ function planOptionsFrom(
       key: 'monthly',
       label: 'Monthly',
       price: monthlyPkg?.product.priceString ?? FALLBACK_MONTHLY,
-      caption: 'Billed monthly',
+      caption: `${perYear} a year`,
       period: 'per month',
       badge: monthlyTrial,
       pkg: monthlyPkg,
