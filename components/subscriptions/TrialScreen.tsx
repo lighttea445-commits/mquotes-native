@@ -63,14 +63,17 @@ const TRIAL_DAYS = 3;
  * gap and two subtitle lines.
  */
 const STEP_HEIGHT_MIN = 44;
-const STEP_HEIGHT_MAX = 74;
+// High enough that the timeline absorbs the slack on a tall phone. Capped at
+// all so the steps cannot drift so far apart that the card stops reading as
+// one sequence.
+const STEP_HEIGHT_MAX = 84;
 
 /**
  * What the scroll area holds besides the timeline steps: the heading pair, the
  * card's own padding, the reminder row and the content padding. Small, known
  * from the styles below, and subtracted from the area's *measured* height.
  */
-const SCROLL_CHROME_HEIGHT = 186;
+const SCROLL_CHROME_HEIGHT = 178;
 
 /**
  * Everything that is not the timeline, safe areas excluded, used only for the
@@ -574,7 +577,13 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        <SheetHeader leading="close" onLeadingPress={onClose} />
+        {/* SheetHeader is shared by every sheet and carries no spacing prop,
+            so the tightening is local: this screen is the one that needs the
+            height. It pulls up what sits below the header, never the header
+            itself, which has to keep the full safe-area inset above it. */}
+        <View style={styles.headerTight}>
+          <SheetHeader leading="close" onLeadingPress={onClose} />
+        </View>
 
         <ScrollView
           style={styles.scroll}
@@ -752,8 +761,12 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   safe: { flex: 1 },
   scroll: { flex: 1 },
+  headerTight: {
+    // Bottom only. A negative marginTop here eats the safe-area padding the
+    // SafeAreaView just applied, which puts the X under the status bar.
+    marginBottom: -SPACE.sm,
+  },
   scrollContent: {
-    paddingTop: SPACE.sm,
     paddingHorizontal: GUTTER,
     paddingBottom: SPACE.md,
   },
