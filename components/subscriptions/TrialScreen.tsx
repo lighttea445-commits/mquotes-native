@@ -8,9 +8,8 @@ import {
   Platform,
   Linking,
   ActivityIndicator,
-  useWindowDimensions,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Purchases, { PurchasesPackage } from 'react-native-purchases';
 import { Icon } from '../ui/Icon';
@@ -56,31 +55,28 @@ const FALLBACK_ANNUAL = `$${FALLBACK_ANNUAL_PRICE.toFixed(2)}`;
 const TRIAL_DAYS = 3;
 
 /**
- * The timeline is the one block on this screen that can give. Everything else
- * is either fixed chrome or the purchase block, which must stay reachable
- * without scrolling, so the steps take whatever height is left inside these
- * bounds. The lower bound is what the tallest step needs: one title line, one
- * gap and two subtitle lines.
+ * The timeline is the one block on this screen that can give, so the card is a
+ * flex child and takes whatever the layout engine has left after the headings,
+ * the reminder row and the purchase block.
+ *
+ * Two earlier attempts summed those heights by hand and both were wrong: the
+ * total depends on safe areas, the sheet header, the user's text size and the
+ * natural line height of a font, none of which are knowable from here. So
+ * nothing is summed any more. Flexbox sizes the card, an onLayout reads the
+ * result, and the steps divide that measured height between them.
+ *
+ * The bounds only stop the card collapsing to nothing on a very small screen
+ * or spreading until it stops reading as one sequence on a very large one.
+ * Below the floor the ScrollView takes over, which is what it is there for.
  */
 const STEP_HEIGHT_MIN = 44;
-// High enough that the timeline absorbs the slack on a tall phone. Capped at
-// all so the steps cannot drift so far apart that the card stops reading as
-// one sequence.
 const STEP_HEIGHT_MAX = 84;
 
-/**
- * What the scroll area holds besides the timeline steps: the heading pair, the
- * card's own padding, the reminder row and the content padding. Small, known
- * from the styles below, and subtracted from the area's *measured* height.
- */
-const SCROLL_CHROME_HEIGHT = 178;
+/** Card padding plus its border, the only part of the card that is fixed. */
+const CARD_CHROME = 30;
 
-/**
- * Everything that is not the timeline, safe areas excluded, used only for the
- * first frame before the scroll area has reported its real height. Being a few
- * points out costs one frame of a slightly wrong card, never a broken layout.
- */
-const NON_TIMELINE_HEIGHT = 511;
+/** Used for one frame, until the card reports the height flexbox gave it. */
+const STEP_HEIGHT_SEED = 60;
 
 const ICON_SIZE = 28;
 const BAR_WIDTH = 10;
@@ -374,22 +370,10 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
   const notifIdRef = useRef<string | null>(null);
   const steps = buildSteps();
 
-  // Give the timeline exactly what is left once the purchase block has taken
-  // its space. The scroll area is `flex: 1`, so its laid-out height IS that
-  // remainder: measuring it beats estimating the chrome, which depends on safe
-  // areas, the header and the user's text size. The window figure covers only
-  // the first frame, before that measurement exists.
-  const { height: windowHeight } = useWindowDimensions();
-  const insets = useSafeAreaInsets();
-  const [scrollHeight, setScrollHeight] = useState(0);
-
-  const availableStep =
-    scrollHeight > 0
-      ? (scrollHeight - SCROLL_CHROME_HEIGHT) / steps.length
-      : (windowHeight - insets.top - insets.bottom - NON_TIMELINE_HEIGHT) / steps.length;
-
-  const stepHeight = Math.min(STEP_HEIGHT_MAX, Math.max(STEP_HEIGHT_MIN, availableStep));
-  const timelineHeight = stepHeight * steps.length;
+  // The card is a flex child, so this is the height flexbox actually gave it,
+  // not a height derived from adding up everything else on the screen.
+  const [timelineHeight, setTimelineHeight] = useState(0);
+  const stepHeight = timelineHeight > 0 ? timelineHeight / steps.length : STEP_HEIGHT_SEED;
 
   const planOptions = useMemo(() => planOptionsFrom(offerings), [offerings]);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -589,7 +573,6 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
           style={styles.scroll}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
-          onLayout={e => setScrollHeight(e.nativeEvent.layout.height)}
         >
           <Text style={[styles.title, { color: theme.text }]}>
             How your free trial works
@@ -600,10 +583,13 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
 
           {/* Timeline card */}
           <View style={[styles.card, { backgroundColor: theme.surface, borderColor: `${theme.gold}50` }]}>
-            <View style={styles.timelineRow}>
+            <View
+              style={styles.timelineRow}
+              onLayout={e => setTimelineHeight(e.nativeEvent.layout.height)}
+            >
 
               {/* Left: gradient bar + icon nodes */}
-              <View style={[styles.timelineLeft, { height: timelineHeight }]}>
+              <View style={styles.timelineLeft}>
                 <LinearGradient
                   colors={[theme.gold, `${theme.gold}80`, theme.border]}
                   start={{ x: 0, y: 0 }}
@@ -767,6 +753,9 @@ const styles = StyleSheet.create({
     marginBottom: -SPACE.sm,
   },
   scrollContent: {
+    // Fill the viewport when there is room, so the card has slack to flex into,
+    // and grow past it only when even the floor sizes do not fit.
+    flexGrow: 1,
     paddingHorizontal: GUTTER,
     paddingBottom: SPACE.md,
   },
@@ -790,9 +779,16 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
     padding: 14,
+    // Takes the slack the rest of the screen leaves. The bounds keep it from
+    // collapsing on a small screen or spreading on a large one; past the floor
+    // the ScrollView takes over.
+    flex: 1,
+    minHeight: STEP_HEIGHT_MIN * 4 + CARD_CHROME,
+    maxHeight: STEP_HEIGHT_MAX * 4 + CARD_CHROME,
   },
   timelineRow: {
     flexDirection: 'row',
+    flex: 1,
   },
   timelineLeft: {
     width: LEFT_COL_WIDTH,
