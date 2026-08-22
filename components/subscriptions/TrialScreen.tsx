@@ -69,7 +69,9 @@ const TRIAL_DAYS = 3;
  * or spreading until it stops reading as one sequence on a very large one.
  * Below the floor the ScrollView takes over, which is what it is there for.
  */
-const STEP_HEIGHT_MIN = 44;
+// The floor is what one step's text occupies: a title line, the gap and a
+// subtitle line. At that height the card is pure content with nothing to give.
+const STEP_HEIGHT_MIN = 40;
 const STEP_HEIGHT_MAX = 84;
 
 /** Card padding plus its border, the only part of the card that is fixed. */
@@ -178,13 +180,25 @@ function savingsPercent(monthlyValue: number, annualValue: number): number | nul
 interface PlanOption {
   key: string;
   label: string;
-  /** The store's own price string, or the advertised one until offerings land. */
+  /**
+   * The headline figure on the card. Annual carries its monthly equivalent, so
+   * the two cards can be read straight down as one comparison instead of
+   * asking the reader to divide a year by twelve.
+   */
   price: string;
-  /** How it bills, spelled out under the label. */
+  /** Tiny line under the label. Empty renders nothing. */
   caption: string;
-  /** Reads after the price in the line under the CTA. Empty when unknown. */
+  /**
+   * What the store actually charges. The card headline is a per-month figure
+   * that annual is never billed at, so the line under the CTA has to take its
+   * number from here or it would state a price nobody is charged.
+   */
+  billedPrice: string;
+  /** Reads after billedPrice in the line under the CTA. Empty when unknown. */
   period: string;
   badge: string | null;
+  /** Spelled out for screen readers, where a bare "$3.75" has no period. */
+  a11yLabel: string;
   /** Null while offerings are in flight — the CTA refetches on tap. */
   pkg: PurchasesPackage | null;
 }
@@ -209,8 +223,10 @@ function planOptionsFrom(
       label: p.product.title,
       price: p.product.priceString,
       caption: p.product.description,
+      billedPrice: p.product.priceString,
       period: '',
       badge: null,
+      a11yLabel: `${p.product.title}, ${p.product.priceString}`,
       pkg: p,
     }));
   }
@@ -221,11 +237,10 @@ function planOptionsFrom(
   const currency = annualPkg?.product.currencyCode ?? monthlyPkg?.product.currencyCode;
   const saving = savingsPercent(monthlyValue, annualValue);
 
-  // Each card states its own plan in the other card's billing period, so the
-  // two are comparable in both directions and the annual saving is visible as
-  // a pair of numbers rather than a claim.
+  // Both headline figures are per month, so the cards compare straight down:
+  // $3.75 against $4.99. Annual's real yearly charge moves to its caption and
+  // to the line under the CTA, which is what the user is actually billed.
   const perMonth = formatMoney(annualValue / 12, currency);
-  const perYear = formatMoney(monthlyValue * 12, currency);
   const savingLabel = saving ? `Save ${saving}%` : null;
 
   // The free trial is the strongest thing either card has to say, so it takes
@@ -235,15 +250,20 @@ function planOptionsFrom(
   const annualTrial = trialBadgeFor(annualPkg, inFlight);
   const monthlyTrial = trialBadgeFor(monthlyPkg, inFlight);
 
+  const annualBilled = annualPkg?.product.priceString ?? FALLBACK_ANNUAL;
+  const monthlyBilled = monthlyPkg?.product.priceString ?? FALLBACK_MONTHLY;
+
   const options: PlanOption[] = [];
   if (annualPkg || inFlight) {
     options.push({
       key: 'annual',
       label: 'Annual',
-      price: annualPkg?.product.priceString ?? FALLBACK_ANNUAL,
-      caption: `${perMonth} a month`,
+      price: perMonth,
+      caption: `${annualBilled} a year`,
+      billedPrice: annualBilled,
       period: 'per year',
       badge: annualTrial ?? savingLabel,
+      a11yLabel: `Annual, ${perMonth} a month, ${annualBilled} a year`,
       pkg: annualPkg,
     });
   }
@@ -251,10 +271,13 @@ function planOptionsFrom(
     options.push({
       key: 'monthly',
       label: 'Monthly',
-      price: monthlyPkg?.product.priceString ?? FALLBACK_MONTHLY,
-      caption: `${perYear} a year`,
+      price: monthlyBilled,
+      // Nothing to add: the headline already reads as the monthly charge.
+      caption: '',
+      billedPrice: monthlyBilled,
       period: 'per month',
       badge: monthlyTrial,
+      a11yLabel: `Monthly, ${monthlyBilled} a month`,
       pkg: monthlyPkg,
     });
   }
@@ -310,10 +333,7 @@ function PlanRow({
       onPress={onPress}
       accessibilityRole="radio"
       accessibilityState={{ selected }}
-      accessibilityLabel={
-        `${option.label}, ${option.price} ${option.period}`.trim() +
-        (option.badge ? `, ${option.badge}` : '')
-      }
+      accessibilityLabel={option.a11yLabel + (option.badge ? `, ${option.badge}` : '')}
       style={[
         styles.planRow,
         {
@@ -342,12 +362,14 @@ function PlanRow({
             </View>
           ) : null}
         </View>
-        <Text
-          style={[styles.planCaption, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}
-          numberOfLines={1}
-        >
-          {option.caption}
-        </Text>
+        {option.caption ? (
+          <Text
+            style={[styles.planCaption, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}
+            numberOfLines={1}
+          >
+            {option.caption}
+          </Text>
+        ) : null}
       </View>
 
       <Text style={[styles.planPrice, { color: theme.text }]}>{option.price}</Text>
@@ -390,7 +412,9 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
   // Names the exact plan the button charges, on the same screen as the button.
   const disclosure = (() => {
     if (!selectedPlan) return '';
-    const priced = [selectedPlan.price, selectedPlan.period].filter(Boolean).join(' ');
+    // billedPrice, not the card headline: annual's headline is a per-month
+    // figure the store never charges.
+    const priced = [selectedPlan.billedPrice, selectedPlan.period].filter(Boolean).join(' ');
     return trialOnSelected
       ? `${TRIAL_DAYS} days free, then ${priced}. Cancel anytime.`
       : `${priced}. Cancel anytime.`;
@@ -574,11 +598,13 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >
+          {/* The subtitle that sat here said the user would not be charged
+              today. Both plan cards carry a "3 days free" badge and the line
+              under the CTA gives the full terms, so it was the one block on
+              the screen saying nothing the reader had not already been told
+              twice, and the reminder row needed its height. */}
           <Text style={[styles.title, { color: theme.text }]}>
             How your free trial works
-          </Text>
-          <Text style={[styles.subtitle, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-            You won't be charged anything today
           </Text>
 
           {/* Timeline card */}
@@ -767,12 +793,7 @@ const styles = StyleSheet.create({
     lineHeight: 34,
     includeFontPadding: false,
     letterSpacing: -0.4,
-    marginBottom: 6,
-    textAlign: 'center',
-  },
-  subtitle: {
-    fontSize: 15,
-    marginBottom: 18,
+    marginBottom: SPACE.md,
     textAlign: 'center',
   },
   card: {
@@ -842,6 +863,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACE.lg,
     paddingVertical: SPACE.sm,
     gap: SPACE.md,
+    // Only annual carries a caption, so without a floor the two cards would
+    // stand at different heights.
+    minHeight: 60,
   },
   radio: {
     width: 22,
@@ -909,7 +933,7 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.pill,
     borderWidth: 1,
     paddingHorizontal: SPACE.lg,
-    paddingVertical: SPACE.sm,
+    paddingVertical: 6,
     // Stands in for the `gap` it lost when it moved inside the ScrollView.
     marginTop: SPACE.sm,
   },
