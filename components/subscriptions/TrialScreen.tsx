@@ -844,7 +844,7 @@ const styles = StyleSheet.create({
     // Constant width in both states so selecting a row cannot shift layout.
     borderWidth: 2,
     paddingHorizontal: SPACE.lg,
-    paddingVertical: 10,
+    paddingVertical: SPACE.sm,
     gap: SPACE.md,
   },
   radio: {
@@ -921,13 +921,13 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   ctaButton: {
-    height: 56,
-    borderRadius: 30,
+    height: 50,
+    borderRadius: 25,
     alignItems: 'center',
     justifyContent: 'center',
   },
   ctaText: {
-    fontSize: 19,
+    fontSize: 18,
     fontFamily: FONTS.display.bold,
     lineHeight: 26,
     includeFontPadding: false,
