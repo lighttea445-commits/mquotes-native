@@ -69,13 +69,16 @@ const TRIAL_DAYS = 3;
  * or spreading until it stops reading as one sequence on a very large one.
  * Below the floor the ScrollView takes over, which is what it is there for.
  */
-// The floor is what one step's text occupies: a title line, the gap and a
-// subtitle line. At that height the card is pure content with nothing to give.
-const STEP_HEIGHT_MIN = 40;
-const STEP_HEIGHT_MAX = 84;
+// The floor leaves each step ten points clear of its own two lines of text.
+// Going below that is what made the card read as cramped rather than calm.
+const STEP_HEIGHT_MIN = 52;
+const STEP_HEIGHT_MAX = 96;
+
+/** How many `buildSteps` returns, needed by the card bounds at module scope. */
+const STEP_COUNT = 3;
 
 /** Card padding plus its border, the only part of the card that is fixed. */
-const CARD_CHROME = 30;
+const CARD_CHROME = 34;
 
 /** Used for one frame, until the card reports the height flexbox gave it. */
 const STEP_HEIGHT_SEED = 60;
@@ -95,40 +98,36 @@ function formatDate(d: Date): string {
 }
 
 interface Step {
-  icon: 'check-circle-outline' | 'lock-open-outline' | 'bell-outline' | 'crown-outline';
+  icon: 'lock-open-outline' | 'bell-outline' | 'crown-outline';
   title: string;
   subtitle: string;
-  done: boolean;
 }
 
+/**
+ * The trial, start to finish. A fourth step used to sit on top saying the app
+ * had been downloaded, struck through as already done. It told the reader
+ * something they could see from the fact they were holding it, and it cost a
+ * quarter of the card, which is what the other three needed to breathe.
+ */
 function buildSteps(): Step[] {
   const today = new Date();
   const reminderDate = formatDate(addDays(today, TRIAL_DAYS - 1));
   const memberDate = formatDate(addDays(today, TRIAL_DAYS));
   return [
     {
-      icon: 'check-circle-outline',
-      title: 'Download Quotable',
-      subtitle: 'Start discovering quotes that move you',
-      done: true,
-    },
-    {
       icon: 'lock-open-outline',
-      title: 'Today - get full access',
-      subtitle: `Full access, free for ${TRIAL_DAYS} days`,
-      done: false,
+      title: 'Today, get full access',
+      subtitle: `Free for your first ${TRIAL_DAYS} days`,
     },
     {
       icon: 'bell-outline',
-      title: `${reminderDate} - Trial reminder`,
+      title: `${reminderDate}, trial reminder`,
       subtitle: "To let you know it's ending soon",
-      done: false,
     },
     {
       icon: 'crown-outline',
-      title: `${memberDate} - Become member`,
+      title: `${memberDate}, become member`,
       subtitle: 'Your trial ends unless canceled',
-      done: false,
     },
   ];
 }
@@ -659,25 +658,12 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
               <View style={styles.stepsContent}>
                 {steps.map((step, i) => (
                   <View key={i} style={[styles.step, { height: stepHeight }]}>
-                    {step.done ? (
-                      <>
-                        <Text style={[styles.stepTitleDone, { color: theme.textMuted }]}>
-                          {step.title}
-                        </Text>
-                        <Text style={[styles.stepSubtitle, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-                          {step.subtitle}
-                        </Text>
-                      </>
-                    ) : (
-                      <>
-                        <Text style={[styles.stepTitle, { color: theme.text }]}>
-                          {step.title}
-                        </Text>
-                        <Text style={[styles.stepSubtitle, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-                          {step.subtitle}
-                        </Text>
-                      </>
-                    )}
+                    <Text style={[styles.stepTitle, { color: theme.text }]}>
+                      {step.title}
+                    </Text>
+                    <Text style={[styles.stepSubtitle, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+                      {step.subtitle}
+                    </Text>
                   </View>
                 ))}
               </View>
@@ -793,19 +779,19 @@ const styles = StyleSheet.create({
     lineHeight: 34,
     includeFontPadding: false,
     letterSpacing: -0.4,
-    marginBottom: SPACE.md,
+    marginBottom: SPACE.lg,
     textAlign: 'center',
   },
   card: {
     borderRadius: 20,
     borderWidth: 1,
-    padding: 14,
+    padding: SPACE.lg,
     // Takes the slack the rest of the screen leaves. The bounds keep it from
     // collapsing on a small screen or spreading on a large one; past the floor
     // the ScrollView takes over.
     flex: 1,
-    minHeight: STEP_HEIGHT_MIN * 4 + CARD_CHROME,
-    maxHeight: STEP_HEIGHT_MAX * 4 + CARD_CHROME,
+    minHeight: STEP_HEIGHT_MIN * STEP_COUNT + CARD_CHROME,
+    maxHeight: STEP_HEIGHT_MAX * STEP_COUNT + CARD_CHROME,
   },
   timelineRow: {
     flexDirection: 'row',
@@ -821,7 +807,7 @@ const styles = StyleSheet.create({
   },
   step: {
     justifyContent: 'center',
-    gap: 2,
+    gap: 3,
   },
   stepTitle: {
     fontSize: 17,
@@ -829,22 +815,15 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     includeFontPadding: false,
   },
-  stepTitleDone: {
-    fontSize: 17,
-    fontFamily: FONTS.display.bold,
-    lineHeight: 22,
-    includeFontPadding: false,
-    textDecorationLine: 'line-through',
-  },
   stepSubtitle: {
-    fontSize: 12.5,
-    lineHeight: 16,
+    fontSize: 13,
+    lineHeight: 17,
   },
   bottom: {
     paddingHorizontal: GUTTER,
-    paddingTop: SPACE.sm,
+    paddingTop: SPACE.md,
     paddingBottom: SPACE.md,
-    gap: SPACE.sm,
+    gap: SPACE.md,
   },
   disclosure: {
     fontSize: 13,
@@ -861,11 +840,11 @@ const styles = StyleSheet.create({
     // Constant width in both states so selecting a row cannot shift layout.
     borderWidth: 2,
     paddingHorizontal: SPACE.lg,
-    paddingVertical: SPACE.sm,
+    paddingVertical: SPACE.md,
     gap: SPACE.md,
     // Only annual carries a caption, so without a floor the two cards would
     // stand at different heights.
-    minHeight: 60,
+    minHeight: 68,
   },
   radio: {
     width: 22,
@@ -933,21 +912,21 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.pill,
     borderWidth: 1,
     paddingHorizontal: SPACE.lg,
-    paddingVertical: 6,
+    paddingVertical: SPACE.sm,
     // Stands in for the `gap` it lost when it moved inside the ScrollView.
-    marginTop: SPACE.sm,
+    marginTop: SPACE.md,
   },
   toggleLabel: {
     fontSize: 15,
   },
   ctaButton: {
-    height: 50,
-    borderRadius: 25,
+    height: 54,
+    borderRadius: 27,
     alignItems: 'center',
     justifyContent: 'center',
   },
   ctaText: {
-    fontSize: 18,
+    fontSize: 19,
     fontFamily: FONTS.display.bold,
     lineHeight: 26,
     includeFontPadding: false,
