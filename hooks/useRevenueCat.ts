@@ -92,20 +92,24 @@ async function initialize() {
     const userID      = idResult.status === 'fulfilled' ? idResult.value  : null;
     const isPro       = customerInfo?.entitlements.active[ENTITLEMENT_PRO] !== undefined;
 
-    // allSettled swallows rejections. This is the one moment the store says
-    // why it has nothing to sell, so record it rather than dropping it and
-    // leaving `offerings: null` with `error: null` as the only evidence.
+    // allSettled swallows rejections. This is the one moment the store says why
+    // it has nothing to sell, so keep it on `error` where the paywall can read
+    // it. On a TestFlight build there is no console to fall back to.
+    let offeringsError: Error | null = null;
     if (ofResult.status === 'rejected') {
-      errorReporting.captureError(ofResult.reason, { context: 'useRevenueCat:getOfferings' });
+      offeringsError =
+        ofResult.reason instanceof Error ? ofResult.reason : new Error(String(ofResult.reason));
+      errorReporting.captureError(offeringsError, { context: 'useRevenueCat:getOfferings' });
     } else if (!ofResult.value.current && Object.keys(ofResult.value.all).length === 0) {
-      errorReporting.captureMessage(
+      offeringsError = new Error(
         'RevenueCat returned zero offerings. The store has no purchasable products.',
-        'error',
-        { context: 'useRevenueCat:init' },
       );
+      errorReporting.captureMessage(offeringsError.message, 'error', {
+        context: 'useRevenueCat:init',
+      });
     }
 
-    patch({ isInitialized: true, isLoading: false, error: null, customerInfo, offerings, isPro, userID });
+    patch({ isInitialized: true, isLoading: false, error: offeringsError, customerInfo, offerings, isPro, userID });
 
     // One listener for the lifetime of the app — fires after every purchase/restore.
     Purchases.addCustomerInfoUpdateListener((info) => {
@@ -122,19 +126,12 @@ async function initialize() {
       lastAppState = nextState;
     });
   } catch (err) {
-    const isConfigError =
-      err instanceof Error &&
-      (err.message.includes('ConfigurationError') ||
-        err.message.includes('no Test Store products') ||
-        err.message.includes('Check the underlying error'));
-    if (!isConfigError) {
-      console.error('RevenueCat initialization error:', err);
-    }
-    patch({
-      isInitialized: true,
-      isLoading: false,
-      error: isConfigError ? null : err instanceof Error ? err : new Error('Unknown error'),
-    });
+    // A ConfigurationError here is the most informative thing the SDK ever
+    // says: wrong key, missing store connection, or no products. It used to be
+    // rewritten to `error: null`, which left no evidence the failure happened.
+    const error = err instanceof Error ? err : new Error(String(err));
+    errorReporting.captureError(error, { context: 'useRevenueCat:init' });
+    patch({ isInitialized: true, isLoading: false, error });
   }
 }
 

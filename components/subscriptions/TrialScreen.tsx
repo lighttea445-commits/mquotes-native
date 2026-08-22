@@ -160,7 +160,7 @@ interface Props {
 
 export default function TrialScreen({ onClose, onContinue }: Props) {
   const theme = useTheme();
-  const { offerings } = useRevenueCat();
+  const { offerings, error: rcError } = useRevenueCat();
   const [reminderEnabled, setReminderEnabled] = useState(false);
   const [reminderBusy, setReminderBusy] = useState(false);
   const [purchasing, setPurchasing] = useState(false);
@@ -288,17 +288,24 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
       // rather than dropping the tap, so the button always reaches the store's
       // billing sheet.
       let pkg = trialPackage;
+      let reason: string | null = null;
       if (!pkg) {
         try {
           pkg = trialPackageFor(await Purchases.getOfferings());
+          if (!pkg) reason = 'The store returned no plans for this build.';
         } catch (e) {
           errorReporting.captureError(e as Error, { context: 'TrialScreen:getOfferings' });
+          reason = (e as Error)?.message ?? null;
           pkg = null;
         }
       }
 
+      // "Check your connection" was the wrong thing to say: an empty offering
+      // is a store configuration problem, not a network one, and there is no
+      // console on a TestFlight device to find the real reason in.
       if (!pkg) {
-        setPurchaseError('Plans could not be loaded. Check your connection and try again.');
+        const detail = reason ?? rcError?.message ?? 'The store returned no plans for this build.';
+        setPurchaseError(`Plans could not be loaded. ${detail}`);
         return;
       }
 
