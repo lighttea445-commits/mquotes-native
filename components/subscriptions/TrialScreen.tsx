@@ -8,6 +8,7 @@ import {
   Platform,
   Linking,
   ActivityIndicator,
+  ActionSheetIOS,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -17,7 +18,7 @@ import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../../hooks/useTheme';
 import { useRevenueCat } from '../../hooks/useRevenueCat';
-import { ENTITLEMENT_PRO } from '../../lib/revenuecat';
+import { ENTITLEMENT_PRO, IAP_DIAGNOSTICS } from '../../lib/revenuecat';
 import { requestPermissions, canAskForPermissions } from '../../lib/notifications';
 import { errorReporting } from '../../lib/errorReporting';
 import { analytics } from '../../lib/analytics';
@@ -71,14 +72,17 @@ const TRIAL_DAYS = 3;
  */
 // The floor leaves each step ten points clear of its own two lines of text.
 // Going below that is what made the card read as cramped rather than calm.
-const STEP_HEIGHT_MIN = 52;
-const STEP_HEIGHT_MAX = 96;
+// A step carries 39pt of text. 50 is the floor that keeps a little air under
+// it; 78 is as tall as one can stand before four of them read as a stretched
+// list rather than a sequence — 96 was tuned when there were only three.
+const STEP_HEIGHT_MIN = 50;
+const STEP_HEIGHT_MAX = 78;
 
 /** How many `buildSteps` returns, needed by the card bounds at module scope. */
-const STEP_COUNT = 3;
+const STEP_COUNT = 4;
 
 /** Card padding plus its border, the only part of the card that is fixed. */
-const CARD_CHROME = 34;
+const CARD_CHROME = 26;
 
 /**
  * Marks both headline figures as per month. Annual needs it, because its
@@ -88,10 +92,21 @@ const CARD_CHROME = 34;
  */
 const PER_MONTH_SUFFIX = '/m';
 
+/**
+ * Where the plan choice happens.
+ *
+ * iOS asks for it in a native action sheet hung off a single button; Android
+ * keeps both plans on screen as cards. Worth being clear about what the sheet
+ * is: StoreKit has no API that presents a plan picker of its own, so this is
+ * UIKit's action sheet, which is native chrome but ours to populate. The
+ * store's own sheet still follows, once a plan has been chosen.
+ */
+const PICKS_PLAN_IN_SHEET = Platform.OS === 'ios';
+
 /** Used for one frame, until the card reports the height flexbox gave it. */
 const STEP_HEIGHT_SEED = 60;
 
-const ICON_SIZE = 28;
+const ICON_SIZE = 26;
 const BAR_WIDTH = 10;
 const LEFT_COL_WIDTH = 44;
 
@@ -106,22 +121,35 @@ function formatDate(d: Date): string {
 }
 
 interface Step {
-  icon: 'lock-open-outline' | 'bell-outline' | 'crown-outline';
+  icon: 'check' | 'lock-open-outline' | 'bell-outline' | 'crown-outline';
   title: string;
   subtitle: string;
+  /** Already behind the reader: struck through and dimmed rather than pending. */
+  done?: boolean;
 }
 
 /**
- * The trial, start to finish. A fourth step used to sit on top saying the app
- * had been downloaded, struck through as already done. It told the reader
- * something they could see from the fact they were holding it, and it cost a
- * quarter of the card, which is what the other three needed to breathe.
+ * The trial, start to finish, opening on the step already behind the reader.
+ *
+ * That first step was dropped once, on the grounds that it told the reader
+ * something they could see from the fact they were holding the phone, and that
+ * it cost a quarter of the card. The second half of that no longer holds: the
+ * plan cards left the scroll view on iOS and the reminder row shrank, so the
+ * card has the height for four steps without any of them tightening. What it
+ * buys is a timeline that starts from something already done rather than from
+ * a demand, which is the point of drawing one at all.
  */
 function buildSteps(): Step[] {
   const today = new Date();
   const reminderDate = formatDate(addDays(today, TRIAL_DAYS - 1));
   const memberDate = formatDate(addDays(today, TRIAL_DAYS));
   return [
+    {
+      icon: 'check',
+      title: 'Downloaded Quotable',
+      subtitle: 'Already done',
+      done: true,
+    },
     {
       icon: 'lock-open-outline',
       title: 'Today, get full access',
@@ -212,15 +240,22 @@ interface PlanOption {
   price: string;
   /** Tiny line under the label. Empty renders nothing. */
   caption: string;
-  /**
-   * What the store actually charges. The card headline is a per-month figure
-   * that annual is never billed at, so the line under the CTA has to take its
-   * number from here or it would state a price nobody is charged.
-   */
-  billedPrice: string;
-  /** Reads after billedPrice in the line under the CTA. Empty when unknown. */
-  period: string;
   badge: string | null;
+  /**
+   * Zero in this plan's own currency, for the CTA's "Try for …" label. Taken
+   * from the store's currency rather than hardcoded, so the button cannot read
+   * "$0.00" on a card that prices the plan at "44,99 €".
+   */
+  zeroPrice: string;
+  /**
+   * What the store charges, spelled out for the iOS action sheet.
+   *
+   * The card headline divides the year by twelve so the two plans compare
+   * straight down a column. A sheet row has no column to compare against, so
+   * it names the real charge instead — putting both figures on one row only
+   * asked the reader to work out which of the two they would be paying.
+   */
+  sheetPrice: string;
   /** Spelled out for screen readers, where a bare "$3.75" has no period. */
   a11yLabel: string;
   /** Null while offerings are in flight — the CTA refetches on tap. */
@@ -247,9 +282,9 @@ function planOptionsFrom(
       label: p.product.title,
       price: p.product.priceString,
       caption: '',
-      billedPrice: p.product.priceString,
-      period: '',
       badge: null,
+      zeroPrice: formatMoney(0, p.product.currencyCode),
+      sheetPrice: p.product.priceString,
       a11yLabel: `${p.product.title}, ${p.product.priceString}`,
       pkg: p,
     }));
@@ -266,6 +301,7 @@ function planOptionsFrom(
   // to the line under the CTA, which is what the user is actually billed.
   const perMonth = formatMoney(annualValue / 12, currency);
   const savingLabel = saving ? `Save ${saving}%` : null;
+  const zeroPrice = formatMoney(0, currency);
 
   // The free trial is the strongest thing either card has to say, so it takes
   // the badge whenever the store actually offers it and pushes the saving down
@@ -280,14 +316,14 @@ function planOptionsFrom(
   const options: PlanOption[] = [];
   if (annualPkg || inFlight) {
     options.push({
-      key: 'annual',
-      label: 'Annual',
+      key: 'yearly',
+      label: 'Yearly',
       price: `${perMonth}${PER_MONTH_SUFFIX}`,
       caption: `${annualBilled} a year`,
-      billedPrice: annualBilled,
-      period: 'per year',
       badge: annualTrial ?? savingLabel,
-      a11yLabel: `Annual, ${perMonth} a month, ${annualBilled} a year`,
+      zeroPrice,
+      sheetPrice: `${annualBilled} a year`,
+      a11yLabel: `Yearly, ${perMonth} a month, ${annualBilled} a year`,
       pkg: annualPkg,
     });
   }
@@ -298,9 +334,9 @@ function planOptionsFrom(
       price: `${monthlyBilled}${PER_MONTH_SUFFIX}`,
       // Nothing to add: the headline already reads as the monthly charge.
       caption: '',
-      billedPrice: monthlyBilled,
-      period: 'per month',
       badge: monthlyTrial,
+      zeroPrice,
+      sheetPrice: `${monthlyBilled} a month`,
       a11yLabel: `Monthly, ${monthlyBilled} a month`,
       pkg: monthlyPkg,
     });
@@ -316,6 +352,19 @@ function planOptionsFrom(
  */
 function hasFreeTrial(pkg: PurchasesPackage | null): boolean {
   return pkg?.product?.introPrice?.price === 0;
+}
+
+/**
+ * One row of the iOS action sheet: the plan and what it costs, nothing else.
+ *
+ * A sheet row is a single line that the system truncates rather than wraps, so
+ * the two plans read as a pair only while each stays short and parallel —
+ * "Yearly — $44.99 a year" against "Monthly — $4.99 a month". The trial and
+ * the cancel terms sit in the sheet's own message, above the rows, where they
+ * apply to both and are said once.
+ */
+function sheetLabelFor(option: PlanOption): string {
+  return `${option.label} — ${option.sheetPrice}`;
 }
 
 /**
@@ -408,10 +457,18 @@ interface Props {
 
 export default function TrialScreen({ onClose, onContinue }: Props) {
   const theme = useTheme();
-  const { offerings, error: rcError } = useRevenueCat();
+  const {
+    offerings,
+    error: rcError,
+    isInitialized,
+    offeringsLoading,
+    offeringsDiagnostic,
+    retryOfferings,
+  } = useRevenueCat();
   const [reminderEnabled, setReminderEnabled] = useState(false);
   const [reminderBusy, setReminderBusy] = useState(false);
   const [purchasing, setPurchasing] = useState(false);
+  const [retrying, setRetrying] = useState(false);
   const [purchaseError, setPurchaseError] = useState<string | null>(null);
   const notifIdRef = useRef<string | null>(null);
   const steps = buildSteps();
@@ -424,6 +481,34 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
   const planOptions = useMemo(() => planOptionsFrom(offerings), [offerings]);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
+  /*
+   * Whether the store has answered, and whether it had anything to sell.
+   *
+   * These were the same question before, read off `packages.length === 0`, and
+   * conflating them is what App Review saw: the advertised prices render either
+   * way, so a paywall with nothing behind it looked identical to one still
+   * loading, right up until the tap produced "Plans could not be loaded."
+   */
+  const storeSettled = isInitialized && !offeringsLoading;
+  const hasRealPackages = planOptions.some(o => o.pkg !== null);
+  const plansUnavailable = storeSettled && !hasRealPackages;
+
+  /**
+   * One automatic retry when this screen opens on an empty store.
+   *
+   * Worth doing on its own timeline rather than relying on the launch fetch:
+   * onboarding puts twenty steps between app start and here, so this is a
+   * genuinely fresh ask minutes later rather than a re-read of a cold start
+   * that StoreKit was too slow to answer.
+   */
+  const autoRetriedRef = useRef(false);
+  useEffect(() => {
+    if (plansUnavailable && !autoRetriedRef.current) {
+      autoRetriedRef.current = true;
+      retryOfferings();
+    }
+  }, [plansUnavailable, retryOfferings]);
+
   // Falling back to the first option means a key that stops existing when real
   // offerings replace the advertised pair resolves itself, with no effect and
   // no window where nothing is selected. Annual leads, so it is the default.
@@ -433,16 +518,47 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
   // plans carry the trial, so assume one and let the real value correct it.
   const trialOnSelected = selectedPlan?.pkg ? hasFreeTrial(selectedPlan.pkg) : !!selectedPlan;
 
-  // Names the exact plan the button charges, on the same screen as the button.
-  const disclosure = (() => {
-    if (!selectedPlan) return '';
-    // billedPrice, not the card headline: annual's headline is a per-month
-    // figure the store never charges.
-    const priced = [selectedPlan.billedPrice, selectedPlan.period].filter(Boolean).join(' ');
-    return trialOnSelected
-      ? `${TRIAL_DAYS} days free, then ${priced}. Cancel anytime.`
-      : `${priced}. Cancel anytime.`;
-  })();
+  /*
+   * A zero on the button is a claim about what the store charges today, so it
+   * is only made where the store has actually attached a free trial.
+   *
+   * Which plan that has to be true of depends on the platform. Android is
+   * buying the selected card, so that card's own offer decides. On iOS the
+   * button is pressed before any plan is chosen, so the claim has to hold for
+   * every plan in the sheet — a trial on the yearly alone cannot promise a
+   * zero to someone about to pick monthly.
+   */
+  const trialOnCta = PICKS_PLAN_IN_SHEET
+    ? planOptions.length > 0 && planOptions.every(o => (o.pkg ? hasFreeTrial(o.pkg) : true))
+    : trialOnSelected;
+  const ctaPlan = PICKS_PLAN_IN_SHEET ? planOptions[0] ?? null : selectedPlan;
+
+  /*
+   * A button that cannot buy anything must not offer to. Once the store has
+   * settled with nothing priceable, the CTA stops promising a zero and becomes
+   * the retry instead, which is the only useful thing left to press.
+   */
+  const ctaLabel = plansUnavailable
+    ? 'Try again'
+    : trialOnCta && ctaPlan
+      ? `Try for ${ctaPlan.zeroPrice}`
+      : 'Continue';
+
+  /*
+   * The single line under the button.
+   *
+   * On iOS it carries the prices as well, because there are no cards to carry
+   * them and the paywall cannot ask for a purchase without naming what it
+   * costs — the action sheet only says so after the tap. Android's cards sit
+   * directly above the button already, so repeating their prices here would be
+   * the same redundancy this screen has trimmed out of it before.
+   */
+  const disclosure =
+    planOptions.length === 0 || plansUnavailable
+      ? ''
+      : PICKS_PLAN_IN_SHEET
+        ? [...planOptions.map(o => `${o.label} ${o.price}`), 'Cancel anytime'].join('    ')
+        : 'Cancel anytime';
 
   /**
    * Restores the switch from the persisted ID, but only after confirming the
@@ -551,7 +667,7 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
    * package resolved, which is indistinguishable from a dead button: the store
    * sheet never appears and nothing says why.
    */
-  const handleContinue = async () => {
+  const purchase = async (chosen: PlanOption | null) => {
     if (purchasing) return;
     setPurchasing(true);
     setPurchaseError(null);
@@ -560,14 +676,14 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
       // Offerings can still be in flight when the sheet opens. Fetch on demand
       // rather than dropping the tap, so the button always reaches the store's
       // billing sheet.
-      let pkg = selectedPlan?.pkg ?? null;
+      let pkg = chosen?.pkg ?? null;
       let reason: string | null = null;
       if (!pkg) {
         try {
           // Re-resolve against the same key so a tap made before offerings
           // landed still buys the plan the user actually picked.
           const fresh = planOptionsFrom(await Purchases.getOfferings());
-          pkg = (fresh.find(o => o.key === selectedPlan?.key) ?? fresh[0])?.pkg ?? null;
+          pkg = (fresh.find(o => o.key === chosen?.key) ?? fresh[0])?.pkg ?? null;
           if (!pkg) reason = 'The store returned no plans for this build.';
         } catch (e) {
           errorReporting.captureError(e as Error, { context: 'TrialScreen:getOfferings' });
@@ -576,12 +692,22 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
         }
       }
 
-      // "Check your connection" was the wrong thing to say: an empty offering
-      // is a store configuration problem, not a network one, and there is no
-      // console on a TestFlight device to find the real reason in.
+      /*
+       * An empty offering is a store configuration problem, not a network one,
+       * so "Check your connection" was the wrong thing to say and the reason
+       * was spliced onto the message instead — a TestFlight device has no
+       * console to find it in.
+       *
+       * It reaches the reporter now rather than the screen. The buyer gets the
+       * one fact that concerns them; the configuration error stays diagnosable
+       * without being read out to someone who cannot act on it.
+       */
       if (!pkg) {
         const detail = reason ?? rcError?.message ?? 'The store returned no plans for this build.';
-        setPurchaseError(`Plans could not be loaded. ${detail}`);
+        errorReporting.captureMessage(`TrialScreen: no packages — ${detail}`, 'error', {
+          context: 'TrialScreen:noPackages',
+        });
+        setPurchaseError('Plans could not be loaded. Please try again.');
         return;
       }
 
@@ -606,6 +732,55 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
     }
   };
 
+  /**
+   * Android buys the card the user already selected. iOS has no cards, so the
+   * choice is asked for first, in the OS's own action sheet.
+   *
+   * With fewer than two plans there is nothing to choose between, so the sheet
+   * is skipped rather than shown with a single row — including the window
+   * before offerings land, where the tap falls through to `purchase` and its
+   * on-demand refetch resolves what to buy.
+   */
+  const handleRetry = async () => {
+    if (retrying) return;
+    setRetrying(true);
+    setPurchaseError(null);
+    try {
+      await retryOfferings();
+    } finally {
+      setRetrying(false);
+    }
+  };
+
+  const handleContinue = () => {
+    if (purchasing || retrying) return;
+    if (plansUnavailable) {
+      handleRetry();
+      return;
+    }
+    if (!PICKS_PLAN_IN_SHEET || planOptions.length < 2) {
+      purchase(PICKS_PLAN_IN_SHEET ? planOptions[0] ?? null : selectedPlan);
+      return;
+    }
+
+    ActionSheetIOS.showActionSheetWithOptions(
+      {
+        title: 'Choose your plan',
+        // Same rule as the button: the trial is only promised where every plan
+        // in the sheet actually carries one.
+        message: trialOnCta
+          ? `${TRIAL_DAYS} days free, then your plan renews. Cancel anytime.`
+          : 'Cancel anytime.',
+        options: [...planOptions.map(sheetLabelFor), 'Cancel'],
+        cancelButtonIndex: planOptions.length,
+        userInterfaceStyle: theme.isDark ? 'dark' : 'light',
+      },
+      index => {
+        if (index < planOptions.length) purchase(planOptions[index]);
+      },
+    );
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
@@ -622,13 +797,26 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >
-          {/* The subtitle that sat here said the user would not be charged
-              today. Both plan cards carry a "3 days free" badge and the line
-              under the CTA gives the full terms, so it was the one block on
-              the screen saying nothing the reader had not already been told
-              twice, and the reminder row needed its height. */}
-          <Text style={[styles.title, { color: theme.text }]}>
+          {/* A subtitle here was dropped once before as redundant, back when
+              the line under the CTA spelled out the full terms. That line now
+              says only "Cancel anytime", so the one thing a reader wants
+              settled before reading a timeline — whether tapping costs them
+              anything today — is no longer answered anywhere else. */}
+          {/* One line, always. Wrapped across two it stopped reading as a
+              heading and cost the card the height of a whole timeline step.
+              The size is set to fit; `adjustsFontSizeToFit` only has to catch
+              what that cannot know about — a narrower screen than any this
+              targets, or the user's own text-size setting scaling it up. */}
+          <Text
+            style={[styles.title, { color: theme.text }]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.75}
+          >
             How your free trial works
+          </Text>
+          <Text style={[styles.subtitle, { color: theme.textMuted, fontFamily: theme.bodyFontFamily }]}>
+            You won't pay anything today
           </Text>
 
           {/* Timeline card */}
@@ -683,7 +871,13 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
               <View style={styles.stepsContent}>
                 {steps.map((step, i) => (
                   <View key={i} style={[styles.step, { height: stepHeight }]}>
-                    <Text style={[styles.stepTitle, { color: theme.text }]}>
+                    <Text
+                      style={[
+                        styles.stepTitle,
+                        { color: step.done ? theme.textMuted : theme.text },
+                        step.done ? styles.stepDone : null,
+                      ]}
+                    >
                       {step.title}
                     </Text>
                     <Text style={[styles.stepSubtitle, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
@@ -696,8 +890,15 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
             </View>
           </View>
 
-          {/* Sits with the timeline it refers to, which keeps the purchase
-              block below to plans, button, fine print. */}
+        </ScrollView>
+
+        {/* Bottom */}
+        <View style={styles.bottom}>
+          {/* Three quarters the height of a plan row, on the same surface,
+              radius and gutter, so it joins that family as its lesser member
+              rather than competing with it. It sits above the plans, not
+              between them and the button, so choosing a plan and buying it
+              stay adjacent. */}
           <View style={[styles.toggleRow, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             <Text style={[styles.toggleLabel, { color: theme.text, fontFamily: theme.uiFontFamily }]}>
               Reminder before trial ends
@@ -709,11 +910,10 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
               accessibilityLabel="Reminder before trial ends"
             />
           </View>
-        </ScrollView>
 
-        {/* Bottom */}
-        <View style={styles.bottom}>
-          {planOptions.length > 0 ? (
+          {/* Android chooses here; iOS chooses in the action sheet the button
+              opens, and carries the same figures on one line instead. */}
+          {!PICKS_PLAN_IN_SHEET && planOptions.length > 0 ? (
             <View style={styles.planGroup} accessibilityRole="radiogroup">
               {planOptions.map(option => (
                 <PlanRow
@@ -727,21 +927,37 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
             </View>
           ) : null}
 
+
           <Pressable
             onPress={handleContinue}
-            disabled={purchasing}
-            style={[styles.ctaButton, { backgroundColor: theme.goldButton, opacity: purchasing ? 0.7 : 1 }]}
+            disabled={purchasing || retrying}
+            style={[
+              styles.ctaButton,
+              { backgroundColor: theme.goldButton, opacity: purchasing || retrying ? 0.7 : 1 },
+            ]}
             accessibilityRole="button"
-            accessibilityState={{ disabled: purchasing }}
+            accessibilityState={{ disabled: purchasing || retrying }}
           >
-            {purchasing ? (
+            {purchasing || retrying ? (
               <ActivityIndicator color={ON_GOLD} />
             ) : (
               <Text style={[styles.ctaText, { color: ON_GOLD }]}>
-                Continue
+                {ctaLabel}
               </Text>
             )}
           </Pressable>
+
+          {/* Said before the tap rather than after it. The whole point of the
+              rewrite is that the reviewer learns the store is empty from the
+              screen, not from pressing a button that looked like it worked. */}
+          {plansUnavailable && !purchaseError ? (
+            <Text
+              style={[styles.errorLine, { color: theme.text, fontFamily: theme.bodyFontFamily }]}
+              accessibilityLiveRegion="polite"
+            >
+              Plans could not be loaded right now.
+            </Text>
+          ) : null}
 
           {purchaseError ? (
             <Text
@@ -752,9 +968,16 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
             </Text>
           ) : null}
 
-          {/* Names the selected plan, its price and its renewal directly under
-              the button that charges it. Reads the store's real price once
-              offerings land. */}
+          {/* Compiled out of the App Store build: IAP_DIAGNOSTICS is set only
+              by the `device` EAS profile. See lib/revenuecat.ts. */}
+          {IAP_DIAGNOSTICS && offeringsDiagnostic ? (
+            <Text style={[styles.diagnostic, { color: theme.textMuted, fontFamily: theme.bodyFontFamily }]}>
+              {offeringsDiagnostic}
+            </Text>
+          ) : null}
+
+          {/* Spacing separates the parts rather than punctuation, so the line
+              reads as one quiet run instead of a list. */}
           {disclosure ? (
             <Text style={[styles.disclosure, { color: theme.textMuted, fontFamily: theme.bodyFontFamily }]}>
               {disclosure}
@@ -794,23 +1017,44 @@ const styles = StyleSheet.create({
     // and grow past it only when even the floor sizes do not fit.
     flexGrow: 1,
     paddingHorizontal: GUTTER,
-    paddingBottom: SPACE.md,
+    // No bottom padding. The card is the last thing in the scroll view and the
+    // block below opens with its own paddingTop, so anything here stacks on
+    // that and separates the two by twice what either one asked for.
   },
   // fontWeight is inert on Peachi and on the Inter families — every weight
   // here is a family name (see constants/fonts.ts).
   title: {
-    fontSize: 27,
+    /*
+     * The largest size that keeps "How your free trial works" on one line.
+     *
+     * Measured, not guessed: Peachi-Bold sets that string at 12.145em, so at
+     * this tracking it needs `12.145 * size - 25 * 0.4` points. The binding
+     * case is a 360dp Android — 320pt inside the gutter — where the ceiling
+     * is 27.0. This takes 26 for a 14pt buffer rather than 27's 2pt, because
+     * the backstop below is the less dependable half of this on Android and
+     * truncating a heading is worse than losing a point of size.
+     */
+    fontSize: 26,
     fontFamily: FONTS.display.bold,
-    lineHeight: 34,
+    lineHeight: 33,
     includeFontPadding: false,
     letterSpacing: -0.4,
-    marginBottom: SPACE.lg,
+    // Tight to the subtitle it heads. The subtitle carries the gap to the card.
+    marginBottom: SPACE.xs,
+    textAlign: 'center',
+  },
+  subtitle: {
+    // Holds the title's ratio (26 * 0.52). Larger than the fine print under
+    // the button, which is right — this is a subhead, not more small print.
+    fontSize: 14,
+    lineHeight: 19,
+    marginBottom: SPACE.md,
     textAlign: 'center',
   },
   card: {
     borderRadius: 20,
     borderWidth: 1,
-    padding: SPACE.lg,
+    padding: SPACE.md,
     // Takes the slack the rest of the screen leaves. The bounds keep it from
     // collapsing on a small screen or spreading on a large one; past the floor
     // the ScrollView takes over.
@@ -832,17 +1076,22 @@ const styles = StyleSheet.create({
   },
   step: {
     justifyContent: 'center',
-    gap: 3,
+    gap: 2,
   },
   stepTitle: {
-    fontSize: 17,
+    fontSize: 16,
     fontFamily: FONTS.display.bold,
-    lineHeight: 22,
+    lineHeight: 21,
     includeFontPadding: false,
   },
   stepSubtitle: {
-    fontSize: 13,
-    lineHeight: 17,
+    fontSize: 12.5,
+    lineHeight: 16,
+  },
+  stepDone: {
+    // Only the title is struck. Running the rule through the subtitle too
+    // makes the pair read as retracted rather than as completed.
+    textDecorationLine: 'line-through',
   },
   bottom: {
     paddingHorizontal: GUTTER,
@@ -851,8 +1100,11 @@ const styles = StyleSheet.create({
     gap: SPACE.md,
   },
   disclosure: {
-    fontSize: 13,
-    lineHeight: 18,
+    // One step above footerText and no further. It is reassurance, not a
+    // second headline, so it has to outrank the terms link without competing
+    // with the button it sits under.
+    fontSize: 12.5,
+    lineHeight: 17,
     textAlign: 'center',
   },
   planGroup: {
@@ -920,6 +1172,14 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     textAlign: 'center',
   },
+  diagnostic: {
+    // Deliberately small and dense. It exists to be read off a device once,
+    // not to sit comfortably in the layout.
+    fontSize: 10,
+    lineHeight: 13,
+    textAlign: 'left',
+    opacity: 0.7,
+  },
   footerItem: {
     alignSelf: 'center',
     marginTop: -SPACE.xs,
@@ -934,20 +1194,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    // Card radius, not a pill. A stadium shape reads as a thin strip between
-    // the timeline card and the plan rows, which are both card-cornered, and
-    // the height alone did not fix that.
+    // The plan rows' own card radius. At 51 it stays under half the box, so
+    // the corners still read as a rounded card rather than rounding the whole
+    // row into the stadium an earlier pass here already rejected.
     borderRadius: RADIUS.card,
     borderWidth: 1,
     paddingHorizontal: SPACE.lg,
-    paddingVertical: SPACE.md,
-    // Stands in for the `gap` it lost when it moved inside the ScrollView.
-    marginTop: SPACE.md,
-    // The same 68 the plan rows stand at, so the three read as one family.
-    minHeight: 68,
+    paddingVertical: SPACE.sm,
+    // Three quarters of the plan rows' 68. Enough under them to read as the
+    // lesser row, and enough over the 30pt switch to clear it by 10 rather
+    // than the 2 a true half would have left.
+    minHeight: 51,
   },
   toggleLabel: {
-    fontSize: 16,
+    // A step under the plan rows' 17pt label, matching the drop in height.
+    fontSize: 15,
   },
   ctaButton: {
     height: 54,

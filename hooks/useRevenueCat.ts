@@ -1,13 +1,29 @@
 import { useEffect, useReducer } from 'react';
 import { AppState, Platform } from 'react-native';
 import Purchases, { CustomerInfo, PurchasesOfferings } from 'react-native-purchases';
-import { initializeRevenueCat, ENTITLEMENT_PRO } from '../lib/revenuecat';
+import {
+  initializeRevenueCat,
+  fetchOfferingsWithRetry,
+  OfferingsResult,
+  ENTITLEMENT_PRO,
+} from '../lib/revenuecat';
 import { errorReporting } from '../lib/errorReporting';
 
 export interface RevenueCatState {
   isInitialized: boolean;
   isLoading: boolean;
+  /**
+   * Offerings have their own flag because they settle on their own timeline.
+   * The store is retried for up to twelve seconds after launch, and nothing
+   * that only needs the entitlement should wait on that.
+   */
+  offeringsLoading: boolean;
   error: Error | null;
+  /**
+   * What the store said about offerings, in one line. Surfaced on the paywall
+   * in diagnostics builds — see IAP_DIAGNOSTICS in lib/revenuecat.ts.
+   */
+  offeringsDiagnostic: string | null;
   customerInfo: CustomerInfo | null;
   offerings: PurchasesOfferings | null;
   isPro: boolean;
@@ -29,7 +45,9 @@ export function getIsPro(): boolean {
 let _state: RevenueCatState = {
   isInitialized: false,
   isLoading: true,
+  offeringsLoading: true,
   error: null,
+  offeringsDiagnostic: null,
   customerInfo: null,
   offerings: null,
   isPro: false,
@@ -74,42 +92,34 @@ async function initialize() {
   if (DISABLE_REVENUECAT) {
     // Report as "settled, not pro" so the UI renders normally instead of
     // sitting on a loading spinner forever.
-    patch({ isInitialized: true, isLoading: false, error: null, isPro: false });
+    patch({
+      isInitialized: true,
+      isLoading: false,
+      offeringsLoading: false,
+      error: null,
+      isPro: false,
+    });
     return;
   }
 
   try {
     await initializeRevenueCat();
 
-    const [ciResult, ofResult, idResult] = await Promise.allSettled([
+    const [ciResult, idResult] = await Promise.allSettled([
       Purchases.getCustomerInfo(),
-      Purchases.getOfferings(),
       Purchases.getAppUserID(),
     ]);
 
     const customerInfo = ciResult.status === 'fulfilled' ? ciResult.value : null;
-    const offerings   = ofResult.status === 'fulfilled' ? ofResult.value  : null;
-    const userID      = idResult.status === 'fulfilled' ? idResult.value  : null;
-    const isPro       = customerInfo?.entitlements.active[ENTITLEMENT_PRO] !== undefined;
+    const userID       = idResult.status === 'fulfilled' ? idResult.value : null;
+    const isPro        = customerInfo?.entitlements.active[ENTITLEMENT_PRO] !== undefined;
 
-    // allSettled swallows rejections. This is the one moment the store says why
-    // it has nothing to sell, so keep it on `error` where the paywall can read
-    // it. On a TestFlight build there is no console to fall back to.
-    let offeringsError: Error | null = null;
-    if (ofResult.status === 'rejected') {
-      offeringsError =
-        ofResult.reason instanceof Error ? ofResult.reason : new Error(String(ofResult.reason));
-      errorReporting.captureError(offeringsError, { context: 'useRevenueCat:getOfferings' });
-    } else if (!ofResult.value.current && Object.keys(ofResult.value.all).length === 0) {
-      offeringsError = new Error(
-        'RevenueCat returned zero offerings. The store has no purchasable products.',
-      );
-      errorReporting.captureMessage(offeringsError.message, 'error', {
-        context: 'useRevenueCat:init',
-      });
-    }
+    patch({ isInitialized: true, isLoading: false, customerInfo, isPro, userID });
 
-    patch({ isInitialized: true, isLoading: false, error: offeringsError, customerInfo, offerings, isPro, userID });
+    // Deliberately not awaited. The entitlement is what gates the app, and it
+    // has already landed; the store gets its retries without holding up a
+    // spinner on every screen that only wanted to know whether the user is Pro.
+    loadOfferings();
 
     // One listener for the lifetime of the app — fires after every purchase/restore.
     Purchases.addCustomerInfoUpdateListener((info) => {
@@ -131,27 +141,85 @@ async function initialize() {
     // rewritten to `error: null`, which left no evidence the failure happened.
     const error = err instanceof Error ? err : new Error(String(err));
     errorReporting.captureError(error, { context: 'useRevenueCat:init' });
-    patch({ isInitialized: true, isLoading: false, error });
+    patch({
+      isInitialized: true,
+      isLoading: false,
+      offeringsLoading: false,
+      error,
+      offeringsDiagnostic: `RevenueCat failed to configure. ${error.message}`,
+    });
   }
+}
+
+// Only one offerings fetch runs at a time: the paywall asks for one on mount,
+// and a foreground transition can land in the middle of it.
+let _offeringsInFlight = false;
+
+/**
+ * Fetch offerings, retrying, patching as each attempt lands.
+ *
+ * Patching per attempt rather than only at the end means a first attempt that
+ * succeeds costs nothing, while one that fails leaves the paywall showing its
+ * loading state instead of a dead Continue button for the twelve seconds the
+ * retries take.
+ */
+async function loadOfferings(): Promise<void> {
+  if (_offeringsInFlight) return;
+  _offeringsInFlight = true;
+  patch({ offeringsLoading: true });
+
+  try {
+    const apply = (result: OfferingsResult) => {
+      patch({
+        // A failed attempt returns null. Never let it clear a set that an
+        // earlier attempt managed to fetch.
+        offerings: result.offerings ?? _state.offerings,
+        offeringsDiagnostic: result.diagnostic,
+      });
+    };
+
+    const final = await fetchOfferingsWithRetry(apply);
+
+    patch({
+      offerings: final.offerings ?? _state.offerings,
+      offeringsDiagnostic: final.diagnostic,
+      error: final.usable ? null : new Error(final.diagnostic),
+    });
+
+    if (!final.usable) {
+      errorReporting.captureError(new Error(final.diagnostic), {
+        context: 'useRevenueCat:getOfferings',
+      });
+    }
+  } finally {
+    _offeringsInFlight = false;
+    patch({ offeringsLoading: false });
+  }
+}
+
+/** Re-ask the store. Does not re-run configure, which must happen once. */
+export function retryOfferings(): Promise<void> {
+  return loadOfferings();
 }
 
 async function refresh() {
   patch({ isLoading: true });
   try {
-    const [customerInfo, offerings] = await Promise.all([
-      Purchases.getCustomerInfo(),
-      Purchases.getOfferings(),
-    ]);
+    const customerInfo = await Purchases.getCustomerInfo();
     const isPro = customerInfo.entitlements.active[ENTITLEMENT_PRO] !== undefined;
-    patch({ customerInfo, offerings, isPro, error: null, isLoading: false });
+    patch({ customerInfo, isPro, isLoading: false });
   } catch (err) {
     patch({ error: err instanceof Error ? err : new Error('Refresh failed'), isLoading: false });
   }
+  // Offerings carry their own flag and their own error, so they are refreshed
+  // alongside rather than inside the entitlement round trip.
+  loadOfferings();
 }
 
 // ── Hook ────────────────────────────────────────────────────────────────────
 export interface RevenueCatHookResult extends RevenueCatState {
   refresh: () => Promise<void>;
+  retryOfferings: () => Promise<void>;
 }
 
 export function useRevenueCat(): RevenueCatHookResult {
@@ -164,5 +232,5 @@ export function useRevenueCat(): RevenueCatHookResult {
     return () => { _listeners.delete(forceUpdate); };
   }, []);
 
-  return { ..._state, refresh };
+  return { ..._state, refresh, retryOfferings };
 }

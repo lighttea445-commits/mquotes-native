@@ -19,7 +19,7 @@ jest.mock('react-native-purchases', () => ({
     addCustomerInfoUpdateListener: jest.fn(),
   },
   PURCHASES_ERROR_CODE: {},
-  LOG_LEVEL: { DEBUG: 'DEBUG', INFO: 'INFO', WARN: 'WARN', ERROR: 'ERROR' },
+  LOG_LEVEL: { VERBOSE: 'VERBOSE', DEBUG: 'DEBUG', INFO: 'INFO', WARN: 'WARN', ERROR: 'ERROR' },
 }));
 
 jest.mock('react-native-view-shot', () => ({

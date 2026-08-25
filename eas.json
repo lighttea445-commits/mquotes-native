@@ -17,6 +17,16 @@
         "simulator": true
       }
     },
+    "device": {
+      "distribution": "internal",
+      "ios": {
+        "simulator": false,
+        "buildConfiguration": "Release"
+      },
+      "env": {
+        "EXPO_PUBLIC_IAP_DIAGNOSTICS": "1"
+      }
+    },
     "production": {
       "env": {
         "SENTRY_DISABLE_AUTO_UPLOAD": "true"
