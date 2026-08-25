@@ -100,7 +100,7 @@ export function describeOfferings(offerings: PurchasesOfferings | null): string 
   const total = countPackages(offerings);
 
   if (total === 0) {
-    return `RevenueCat returned ${ids.length} offering(s) but 0 packages. Current: ${current}. Packages per offering: ${breakdown}. RevenueCat has the config, so StoreKit did not price the products: check the Paid Applications agreement and that the product IDs match App Store Connect exactly.`;
+    return `RevenueCat returned ${ids.length} offering(s) but 0 packages. Current: ${current}. Packages per offering: ${breakdown}. Either no packages are attached to the offering in the RevenueCat dashboard, or the store refused to price the ones that are. Check the dashboard offering first: an empty package list is the common cause, and it looks identical from here.`;
   }
 
   return `${total} package(s) across ${ids.length} offering(s). Current: ${current}. Packages per offering: ${breakdown}.`;

@@ -51,12 +51,15 @@ describe('describeOfferings', () => {
     expect(text).toMatch(/RevenueCat/);
   });
 
-  it('names App Store Connect when offerings exist but nothing is priceable', () => {
+  it('sends you to the dashboard offering when nothing is priceable', () => {
     const text = describeOfferings(offeringsWith({ default: 0 }));
     expect(text).toContain('0 packages');
-    // The whole point of this branch: RevenueCat is configured, Apple is not.
-    expect(text).toMatch(/App Store Connect/);
-    expect(text).toMatch(/Paid Applications/);
+    // This branch covers two causes that look identical from the client: an
+    // offering with no packages attached at all, and one whose packages the
+    // store would not price. The first is what actually broke this app, so it
+    // has to be named first rather than sending anyone to App Store Connect.
+    expect(text).toMatch(/no packages are attached/);
+    expect(text).toMatch(/RevenueCat dashboard/);
   });
 
   it('reports the counts and the current offering when healthy', () => {
