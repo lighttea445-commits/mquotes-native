@@ -118,6 +118,13 @@ export function describeOfferings(offerings: PurchasesOfferings | null): string 
  * error, because the SDK reports a StoreKit product lookup that came back
  * empty as a success.
  *
+ * Worth knowing what this does not fix. The SDK caches a *successful* offerings
+ * response for about five minutes, so retries inside that window return the
+ * same object without asking StoreKit again. A thrown ConfigurationError, which
+ * is what a store with no fetchable products actually produces, is not cached,
+ * and that is the case these retries are for. A genuinely misconfigured store
+ * still needs the store fixed: this buys a correct diagnosis, not a cure.
+ *
  * `onAttempt` fires as each attempt lands, so a caller can show what it has
  * rather than waiting out the whole backoff before rendering anything.
  */
