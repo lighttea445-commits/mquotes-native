@@ -18,7 +18,7 @@ import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../../hooks/useTheme';
 import { useRevenueCat } from '../../hooks/useRevenueCat';
-import { ENTITLEMENT_PRO, IAP_DIAGNOSTICS } from '../../lib/revenuecat';
+import { ENTITLEMENT_PRO, IAP_DIAGNOSTICS, restorePurchases } from '../../lib/revenuecat';
 import { requestPermissions, canAskForPermissions } from '../../lib/notifications';
 import { errorReporting } from '../../lib/errorReporting';
 import { analytics } from '../../lib/analytics';
@@ -469,7 +469,13 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
   const [reminderBusy, setReminderBusy] = useState(false);
   const [purchasing, setPurchasing] = useState(false);
   const [retrying, setRetrying] = useState(false);
-  const [purchaseError, setPurchaseError] = useState<string | null>(null);
+  const [restoring, setRestoring] = useState(false);
+  /**
+   * The one message line under the button. Shared by buying and restoring,
+   * because only one of the two can be running at a time and two lines that
+   * can never both appear are two lines of layout for no reason.
+   */
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const notifIdRef = useRef<string | null>(null);
   const steps = buildSteps();
 
@@ -659,6 +665,13 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
   const done = () => (onContinue ? onContinue() : onClose?.());
 
   /**
+   * One store round trip at a time. Buying, retrying offerings and restoring
+   * all read and write the same store state and share the one message line, so
+   * whichever started first owns the screen until it finishes.
+   */
+  const busy = purchasing || retrying || restoring;
+
+  /**
    * Buys straight through the store's own billing sheet — there is no second
    * paywall in between. A cancelled purchase leaves the user on this screen
    * rather than dismissing it, so the CTA is still there to retry.
@@ -670,7 +683,7 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
   const purchase = async (chosen: PlanOption | null) => {
     if (purchasing) return;
     setPurchasing(true);
-    setPurchaseError(null);
+    setStatusMessage(null);
 
     try {
       // Offerings can still be in flight when the sheet opens. Fetch on demand
@@ -707,7 +720,7 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
         errorReporting.captureMessage(`TrialScreen: no packages — ${detail}`, 'error', {
           context: 'TrialScreen:noPackages',
         });
-        setPurchaseError('Plans could not be loaded. Please try again.');
+        setStatusMessage('Plans could not be loaded. Please try again.');
         return;
       }
 
@@ -719,13 +732,13 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
         });
         done();
       } else {
-        setPurchaseError('Your purchase is still processing. Access unlocks as soon as the store confirms it.');
+        setStatusMessage('Your purchase is still processing. Access unlocks as soon as the store confirms it.');
       }
     } catch (e) {
       const err = e as { userCancelled?: boolean; message?: string };
       if (!err?.userCancelled) {
         errorReporting.captureError(e as Error, { context: 'TrialScreen:purchase' });
-        setPurchaseError(err?.message || 'Purchase could not be completed. Please try again.');
+        setStatusMessage(err?.message || 'Purchase could not be completed. Please try again.');
       }
     } finally {
       setPurchasing(false);
@@ -741,10 +754,53 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
    * before offerings land, where the tap falls through to `purchase` and its
    * on-demand refetch resolves what to buy.
    */
+  /**
+   * Gives an existing subscriber their access back.
+   *
+   * Both stores require this on the paywall itself, and the CTA above cannot
+   * stand in for it: a repeat purchase of a subscription that is already
+   * active comes back from the store as an error, not as an entitlement, so
+   * someone who reinstalled or switched device has no other way through.
+   *
+   * A restore that finds nothing is not a failure and is not reported as one.
+   * It is the ordinary outcome for the many people who tap this having never
+   * subscribed, so it says exactly that rather than sounding like a fault.
+   */
+  const handleRestore = async () => {
+    if (busy) return;
+    setRestoring(true);
+    setStatusMessage(null);
+
+    try {
+      const customerInfo = await restorePurchases();
+
+      if (customerInfo.entitlements.active[ENTITLEMENT_PRO]) {
+        analytics.track('subscription_restored');
+        // Same exit as a purchase: the entitlement is what this screen exists
+        // to obtain, so how it arrived makes no difference to where it goes.
+        done();
+        return;
+      }
+
+      setStatusMessage(
+        `No previous purchase found on this ${
+          Platform.OS === 'ios' ? 'Apple ID' : 'Google account'
+        }.`,
+      );
+    } catch (e) {
+      const err = e as { userCancelled?: boolean; message?: string };
+      if (err?.userCancelled) return;
+      errorReporting.captureError(e as Error, { context: 'TrialScreen:restore' });
+      setStatusMessage(err?.message || 'Purchases could not be restored. Please try again.');
+    } finally {
+      setRestoring(false);
+    }
+  };
+
   const handleRetry = async () => {
     if (retrying) return;
     setRetrying(true);
-    setPurchaseError(null);
+    setStatusMessage(null);
     try {
       await retryOfferings();
     } finally {
@@ -753,7 +809,7 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
   };
 
   const handleContinue = () => {
-    if (purchasing || retrying) return;
+    if (busy) return;
     if (plansUnavailable) {
       handleRetry();
       return;
@@ -930,14 +986,17 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
 
           <Pressable
             onPress={handleContinue}
-            disabled={purchasing || retrying}
+            disabled={busy}
             style={[
               styles.ctaButton,
-              { backgroundColor: theme.goldButton, opacity: purchasing || retrying ? 0.7 : 1 },
+              { backgroundColor: theme.goldButton, opacity: busy ? 0.7 : 1 },
             ]}
             accessibilityRole="button"
-            accessibilityState={{ disabled: purchasing || retrying }}
+            accessibilityState={{ disabled: busy }}
           >
+            {/* A restore in flight dims this button but does not put a spinner
+                in it: the spinner belongs where the tap happened, and the
+                footer link carries its own. */}
             {purchasing || retrying ? (
               <ActivityIndicator color={ON_GOLD} />
             ) : (
@@ -950,7 +1009,7 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
           {/* Said before the tap rather than after it. The whole point of the
               rewrite is that the reviewer learns the store is empty from the
               screen, not from pressing a button that looked like it worked. */}
-          {plansUnavailable && !purchaseError ? (
+          {plansUnavailable && !statusMessage ? (
             <Text
               style={[styles.errorLine, { color: theme.text, fontFamily: theme.bodyFontFamily }]}
               accessibilityLiveRegion="polite"
@@ -959,12 +1018,12 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
             </Text>
           ) : null}
 
-          {purchaseError ? (
+          {statusMessage ? (
             <Text
               style={[styles.errorLine, { color: theme.text, fontFamily: theme.bodyFontFamily }]}
               accessibilityLiveRegion="polite"
             >
-              {purchaseError}
+              {statusMessage}
             </Text>
           ) : null}
 
@@ -984,19 +1043,51 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
             </Text>
           ) : null}
 
-          {TERMS_URL ? (
+          {/* Restore sits beside the terms rather than above the button. It is
+              a way back in for someone who already paid, not a second offer,
+              so it takes the same quiet weight as the legal line and costs the
+              timeline card no height. */}
+          <View style={styles.footerRow}>
             <Pressable
-              onPress={() => Linking.openURL(TERMS_URL)}
+              onPress={handleRestore}
+              disabled={busy}
               hitSlop={HIT}
-              style={styles.footerItem}
-              accessibilityRole="link"
-              accessibilityLabel="Terms and Privacy"
+              accessibilityRole="button"
+              accessibilityLabel="Restore purchases"
+              accessibilityState={{ disabled: busy, busy: restoring }}
             >
-              <Text style={[styles.footerText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
-                Terms & Privacy
+              <Text
+                style={[
+                  styles.footerText,
+                  { color: theme.textMuted, fontFamily: theme.uiFontFamily },
+                  busy ? styles.footerDim : null,
+                ]}
+              >
+                {restoring ? 'Restoring…' : 'Restore Purchases'}
               </Text>
             </Pressable>
-          ) : null}
+
+            {TERMS_URL ? (
+              <>
+                <Text
+                  style={[styles.footerText, { color: theme.textMuted }]}
+                  accessible={false}
+                >
+                  ·
+                </Text>
+                <Pressable
+                  onPress={() => Linking.openURL(TERMS_URL)}
+                  hitSlop={HIT}
+                  accessibilityRole="link"
+                  accessibilityLabel="Terms and Privacy"
+                >
+                  <Text style={[styles.footerText, { color: theme.textMuted, fontFamily: theme.uiFontFamily }]}>
+                    Terms & Privacy
+                  </Text>
+                </Pressable>
+              </>
+            ) : null}
+          </View>
         </View>
       </SafeAreaView>
     </View>
@@ -1180,9 +1271,20 @@ const styles = StyleSheet.create({
     textAlign: 'left',
     opacity: 0.7,
   },
-  footerItem: {
-    alignSelf: 'center',
+  footerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    // Wraps rather than truncates: at a large text size the two labels and
+    // their separator no longer fit one line inside the gutter.
+    flexWrap: 'wrap',
+    gap: SPACE.sm,
     marginTop: -SPACE.xs,
+  },
+  footerDim: {
+    // Same treatment the CTA gets while the store is busy, so the two read as
+    // one screen waiting rather than one control being broken.
+    opacity: 0.5,
   },
   footerText: {
     fontSize: 11,
