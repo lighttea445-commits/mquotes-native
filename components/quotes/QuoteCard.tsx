@@ -40,6 +40,7 @@ import { FavoritesGoalSheet } from './FavoritesGoalSheet';
 
 import { errorReporting } from '../../lib/errorReporting';
 import { analytics } from '../../lib/analytics';
+import { askForReviewAfterGoodMoment } from '../../lib/review';
 
 // Pixels per second past which a swipe commits regardless of how far it
 // travelled. Low enough that a casual flick counts.
@@ -393,6 +394,9 @@ export function QuoteCard() {
         withTiming(1, { duration: 80 }),
         withDelay(320, withTiming(0, { duration: 400 })),
       );
+      // Someone who has just saved a quote, on a screen with nothing over it,
+      // is the moment to ask. The helper decides whether they have earned it.
+      askForReviewAfterGoodMoment();
     }
   }, [converted, favorited, toggleFavorite, haptics]);
 

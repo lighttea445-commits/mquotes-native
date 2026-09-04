@@ -53,7 +53,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAppStore } from '../store/useAppStore';
 import { useTheme } from '../hooks/useTheme';
 import { THEMES } from '../constants/themes';
-import { useReviewPrompt } from '../hooks/useReviewPrompt';
 import { registerWidgetRefreshTask } from '../tasks/widgetRefreshTask';
 import { WidgetBridge, IOS_WIDGET_QUEUE_KEY_PREFIX } from '../modules/widget-bridge';
 import { refreshAllIOSWidgets, confirmSeenIOSConfigs } from '../lib/iosWidget';
@@ -124,8 +123,6 @@ function RootLayoutInner() {
   const router = useRouter();
   const onboardingComplete = useAppStore((s) => s.onboardingComplete);
   const navReady = !!useRootNavigationState()?.key;
-
-  useReviewPrompt();
 
   // Redirect to onboarding on first launch. We gate on both:
   // 1. navReady — the Expo Router navigator has committed its initial state,

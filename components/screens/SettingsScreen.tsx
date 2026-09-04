@@ -11,7 +11,6 @@ import {
   Switch,
   Linking,
 } from 'react-native';
-import * as StoreReview from 'expo-store-review';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Icon } from '../ui/Icon';
@@ -25,6 +24,7 @@ import { useCollectionsStore } from '../../store/useCollectionsStore';
 import { useUserQuotesStore } from '../../store/useUserQuotesStore';
 import { useWidgetStore } from '../../store/useWidgetStore';
 import { useModal } from '../../contexts/ModalContext';
+import { openStoreReviewPage } from '../../lib/review';
 import { ConfirmSheet } from '../ui/ConfirmSheet';
 import { ON_GOLD } from '../ui/tokens';
 
@@ -164,11 +164,7 @@ export default function SettingsScreen({ onClose, onBack }: { onClose?: () => vo
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border, marginTop: 8 }]}
-              onPress={async () => {
-                if (await StoreReview.hasAction()) {
-                  await StoreReview.requestReview();
-                }
-              }}
+              onPress={() => { void openStoreReviewPage(); }}
             >
               <Icon name="star-outline" size={20} color={theme.gold} />
               <Text style={[styles.menuText, { color: theme.text, fontFamily: theme.uiFontFamily }]}>

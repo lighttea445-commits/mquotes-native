@@ -136,23 +136,20 @@ describe('useAppStore', () => {
     expect(state.preferences.theme).toBe('minimal');
   });
 
-  it('accumulates active usage time', () => {
+  it('counts each review prompt and stamps when it was raised', () => {
     const { useAppStore } = require('../../store/useAppStore');
     useAppStore.getState().resetApp();
-    useAppStore.getState().addActiveUsageMs(1000);
-    useAppStore.getState().addActiveUsageMs(2000);
-    expect(useAppStore.getState().reviewPrompt.activeMs).toBe(3000);
-  });
+    expect(useAppStore.getState().reviewPrompt.attempts).toBe(0);
+    expect(useAppStore.getState().reviewPrompt.lastPromptAt).toBeNull();
 
-  it('latches promptShown once marked, and resetApp clears it', () => {
-    const { useAppStore } = require('../../store/useAppStore');
+    useAppStore.getState().noteReviewPromptShown();
+    useAppStore.getState().noteReviewPromptShown();
+    expect(useAppStore.getState().reviewPrompt.attempts).toBe(2);
+    expect(useAppStore.getState().reviewPrompt.lastPromptAt).toEqual(expect.any(String));
+
     useAppStore.getState().resetApp();
-    expect(useAppStore.getState().reviewPrompt.promptShown).toBe(false);
-    useAppStore.getState().markReviewPromptShown();
-    expect(useAppStore.getState().reviewPrompt.promptShown).toBe(true);
-    useAppStore.getState().resetApp();
-    expect(useAppStore.getState().reviewPrompt.promptShown).toBe(false);
-    expect(useAppStore.getState().reviewPrompt.activeMs).toBe(0);
+    expect(useAppStore.getState().reviewPrompt.attempts).toBe(0);
+    expect(useAppStore.getState().reviewPrompt.lastPromptAt).toBeNull();
   });
 
   it('returns a 0 gap on the very first foreground open', () => {

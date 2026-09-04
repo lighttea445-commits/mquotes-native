@@ -76,10 +76,15 @@ export interface StreakData {
 }
 
 export interface ReviewPromptState {
-  /** Cumulative foreground active time, in ms, since the last prompt (or since install). */
-  activeMs: number;
-  /** Once true, the native review prompt is never triggered again. */
-  promptShown: boolean;
+  /** How many times the system review prompt has been raised. iOS allows three a year. */
+  attempts: number;
+  /** ISO timestamp of the last one, or null if it has never been raised. */
+  lastPromptAt: string | null;
+  /**
+   * Written by the usage-timer prompt this replaced. Read as one spent attempt
+   * so an upgrading user is not asked again the moment they favorite a quote.
+   */
+  promptShown?: boolean;
 }
 
 /** Which "come back" nudge is currently on screen. Only one at a time. */
@@ -122,10 +127,8 @@ interface AppState {
   markFavoritesGoalCelebrated: () => void;
   updateStreak: () => void;
   dismissStreakBanner: () => void;
-  /** Adds elapsed foreground time toward the review-prompt threshold. */
-  addActiveUsageMs: (ms: number) => void;
-  /** Latches the review prompt off so it never fires again. */
-  markReviewPromptShown: () => void;
+  /** Records that the system review prompt was raised, for the cap and the spacing. */
+  noteReviewPromptShown: () => void;
   /** Records a foreground open and returns the gap since the previous one, in ms (0 on the very first open). */
   noteForegroundOpen: () => number;
   setReturnNudgeType: (type: ReturnNudgeType) => void;
@@ -169,8 +172,8 @@ const defaultStreak: StreakData = {
 };
 
 const defaultReviewPrompt: ReviewPromptState = {
-  activeMs: 0,
-  promptShown: false,
+  attempts: 0,
+  lastPromptAt: null,
 };
 
 function toLocalDateString(d: Date): string {
@@ -331,14 +334,15 @@ export const useAppStore = create<AppState>()(
 
       dismissStreakBanner: () => set({ showStreakBanner: false }),
 
-      addActiveUsageMs: (ms) =>
+      noteReviewPromptShown: () =>
         set((state) => ({
-          reviewPrompt: { ...state.reviewPrompt, activeMs: state.reviewPrompt.activeMs + ms },
-        })),
-
-      markReviewPromptShown: () =>
-        set((state) => ({
-          reviewPrompt: { ...state.reviewPrompt, promptShown: true },
+          reviewPrompt: {
+            ...state.reviewPrompt,
+            // attempts is absent on state persisted before this replaced the
+            // usage timer, where promptShown was the whole record.
+            attempts: (state.reviewPrompt.attempts ?? 0) + 1,
+            lastPromptAt: new Date().toISOString(),
+          },
         })),
 
       noteForegroundOpen: () => {
