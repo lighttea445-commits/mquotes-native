@@ -59,7 +59,7 @@ export default function SettingsScreen({ onClose, onBack }: { onClose?: () => vo
     }
   };
 
-  const confirmDeleteAccount = () => {
+  const confirmDeleteData = () => {
     clearFavorites();
     clearHistory();
     resetTopics();
@@ -189,7 +189,7 @@ export default function SettingsScreen({ onClose, onBack }: { onClose?: () => vo
             >
               <Icon name="delete-outline" size={20} color="#EF4444" />
               <Text style={[styles.menuText, { color: '#EF4444', fontFamily: theme.uiFontFamily }]}>
-                Delete Account
+                Delete Data
               </Text>
             </TouchableOpacity>
           </View>
@@ -199,12 +199,12 @@ export default function SettingsScreen({ onClose, onBack }: { onClose?: () => vo
       <ConfirmSheet
         visible={showDeleteConfirm}
         onClose={() => setShowDeleteConfirm(false)}
-        title="Delete Account"
+        title="Delete Data"
         message="This will permanently erase all your data: favorites, history, quotes, and preferences. This cannot be undone."
         confirmLabel="Delete"
         destructive
         cancelLabel="Cancel"
-        onConfirm={confirmDeleteAccount}
+        onConfirm={confirmDeleteData}
       />
     </KeyboardAvoidingView>
   );
