@@ -747,8 +747,11 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
     } catch (e) {
       const err = e as { userCancelled?: boolean; message?: string };
       if (!err?.userCancelled) {
+        // The SDK's own message names things like "no singleton instance" and
+        // "ConfigurationError" that mean nothing to a buyer. It goes to the
+        // reporter, where it is diagnosable; the screen gets one steady line.
         errorReporting.captureError(e as Error, { context: 'TrialScreen:purchase' });
-        setStatusMessage(err?.message || 'Purchase could not be completed. Please try again.');
+        setStatusMessage('Purchase could not be completed. Please try again.');
       }
     } finally {
       setPurchasing(false);
@@ -795,8 +798,10 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
     } catch (e) {
       const err = e as { userCancelled?: boolean; message?: string };
       if (err?.userCancelled) return;
+      // Same rule as the purchase catch just above: the SDK's own wording is
+      // for the reporter, not the buyer.
       errorReporting.captureError(e as Error, { context: 'TrialScreen:restore' });
-      setStatusMessage(err?.message || 'Purchases could not be restored. Please try again.');
+      setStatusMessage('Purchases could not be restored. Please try again.');
     } finally {
       setRestoring(false);
     }
