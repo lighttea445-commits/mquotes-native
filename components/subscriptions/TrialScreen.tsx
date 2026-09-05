@@ -17,8 +17,8 @@ import { Icon } from '../ui/Icon';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../../hooks/useTheme';
-import { useRevenueCat } from '../../hooks/useRevenueCat';
-import { ENTITLEMENT_PRO, IAP_DIAGNOSTICS, restorePurchases } from '../../lib/revenuecat';
+import { useRevenueCat, applyCustomerInfo } from '../../hooks/useRevenueCat';
+import { ENTITLEMENT_PRO, restorePurchases } from '../../lib/revenuecat';
 import { requestPermissions, canAskForPermissions } from '../../lib/notifications';
 import { errorReporting } from '../../lib/errorReporting';
 import { analytics } from '../../lib/analytics';
@@ -472,7 +472,6 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
     error: rcError,
     isInitialized,
     offeringsLoading,
-    offeringsDiagnostic,
     retryOfferings,
   } = useRevenueCat();
   const [reminderEnabled, setReminderEnabled] = useState(false);
@@ -735,6 +734,7 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
       }
 
       const { customerInfo } = await Purchases.purchasePackage(pkg);
+      applyCustomerInfo(customerInfo);
       if (customerInfo.entitlements.active[ENTITLEMENT_PRO]) {
         analytics.track('subscription_purchased', {
           packageId: pkg.identifier,
@@ -756,15 +756,6 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
   };
 
   /**
-   * Android buys the card the user already selected. iOS has no cards, so the
-   * choice is asked for first, in the OS's own action sheet.
-   *
-   * With fewer than two plans there is nothing to choose between, so the sheet
-   * is skipped rather than shown with a single row — including the window
-   * before offerings land, where the tap falls through to `purchase` and its
-   * on-demand refetch resolves what to buy.
-   */
-  /**
    * Gives an existing subscriber their access back.
    *
    * Both stores require this on the paywall itself, and the CTA above cannot
@@ -783,6 +774,10 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
 
     try {
       const customerInfo = await restorePurchases();
+      // Written straight in rather than waited for. `done()` is one line
+      // below, and whatever it opens reads the entitlement on its first
+      // render, before the SDK's own event would have arrived.
+      applyCustomerInfo(customerInfo);
 
       if (customerInfo.entitlements.active[ENTITLEMENT_PRO]) {
         analytics.track('subscription_restored');
@@ -818,6 +813,15 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
     }
   };
 
+  /**
+   * Android buys the card the user already selected. iOS has no cards, so the
+   * choice is asked for first, in the OS's own action sheet.
+   *
+   * With fewer than two plans there is nothing to choose between, so the sheet
+   * is skipped rather than shown with a single row — including the window
+   * before offerings land, where the tap falls through to `purchase` and its
+   * on-demand refetch resolves what to buy.
+   */
   const handleContinue = () => {
     if (busy) return;
     if (plansUnavailable) {
@@ -1034,14 +1038,6 @@ export default function TrialScreen({ onClose, onContinue }: Props) {
               accessibilityLiveRegion="polite"
             >
               {statusMessage}
-            </Text>
-          ) : null}
-
-          {/* Compiled out of the App Store build: IAP_DIAGNOSTICS is set only
-              by the `device` EAS profile. See lib/revenuecat.ts. */}
-          {IAP_DIAGNOSTICS && offeringsDiagnostic ? (
-            <Text style={[styles.diagnostic, { color: theme.textMuted, fontFamily: theme.bodyFontFamily }]}>
-              {offeringsDiagnostic}
             </Text>
           ) : null}
 
@@ -1272,14 +1268,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     textAlign: 'center',
-  },
-  diagnostic: {
-    // Deliberately small and dense. It exists to be read off a device once,
-    // not to sit comfortably in the layout.
-    fontSize: 10,
-    lineHeight: 13,
-    textAlign: 'left',
-    opacity: 0.7,
   },
   footerRow: {
     flexDirection: 'row',

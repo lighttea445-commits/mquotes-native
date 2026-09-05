@@ -202,6 +202,26 @@ export function retryOfferings(): Promise<void> {
   return loadOfferings();
 }
 
+/**
+ * Write a CustomerInfo the caller already holds into the shared state.
+ *
+ * Both a purchase and a restore hand back the answer directly. Leaving the
+ * update to the SDK's customer-info event means the screen that just
+ * succeeded is still reading a stale `isPro` at the moment it decides where
+ * to send the user, and it makes that decision depend on a listener
+ * registered once at startup inside a branch that can fail. The caller has
+ * the entitlement in hand; this writes it.
+ *
+ * The listener stays for what only it can catch: a subscription bought or
+ * cancelled outside the app.
+ */
+export function applyCustomerInfo(customerInfo: CustomerInfo): void {
+  patch({
+    customerInfo,
+    isPro: customerInfo.entitlements.active[ENTITLEMENT_PRO] !== undefined,
+  });
+}
+
 async function refresh() {
   patch({ isLoading: true });
   try {

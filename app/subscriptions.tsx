@@ -28,10 +28,10 @@ export default function SubscriptionsScreen() {
   // action, so it shows the same trial screen the sheets do. Its CTA buys
   // through the store directly; there is no RevenueCat paywall any more.
   if (!isPro) {
-    // onContinue is deliberately inert. This route already renders the member
-    // view the moment `isPro` flips, so buying or restoring here swaps the
-    // paywall for the membership card in place. Popping the route instead
-    // would throw the user off the page they came to precisely to fix.
+    // onContinue is deliberately inert. TrialScreen writes the entitlement it
+    // just obtained into the shared state before calling it, so this route
+    // re-renders as the membership card in place. Popping instead would throw
+    // the user off the page they came to precisely to fix.
     return <TrialScreen onClose={() => router.back()} onContinue={() => {}} />;
   }
 
