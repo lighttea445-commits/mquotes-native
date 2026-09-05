@@ -451,7 +451,17 @@ function PlanRow({
 }
 
 interface Props {
+  /** The X button, and every way out that leaves the user un-entitled. */
   onClose?: () => void;
+  /**
+   * Where a user who now holds the entitlement should land, whether they just
+   * bought it or restored one they already had.
+   *
+   * Distinct from `onClose` on purpose. Dismissing a paywall means going back
+   * to where you were; clearing one means the thing you were locked out of is
+   * now open, and that is rarely the same place. Falls back to `onClose` when
+   * a caller has nowhere better to send them.
+   */
   onContinue?: () => void;
 }
 

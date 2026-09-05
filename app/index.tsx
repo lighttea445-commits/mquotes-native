@@ -219,7 +219,12 @@ function HomeScreenInner() {
           it. Every gated action in the app opens this sheet. */}
       <BottomSheet visible={activeSheet === 'trial'} onClose={closeSheet} backgroundColor={theme.background}
         instantClose={previousSheet === 'trial'} instantOpen={isSwitching}>
-        <TrialScreen onClose={closeSheet} />
+        {/* Buying or restoring pops back to the sheet that raised the paywall
+            rather than closing the stack: the locked row the user tapped is
+            the reason they are here, and it is unlocked by the time this
+            returns. The X still closes everything. A paywall opened with
+            nothing under it pops to the same empty stack close would. */}
+        <TrialScreen onClose={closeSheet} onContinue={goBack} />
       </BottomSheet>
 
     </ThemeBackground>
